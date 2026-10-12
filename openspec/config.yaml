@@ -4,9 +4,11 @@ context: |
   Language: pt-BR
   All artifacts must be written in pt-BR.
   Keep OpenSpec structural headings and SHALL/MUST keywords in English.
-  New project: native Rust desktop softphone for Linux first, inspired by GOnnect.
+  New project: native Rust desktop softphone for Linux first, named rust-microsip; compact MicroSIP UI, complementary GOnnect reference.
   PhotoCraft is an architecture reference, not a telephony engine to copy.
-  UI essential flows must match GOnnect, including light/dark/system themes.
+  UI uses Dialpad/Calls/Contacts tabs and light/dark/system themes; no full upstream parity.
+  Portable platform contracts, Linux adapter first; macOS/Windows later.
+  CLI and local stdio MCP are a linked change; Web/WASM full WebRTC calls are a later release.
   Local TOML or explicit dotenv, SQLite embedded, secrets outside database.
   Docker build and isolated Asterisk Docker tests; release requires actual two-way audio.
   base/ is local-only: never track, upload, package or include in build context.

@@ -1,6 +1,6 @@
 ## Context
 
-Ver motivação em [proposal.md](proposal.md) e evidências em [reference-sources](../../../docs/reference-sources.md). O diretório inicial continha referências, não um workspace Rust próprio. GOnnect usa Qt/PJSIP nas superfícies examinadas; PhotoCraft demonstra uma separação Rust/egui que serve de inspiração, não um motor SIP reutilizável.
+Ver motivação em [proposal.md](proposal.md) e evidências em [reference-sources](../../../docs/reference-sources.md). O diretório inicial continha referências, não um workspace Rust próprio. MicroSIP orienta a UI compacta; GOnnect usa Qt/PJSIP nas superfícies examinadas e orienta casos de telefonia/desktop; PhotoCraft demonstra uma separação Rust/egui que serve de inspiração, não um motor SIP reutilizável.
 
 Este documento propõe a arquitetura. Não há prova ainda de que a combinação de bibliotecas candidatas satisfaça telefonia, mídia segura e empacotamento. O primeiro marco é uma prova vertical com critérios de interrupção, antes de investir na UI completa.
 
@@ -19,13 +19,14 @@ Adotar egui/eframe como direção inicial, com renderização wgpu e fallback gr
 Estrutura **planejada**, não criada nesta etapa:
 
 ```text
-apps/gonnect/          composição, CLI de diagnóstico e entrada do desktop
+apps/rust-microsip/          composição, CLI de diagnóstico e entrada do desktop
 crates/core/          contas, contatos, estados, comandos, eventos e interfaces
 crates/telephony/     adaptação SIP, registro, diálogos e transações
 crates/media/         RTP/SRTP, codecs, jitter, resampling e dispositivos
 crates/config/        fontes, validação, precedência e views sanitizadas
 crates/storage/       SQLite, migrações e repositórios
-crates/platform-linux/ Secret Service, notificações, tray, IPC e integração
+crates/platform/      contratos de diretórios, secrets, tema, notificações, tray e IPC
+crates/platform-linux/ implementação Linux dos contratos, sem vazar D-Bus ao core
 crates/ui/            widgets, telas e tokens, sem SQL ou operações SIP diretas
 crates/test-support/  fixtures fictícias e relógio/transporte controláveis
 tests/                integração vertical e interoperabilidade
@@ -34,7 +35,11 @@ docker/               builder e laboratório Asterisk
 docs/                 arquitetura, desenvolvimento, segurança e release
 ```
 
-`core` não depende de UI, SQLite ou adapters. Adapters dependem do domínio; `ui` recebe snapshots e despacha comandos; `apps/gonnect` liga implementações. Teste automatizado de dependências bloqueia ciclos e importação de infraestrutura na UI/domínio.
+`core` não depende de UI, SQLite ou adapters. Adapters dependem do domínio; `ui` recebe snapshots e despacha comandos; `apps/rust-microsip` liga implementações. Teste automatizado de dependências bloqueia ciclos e importação de infraestrutura na UI/domínio.
+
+`platform` expõe interfaces estreitas de diretórios/permissões, armazenamento de segredos, tema, notificações, bandeja e transporte IPC. Tipos públicos não expõem D-Bus, descritores Linux ou APIs Windows. Capabilities explícitas representam serviço ausente; testes usam adapters falsos. `platform-linux` concentra XDG/Secret Service/D-Bus/Unix IPC e seleção por target na composição. macOS/Windows terão adapters próprios e armazenamento/IPC apropriados, apenas em releases futuros, sem stubs que anunciem suporte. Telefonia e mídia usam adapters portáveis próprios, não uma superinterface de SO.
+
+CLI/MCP compartilham serviços via a [mudança vinculada](../add-agent-cli-mcp/design.md); no processo proprietário não há subprocessos SIP, enquanto invocações CLI/MCP opt-in são clientes do mesmo binário por IPC. A [versão web futura](../add-web-wasm-softphone/design.md) compartilha apenas domínio compatível, nunca assume que adapters Linux compilem para WASM.
 
 ### 2. Concorrência e estados
 
@@ -56,11 +61,11 @@ STUN, rport e RTP simétrico atendem topologias restritas; PBX ancorando mídia 
 
 ### 4. Configuração, segredos e armazenamento
 
-Resolver campos em seis camadas, conforme `config-storage`: flags > ambiente > `.env` explícito > TOML > SQLite > defaults. `--config` explícito substitui a fonte TOML XDG, não mescla dois arquivos. Caminhos default: `$XDG_CONFIG_HOME/gonnect-rust/config.toml`, `$XDG_DATA_HOME/gonnect-rust/gonnect.sqlite3`, estado/logs em `$XDG_STATE_HOME/gonnect-rust/`; usar defaults XDG quando variáveis ausentes. Sem `.env` implícito do cwd. Namespace de ambiente `GONNECT_`, chaves e schema versionados. Configuração inválida interrompe o startup de SIP, mas deixa diagnóstico/ajustes acessíveis.
+Resolver campos em seis camadas, conforme `config-storage`: flags > ambiente > `.env` explícito > TOML > SQLite > defaults. `--config` explícito substitui a fonte TOML XDG, não mescla dois arquivos. Caminhos default: `$XDG_CONFIG_HOME/rust-microsip/config.toml`, `$XDG_DATA_HOME/rust-microsip/rust-microsip.sqlite3`, estado/logs em `$XDG_STATE_HOME/rust-microsip/`; usar defaults XDG quando variáveis ausentes. Sem `.env` implícito do cwd. Namespace de ambiente `RUST_MICROSIP_`, chaves e schema versionados. Configuração inválida interrompe o startup de SIP, mas deixa diagnóstico/ajustes acessíveis.
 
 Guardar um `StoredConfig` durável no SQLite e construir `EffectiveConfig` imutável por composição. Nunca gravar o effective inteiro, que pode conter overrides e segredos. Mudanças de transporte/conta durante chamada exigem encerramento confirmado ou ficam pendentes, nunca derrubam áudio silenciosamente. CLI futura no mesmo executável: `--help`, `--version`, `--config`, `--env-file`, `--doctor`, `config validate`, `config import`, `config export`; JSON de diagnóstico sempre sanitizado. `--doctor` não registra ou disca.
 
-Secret Service guarda senha; SQLite guarda `secret_ref`. Sem keyring: prompt por sessão ou arquivo privado/ambiente explícito, sem criptografia caseira com chave adjacente ao banco. Senha literal em TOML privado explicitamente selecionado é aceita somente em memória; recomendar `password_env`, nunca exportar o literal. Não oferecer senha em flag CLI (histórico e lista de processos). Permissões 0700/0600 incluem DB/WAL/SHM/backups e há recusa de arquivos secretos acessíveis por outros. `Debug` de tipos sensíveis oculta valores; exports nunca contêm segredo. Um TOML de exemplo pode usar `password_env = "GONNECT_SIP_PASSWORD"`, hostname `.invalid` e nenhum valor real.
+Secret Service guarda senha; SQLite guarda `secret_ref`. Sem keyring: prompt por sessão ou arquivo privado/ambiente explícito, sem criptografia caseira com chave adjacente ao banco. Senha literal em TOML privado explicitamente selecionado é aceita somente em memória; recomendar `password_env`, nunca exportar o literal. Não oferecer senha em flag CLI (histórico e lista de processos). Permissões 0700/0600 incluem DB/WAL/SHM/backups e há recusa de arquivos secretos acessíveis por outros. `Debug` de tipos sensíveis oculta valores; exports nunca contêm segredo. Um TOML de exemplo pode usar `password_env = "RUST_MICROSIP_SIP_PASSWORD"`, hostname `.invalid` e nenhum valor real.
 
 SQLite via `rusqlite` com feature bundled, foreign keys, busy timeout limitado, queries parametrizadas e WAL. Worker exclusivo serializa escritas. Tabelas previstas: `schema_migrations`, `accounts`, `preferences`, `contacts`, `contact_numbers`, `favorites`, `calls`. IDs estáveis e FK; somente uma conta habilitada. Backup usa API consistente do SQLite, não cópia de arquivo aberto sem WAL. Migração transacional com teste de interrupção; downgrade exige backup compatível, não restauração destrutiva automática.
 
@@ -68,15 +73,17 @@ Histórico default 90 dias; exclusão remove registros ativos, sem alegar apagam
 
 ### 5. Fidelidade visual mensurável
 
-Referência primária de comportamento: AppImage instalado identificado por hash. Referência preliminar de layout: screenshot público do GOnnect examinado. Na implementação, executar a referência com HOME/XDG temporários e dados fictícios, sem carregar contas reais e sem chamadas externas. Não abrir automaticamente a instalação pessoal para capturar suas informações.
+Referência primária: MicroSIP Lite 3.22.16, seus recursos/source e [ajuda oficial](https://www.microsip.org/help), especialmente Single Call Mode. A UI foi aberta em Wine 9/Xvfb, em container sem rede, contas, dispositivos ou HOME pessoais; isso comprova somente abertura/layout. GOnnect é referência complementar de ciclo de chamadas, falhas, dispositivos e integração Linux; não exigir seu dashboard lateral ou agenda. PhotoCraft permanece referência arquitetural.
 
-Matriz obrigatória: início/histórico, contatos/busca, discador, entrada, chamada ativa, espera/transferência, ajustes e erro de registro × claro/escuro; acrescentar sistema, teclado e escalas. Registrar diferenças e aprovação humana por tela. Compare geometria de elementos-chave com tolerância inicial de 4 px lógicos após normalização; antialiasing/texto variável não decide sozinho a aprovação. A igualdade pretendida é layout e fluxos essenciais; diferenças intencionais de funcionalidades adiadas ficam na matriz, com estado indisponível. Não copiar o botão de emergência como se houvesse garantia de emergência. Agenda permanece identificada como adiada.
+Janela única compacta com abas Discador, Chamadas e Contatos; campo de número, teclado 3×4, ligar/encerrar, status de conta, menu de ajustes e DND. Controles de mute, espera e transferência cega aparecem no contexto de chamada; favoritos na aba Contatos, não painel permanente à direita. Dimensão inicial candidata 360×560 pontos lógicos, redimensionável; aprovar mock próprio antes de fixar medidas. Não copiar chat, vídeo, conferência, gravação, autoatendimento ou autoencaminhamento; omitir controles fora de escopo ou identificá-los claramente como indisponíveis. Não importar dial plans, headers arbitrários ou discagem automática da documentação MicroSIP.
 
-Tokens centralizam cores, tipografia, espaçamento, raios e estados. Ícones e fontes embutidos com licença/atribuição. Fixtures sintéticas determinísticas e relógio fixo permitem snapshots; contraste e interação são testes separados da comparação de pixels.
+Matriz obrigatória: três abas, busca, entrada, chamada ativa, espera/transferência, ajustes e erro de registro × claro/escuro, mais sistema/teclado/100–200%. A semelhança é hierarquia e fluxo, não identidade pixel a pixel com Win32 ou compatibilidade irrestrita com MicroSIP. Aprovação humana registra diferenças intencionais; snapshots sintéticos medem regressões contra o mock Rust aprovado, não contra decoração Windows. Usar rolagem em 1024×768/HiDPI quando necessário.
+
+Tokens centralizam cores, tipografia, espaçamento, raios e estados. Recursos Win32 declaram Microsoft Sans Serif, mas nenhum arquivo de fonte foi encontrado no source examinado; não redistribuir fonte proprietária do Windows. Escolher fonte aberta de proporções semelhantes e ícones/tons licenciados, embutidos com atribuição. Nenhum asset ou código C++ será copiado sem auditoria. Fixtures determinísticas e relógio fixo permitem snapshots; contraste e interação são testes separados.
 
 ### 6. Contrato de binário único e build Docker
 
-Artefato principal: ELF `gonnect-rust` contendo código e recursos da aplicação. SQLite estático e assets embutidos; sem sidecars, subprocessos SIP, plugins de aplicação, download de fontes ou libs próprias soltas. **Não é promessa de ELF 100% estático nem Linux universal.** O host fornece kernel, loader/glibc, serviços gráficos/áudio e drivers. A allowlist inicial abrange somente bibliotecas do desktop limpo suportado: loader/glibc, interfaces X11/Wayland/xkbcommon, loader gráfico/driver de GPU e interfaces ALSA/PulseAudio conforme backend escolhido no G0. Manifesto final fixa nomes SONAME e comprova sua presença na imagem desktop de referência. Dependência fora da allowlist exige incorporação ao ELF ou revisão, não instrução oculta de `apt install`.
+Artefato principal: ELF `rust-microsip` contendo código e recursos da aplicação. SQLite estático e assets embutidos; sem sidecars, subprocessos SIP, plugins de aplicação, download de fontes ou libs próprias soltas. **Não é promessa de ELF 100% estático nem Linux universal.** O host fornece kernel, loader/glibc, serviços gráficos/áudio e drivers. A allowlist inicial abrange somente bibliotecas do desktop limpo suportado: loader/glibc, interfaces X11/Wayland/xkbcommon, loader gráfico/driver de GPU e interfaces ALSA/PulseAudio conforme backend escolhido no G0. Manifesto final fixa nomes SONAME e comprova sua presença na imagem desktop de referência. Dependência fora da allowlist exige incorporação ao ELF ou revisão, não instrução oculta de `apt install`.
 
 AppImage é conveniência adicional com mesmo núcleo e fallback sem FUSE documentado, não substituto do ELF. Auditar dependências indiretas e bibliotecas carregadas via `dlopen`, não apenas `ldd`/DT_NEEDED. Testar driver real e ambiente sem Vulkan dedicado; não exigir placa específica sem revisão de suporte.
 
@@ -123,7 +130,7 @@ Testes: registro/renovação em três transportes, dois sentidos, 401/407, ocupa
 
 Gates: fmt, clippy warnings-as-errors, testes/doctests, rustdoc warnings-as-errors, cargo-deny/audit com vulnerabilidades avaliadas, propriedades sobre estados/config/URI/CSV, fuzz dos parsers/adapters, integração Asterisk, snapshots/teclado e smoke VM. Plano rastreável em [test-plan.md](test-plan.md). Budget inicial em VM 2 vCPU/4 GiB: startup p95 até 3 s após caches aquecidos, RSS ocioso até 200 MiB, UI interativa durante falha de rede; baseline medido antes de impor regressões. Cobertura alvo 80% de linhas em domínio/config/storage, nunca substitui cenários críticos de I/O.
 
-Propor GPL-3.0-or-later para futuro código, em vez de assumir licença MIT ao reutilizar referência GPL. Auditar qualquer incorporação do GOnnect e a opção de licença de dependências; preservar avisos e não copiar marca/logo como produto oficial. Nenhuma fonte upstream foi copiada para implementação nesta etapa. A decisão de licenciamento entra no G0 antes de incorporar código/assets.
+Propor GPL-3.0-or-later para futuro código, em vez de assumir licença MIT ao reutilizar referência GPL. Auditar qualquer incorporação do MicroSIP (site GPLv2; headers examinados GPL-2.0-or-later, confirmar cada arquivo) e do GOnnect e a opção de licença de dependências; preservar avisos e não copiar marca/logo como produto oficial. Nenhuma fonte upstream foi copiada para implementação nesta etapa. A decisão de licenciamento entra no G0 antes de incorporar código/assets.
 
 Repositório privado inicialmente, proprietário autenticado `jniltinho`; não alterar visibilidade sem instrução. Commit explícito só de planejamento/skills. Auditoria de índice antes de cada push: nenhum caminho `base/`, submódulo, segredo ou artefato pessoal. CI deve repetir esse bloqueio quando for implementado. Tags/releases só após gates; GitHub Actions não pode afirmar release usável por mera compilação.
 
@@ -131,7 +138,7 @@ Repositório privado inicialmente, proprietário autenticado `jniltinho`; não a
 
 - [Stack Rust ainda não comprovada para todo o fluxo SIP/SDES] → G0 vertical, ADR e revisão de escopo se falhar; não preencher lacunas com mocks de produção.
 - [Bibliotecas de áudio/gráficos escondidas quebram “um binário”] → allowlist explícita, auditoria dlopen e chamadas em VMs limpas; AppImage testado separadamente.
-- [egui não oferece a mesma acessibilidade/visual do Qt automaticamente] → validar navegação, contraste, escala e matriz essencial antes da expansão.
+- [egui não oferece a mesma acessibilidade/visual de Win32/Qt automaticamente] → validar navegação, contraste, escala e matriz essencial antes da expansão.
 - [NAT/Docker gera chamada estabelecida sem áudio] → mídia ancorada, profiles internos/host separados, SDP e tons nas duas direções.
 - [Sem AEC pode haver eco em alto-falantes] → headset como perfil de qualidade inicial, limitação publicada; não prometer viva-voz profissional.
 - [Bandeja/portais variam] → degradação para janela acessível sem extensão obrigatória.
@@ -142,7 +149,7 @@ Repositório privado inicialmente, proprietário autenticado `jniltinho`; não a
 
 1. Aprovar escopo e concluir G0 com recibos; somente então implementar.
 2. Criar workspace, dados fictícios e laboratórios isolados; construir por fatias verticais testadas.
-3. Usar identificador XDG `gonnect-rust` independente de `gonnect`; não ler nem alterar o legado.
+3. Usar identificador XDG `rust-microsip` independente de `gonnect` e MicroSIP; não ler nem alterar os legados.
 4. Entregar release candidate privado e testar artefatos exatos em GNOME/Wayland e KDE/X11.
 5. Liberar v0.1.0 apenas com checklist, licenças e testes completos. Usuário decide eventual visibilidade pública.
 6. Rollback: restaurar binário anterior com backup compatível do perfil Rust; recusar schema futuro, preservar o banco atual. A instalação GOnnect original permanece disponível e intocada.

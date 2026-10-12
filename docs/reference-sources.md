@@ -52,3 +52,40 @@ Aplicação desse contexto: exigir teste de áudio bidirecional no **artefato ex
 - PBX de laboratório: https://docs.asterisk.org/ e https://github.com/asterisk/asterisk .
 
 As bibliotecas acima são candidatas, não dependências já aprovadas ou lockadas. Gate técnico inicial decidirá versões, features, licenças e integração. A licença proposta para o futuro código é GPL-3.0-or-later, sujeita à revisão de compatibilidade antes de incorporar qualquer código/asset de terceiros; sem alegar parecer jurídico.
+
+## MicroSIP: referência principal da UI compacta
+
+Adição de 2026-10-12, após pedido de renomear o produto para rust-microsip. Referências oficiais:
+- https://www.microsip.org/ .
+- https://www.microsip.org/help : modos, discador, contatos, conta e ajustes; o modo de chamada única orienta o fluxo inicial, sem herdar todos os recursos ou permissões de URI.
+- https://www.microsip.org/source : arquivo incremental de fontes; dependências de compilação não estão incluídas.
+- https://www.microsip.org/download/MicroSIP-3.22.16-src.7z .
+- https://www.microsip.org/download/MicroSIP-3.22.16.exe .
+- https://www.microsip.org/download/MicroSIP-Lite-3.22.16.zip .
+
+Downloads HTTPS preservados somente em `base/microsip/downloads/`:
+
+| Arquivo | SHA-256 |
+|---|---|
+| MicroSIP-3.22.16-src.7z | `9c1ff942ae1ae56bdfcdd04c3d6e242a056d7f0dd50bb19f6e13226e7c819b83` |
+| MicroSIP-3.22.16.exe | `e351bbac5e0337091cc0e55a80715208e5550e758028f36efa266c604304daaa` |
+| MicroSIP-Lite-3.22.16.zip | `17dcaa628dfd1ea4ba6686c436fb62f42eb9ed124cd671c9d81f3d1580e1207e` |
+
+Arquivo fonte extraído em `base/microsip/source/MicroSIP-3.22.16-src/`, após verificação de caminhos do archive. Site declara GPLv2; headers C++ examinados declaram GPL-2.0-or-later, portanto revisar cada componente antes de incorporação. Não alegar que o pacote incremental contém PJSIP e todas as dependências. `res/dialog.rc2` declara Microsoft Sans Serif; varredura do source extraído não encontrou arquivos TTF/OTF/WOFF. Fonte Windows não será redistribuída; Rust usará fonte aberta licenciada de proporções semelhantes.
+
+Grafo de referência `gonnect-rust-microsip-reference`, fast, geração `2026-10-12T21:51:48Z`: pesquisa localizou CmainDlg.OnInitDialog, OnTcnSelchangeTab e operações do discador. Snippet de troca de abas confirma mostrar/ocultar página, foco, aba ativa e reset de perdidas em Calls. `check_index_coverage` verificou `mainDlg.cpp`, `Dialer.cpp`, `main.rc` e escopo `res`; os C++ têm macros parcialmente parseadas, complementadas por leitura direta dos intervalos reportados. Recursos RC não rastreados foram lidos diretamente, especialmente `main.rc` e `res/dialog.rc2`. Não usar o grafo como inventário completo de recursos/licenças.
+
+MicroSIP Lite PE32 foi executado com Wine 9.0, prefixo win32 privado e Xvfb em container descartável sem rede, capabilities, privilégios, HOME/áudio/display pessoais ou conta SIP. Somente runtime `/usr` read-only e scratch dedicado foram montados. Primeira tentativa falhou no GLX/EGL Nvidia; nova execução com GLX desabilitado/software gráfico abriu janela MicroSIP 243×459 com abas Phone/Logs/Contacts, campo de número, teclado e status. Captura `base/microsip/wine-runtime/microsip-wine.png` inspecionada localmente; evidência não enviada ao GitHub. Sem window manager, sem placa de áudio e com avisos ALSA esperados; sem teste de chamadas, temas ou interoperabilidade. Instalador completo baixado, mas não executado. Container removido e Wine encerrado.
+
+## Renomeação e extensões
+
+Repositório privado renomeado de `jniltinho/gonnect-rust` para `jniltinho/rust-microsip`; diretório movido para `/home/nilton/Projetos/nilton/NOVOS/rust-microsip`, com base preservada e ignorada. Nomes antigos de grafos/consultas ai-memory acima são proveniência histórica, não identificadores atuais inferidos. A mudança de caminho torna os caminhos antigos do índice históricos; antes de nova exploração estrutural, reindexar/conferir freshness e coverage no caminho novo. Não renomear/migrar memória ou apagar índices históricos sem necessidade.
+
+Fontes oficiais adicionais para os contratos planejados:
+- MCP stdio: https://modelcontextprotocol.io/specification/2025-11-25/basic/transports ; stdout exclusivo de mensagens, stderr para logs.
+- SDK MCP Rust: https://github.com/modelcontextprotocol/rust-sdk ; candidato sujeito a versão/auditoria.
+- Sinalização web candidata: https://github.com/onsip/SIP.js ; SIP sobre WebSocket, WebRTC, espera/transfer e DTMF precisam de prova no nosso bundle.
+- Browser: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia ; contexto seguro e permissão de microfone.
+- Asterisk WebRTC: https://docs.asterisk.org/Configuration/WebRTC/Configuring-Asterisk-for-WebRTC-Clients/ ; WSS e endpoint WebRTC, sem copiar exposição pública dos exemplos.
+
+CLI/MCP foram solicitados para operação por agentes; web foi confirmada como chamadas completas em release posterior. A arquitetura prepara adapters macOS/Windows futuros; nenhum desses recursos está implementado.

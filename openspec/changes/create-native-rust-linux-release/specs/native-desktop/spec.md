@@ -1,19 +1,19 @@
 ## Purpose
 
-Oferecer uma interface desktop Linux nativa, familiar para usuários do GOnnect e fiel às telas essenciais sem disfarçar funcionalidades ainda indisponíveis.
+Oferecer uma interface desktop Linux nativa, compacta e familiar para usuários do MicroSIP, com GOnnect como referência complementar sem disfarçar funcionalidades ainda indisponíveis.
 
 ## ADDED Requirements
 
 ### Requirement: Interface nativa e layout de referência
-O aplicativo SHALL executar sem webview, Electron, Tauri ou Qt e reproduzir a navegação lateral, busca superior, histórico central e favoritos à direita, além das telas de contatos, discador, chamada e ajustes. Agenda e demais funções adiadas MUST indicar indisponibilidade sem simular dados.
+O aplicativo SHALL executar sem webview, Electron, Tauri ou Qt e oferecer janela compacta com abas Discador, Chamadas e Contatos, campo de número, teclado 3×4, ligar/encerrar, conta/status, menu de ajustes e DND. Mute, espera e transferência cega SHALL ser acessíveis em chamada; busca e favoritos SHALL estar nas listas locais. Não SHALL exigir dashboard/agenda do GOnnect ou runtime Wine. Recursos fora de escopo MUST ser omitidos ou indicar indisponibilidade sem simular dados.
 
 #### Scenario: ND-01 layout comparável
-- **WHEN** a janela abre com dados fictícios na mesma resolução, escala, idioma e estado da referência GOnnect 2.4.1
-- **THEN** os elementos essenciais têm a mesma ordem, agrupamento e função, com diferenças registradas na matriz visual e sem controles sobrepostos ou cortados
+- **WHEN** a janela abre com dados fictícios na mesma resolução, escala, idioma e estado da referência MicroSIP Lite 3.22.16 em modo de chamada única e do mock Rust aprovado
+- **THEN** os elementos essenciais têm a ordem, agrupamento e função equivalentes no fluxo compacto, sem exigir identidade pixel a pixel de Win32, com diferenças registradas na matriz visual e sem controles sobrepostos ou cortados
 
 #### Scenario: ND-02 função fora do release
-- **WHEN** o usuário encontra uma área reservada a agenda, vídeo ou conferência
-- **THEN** vê indicação de recurso indisponível neste release, sem ação enganosa nem conteúdo fabricado
+- **WHEN** a matriz de UI é comparada com controles upstream de chat, vídeo, conferência ou gravação
+- **THEN** controles fora do escopo estão ausentes ou claramente indisponíveis, sem ação enganosa nem conteúdo fabricado
 
 ### Requirement: Temas persistentes
 O aplicativo SHALL oferecer claro, escuro e sistema, aplicar a escolha sem reiniciar e preservar a preferência ao reabrir.

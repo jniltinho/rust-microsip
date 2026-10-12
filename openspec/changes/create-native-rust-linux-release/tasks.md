@@ -1,18 +1,18 @@
 ## 1. Aprovação e prova vertical G0
 
-- [ ] 1.1 Obter aprovação desta proposta e registrar limites do v0.1.0, verificando explicitamente uma conta/chamada simultânea, integrações adiadas e contrato ELF versus AppImage.
+- [ ] 1.1 Obter aprovação desta proposta e da extensão CLI/MCP vinculada, registrando web para release posterior e limites do v0.1.0, verificando explicitamente uma conta/chamada simultânea, integrações adiadas e contrato ELF versus AppImage.
 - [ ] 1.2 Criar scaffold mínimo Rust para a prova vertical com toolchain fixado e lockfile; verificar build limpo no builder Docker sem `base/` ou Cargo no host (DIST-03).
 - [ ] 1.3 Inventariar licenças, fontes/ícones e dependências nativas; entregar ADR de compatibilidade e licença antes de copiar qualquer recurso upstream.
 - [ ] 1.4 Criar PBX Asterisk Docker pinado com ramais 1001/1002, echo, URA e tons; verificar readiness PJSIP e ausência de portas publicadas no perfil default (DIST-04).
 - [ ] 1.5 Criar gerador de segredos/CA fictícios, perfil host com bridge não interna/loopback e perfil G4 host-only em VM auxiliar; verificar `docker compose config`, binds/ACL, SDP, mídia ancorada e teardown sem acesso a dados pessoais (DIST-05).
 - [ ] 1.6 Provar registro UDP/TCP/TLS e G.711 PCMA/PCMU nos dois sentidos com stack Rust candidata; anexar recibos PBX e medição de mídia sintética (SIP-01, SIP-03, AUD-01).
 - [ ] 1.7 Provar DTMF, hold, REFER/NOTIFY e TLS+SRTP/SDES com casos negativos; aprovar adapter/versões apenas com testes verdes (SIP-06, SIP-08, SIP-09, AUD-05).
-- [ ] 1.8 Gerar spike ELF com mesma pilha eframe/wgpu, áudio, D-Bus/notificações e IPC de produção; verificar janela, foco/teclado, hotplug e renderer compatível em GNOME/Wayland e KDE/X11, auditar DT_NEEDED/dlopen e bloquear G0 se exigir pacotes extras (DIST-01, ND-05, AUD-03).
+- [ ] 1.8 Gerar spike ELF com mesma pilha eframe/wgpu, áudio, D-Bus/notificações e IPC v1/SO_PEERCRED da extensão CLI/MCP de produção; verificar janela, foco/teclado, hotplug e renderer compatível em GNOME/Wayland e KDE/X11, auditar DT_NEEDED/dlopen e bloquear G0 se exigir pacotes extras (DIST-01, ND-05, AUD-03).
 - [ ] 1.9 Registrar decisão G0 e revisão read-only pelo CLI do Claude; verificar recibo vinculado aos commits/resultados, impedindo avanço para UI completa se houver bloqueador.
 
 ## 2. Workspace e contratos documentados
 
-- [ ] 2.1 Estruturar crates e binário conforme design; verificar grafo de dependências sem ciclos e domínio sem UI/SQL/network adapters.
+- [ ] 2.1 Estruturar crates e binário conforme design; verificar grafo de dependências sem ciclos e domínio sem UI/SQL/network adapters; incluir contratos platform, adapter Linux, capabilities e fakes sem tipos de SO vazando, preparando macOS/Windows sem prometer suporte.
 - [ ] 2.2 Implementar tipos/IDs, máquina de estados e erros tipados; verificar propriedades de transição e ausência de panic em entradas inválidas.
 - [ ] 2.3 Implementar comandos/eventos com filas limitadas, deduplicação e supervisão; verificar saturação, cancelamento e retenção de eventos finais sem bloquear UI/áudio.
 - [ ] 2.4 Adicionar rustdoc de crates/APIs, exemplos e README de arquitetura; verificar `cargo test --doc` e rustdoc com warnings como erros.
@@ -51,10 +51,10 @@
 - [ ] 6.3 Persistir resultados de sessão, duração monotônica e recuperação após crash; verificar unicidade por sessão e resultados reais (CH-03).
 - [ ] 6.4 Implementar filtros, busca local, retenção 90 dias e limpeza confirmada; verificar zero tráfego de busca e remoção das entradas ativas (CH-04).
 
-## 7. UI fiel com temas
+## 7. UI compacta MicroSIP com temas
 
-- [ ] 7.1 Capturar referência em HOME/XDG isolados com fixtures, sem usar configuração pessoal; entregar matriz por tela/tema e registrar exceções de escopo (ND-01, ND-02).
-- [ ] 7.2 Implementar shell de navegação/busca/cards e tokens; verificar snapshots e geometria essencial com diferenças explicadas (ND-01).
+- [ ] 7.1 Completar referências MicroSIP Lite/Wine e ajuda oficial em ambiente isolado com fixtures, sem usar configuração pessoal; entregar matriz por tela/tema e registrar exceções de escopo (ND-01, ND-02).
+- [ ] 7.2 Implementar janela compacta, abas Discador/Chamadas/Contatos, teclado 3×4, status/menu, busca nas listas e tokens; verificar snapshots contra mock Rust aprovado e semelhança de fluxo MicroSIP com diferenças explicadas (ND-01).
 - [ ] 7.3 Implementar telas de contatos, discador, entrada, chamada/hold/transferência e erros, conectadas a comandos reais; verificar estados exibidos a partir de backend e funções adiadas indisponíveis (ND-02, ND-06).
 - [ ] 7.4 Implementar ajustes validados e claro/escuro/sistema; verificar persistência, troca durante chamada e serviço de tema ausente (ND-03, ND-04).
 - [ ] 7.5 Implementar foco, rótulos, navegação de teclado, contraste e layout escalável; verificar matriz 1024x768 e 100/150/200% com ações essenciais acessíveis (ND-05).
@@ -77,4 +77,4 @@
 - [ ] 9.7 Medir startup p95/RSS/estabilidade e revisar matriz visual com operador; verificar budgets do design e nenhum defeito crítico de usabilidade/áudio.
 - [ ] 9.8 Executar revisão final pelo CLI do Claude com contexto sanitizado; verificar relatório de bloqueadores e sua resolução, distinguindo revisão de evidência runtime (DIST-06).
 - [ ] 9.9 Preparar SBOM, checksums, notas, limitações, guia Docker e rollback; verificar cada artefato corresponde ao commit/tag candidato e não contém dados pessoais (DIST-07).
-- [ ] 9.10 Publicar v0.1.0 somente após todos os gates e decisão de visibilidade do proprietário; verificar checklist completo, download/checksums e ausência de promessa de paridade total.
+- [ ] 9.10 Publicar v0.1.0 somente após todos os gates desta mudança e AG-01..06 no G3b da extensão CLI/MCP, além de G4/G5 e decisão de visibilidade do proprietário; verificar checklist completo, download/checksums e ausência de promessa de paridade total.

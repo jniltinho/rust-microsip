@@ -7,9 +7,10 @@
 1. G0: prova vertical SIP + G.711 + TLS/SRTP + Docker/ELF; bloqueia a UI completa se não passar.
 2. G1: domínio/configuração/persistência com testes RED → GREEN → refactor e doctests.
 3. G2: suite Asterisk isolada com fluxo SIP real e mídia sintética nas duas direções.
-4. G3: fidelidade visual/teclado/temas e integração em GNOME/Wayland e KDE/X11.
-5. G4: ELF e AppImage exatos em VMs limpas, headset, chamadas reais de cinco minutos por codec e recibos por hash.
-6. G5: revisão independente Claude, licenças, segurança, SBOM, auditoria do Git e decisão de release.
+4. G3: fluxo compacto MicroSIP, snapshots do mock Rust aprovado, teclado/temas e integração em GNOME/Wayland e KDE/X11.
+5. G3b: contratos AG-01..05 e parte automatizada AG-06 de CLI/MCP (proprietário/IPC, schemas, autorização GUI/grants, ledger/restart, concorrência e controle Asterisk); bloqueiam candidato Linux com agentes.
+6. G4: concluir AG-06 humano em GUI/service na mesma topologia host-only, com recibos separados por modo/hash; ELF e AppImage exatos em VMs limpas, headset, chamadas reais de cinco minutos por codec e recibos por hash.
+7. G5: revisão independente Claude, licenças, segurança, SBOM, auditoria do Git e decisão de release.
 
 ## Matriz de execução
 
@@ -111,3 +112,7 @@ Guardar apenas relatório sanitizado: commit, hash do ELF/AppImage, SO/desktop/d
 ## Validação desta proposta
 
 Ver [validation.md](validation.md) para validação estrutural, análise independente e auditoria de publicação. A revisão Claude receberá somente estes documentos/contratos sanitizados, com ferramentas desabilitadas; não acesso à configuração pessoal nem ao AppImage.
+
+## Extensões vinculadas
+
+CLI/MCP têm cenários e tarefas adicionais em [add-agent-cli-mcp](../add-agent-cli-mcp/tasks.md), obrigatórios para o candidato Linux solicitado com agentes. Os 46 cenários acima continuam sendo apenas o contrato desktop. A versão [web/WASM](../add-web-wasm-softphone/proposal.md) é release posterior com critérios próprios de WebRTC/navegadores. Testes de contratos de plataforma usam adapter fake e Linux real; macOS/Windows não entram na matriz atual.

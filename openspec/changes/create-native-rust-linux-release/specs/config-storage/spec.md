@@ -49,7 +49,7 @@ O aplicativo SHALL usar migrações versionadas e transacionais, backup consiste
 - **THEN** o aplicativo informa a falha, não apaga dados e não registra conta antes de resolver o armazenamento obrigatório
 
 ### Requirement: Importação e exportação conscientes
-O aplicativo SHALL exportar TOML não secreto e importar configuração por confirmação explícita e transação, preservando fontes externas. Configuração INI antiga do GOnnect MUST NOT ser lida ou convertida automaticamente.
+O aplicativo SHALL exportar TOML não secreto e importar configuração por confirmação explícita e transação, preservando fontes externas. Configurações INI antigas do GOnnect e MicroSIP MUST NOT ser lidas ou convertidas automaticamente.
 
 #### Scenario: CFG-09 importação sem tocar o legado
 - **WHEN** o usuário importa TOML válido e depois exporta sua configuração

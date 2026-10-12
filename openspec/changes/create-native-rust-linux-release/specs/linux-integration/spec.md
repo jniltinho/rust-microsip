@@ -23,7 +23,7 @@ O aplicativo SHALL manter uma instância por usuário/perfil e encaminhar URIs p
 
 #### Scenario: LIN-03 segunda instância
 - **WHEN** um segundo processo é iniciado para o mesmo perfil com uma URI válida
-- **THEN** a janela original apresenta a confirmação e não ocorre segundo registro SIP ou concorrência destrutiva no banco
+- **THEN** se o proprietário é GUI, a janela original apresenta confirmação; se é service headless, o invocador recebe uri_confirmation_unavailable sem discagem; em ambos não ocorre segundo registro SIP ou concorrência destrutiva no banco
 
 ### Requirement: Fechar e sair com segurança
 O aplicativo SHALL distinguir ocultar janela de sair. Sem bandeja, fechar SHALL oferecer saída segura em vez de ocultação irrecuperável. Sair durante chamada SHALL exigir confirmação; shutdown SHALL liberar áudio, persistir resultados e tentar encerrar/desregistrar com prazo máximo de cinco segundos.
