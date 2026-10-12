@@ -1,155 +1,155 @@
 ## Context
 
-Ver motivação em [proposal.md](proposal.md) e evidências em [reference-sources](../../../docs/reference-sources.md). O diretório inicial continha referências, não um workspace Rust próprio. MicroSIP orienta a UI compacta; GOnnect usa Qt/PJSIP nas superfícies examinadas e orienta casos de telefonia/desktop; PhotoCraft demonstra uma separação Rust/egui que serve de inspiração, não um motor SIP reutilizável.
+See [proposal.md](proposal.md) and [reference-sources](../../../docs/reference-sources.md). The initial directory contained references, not an own Rust workspace. MicroSIP guides compact UI; examined GOnnect surfaces use Qt/PJSIP and guide telephony/desktop cases; PhotoCraft demonstrates Rust/egui separation, not a reusable SIP engine.
 
-Este documento propõe a arquitetura. Não há prova ainda de que a combinação de bibliotecas candidatas satisfaça telefonia, mídia segura e empacotamento. O primeiro marco é uma prova vertical com critérios de interrupção, antes de investir na UI completa.
+This document proposes architecture. Candidate libraries have not yet been proven to meet telephony, secure-media, and packaging requirements. The first milestone is a vertical proof with stop criteria, before investing in complete UI.
 
 ## Goals / Non-Goals
 
-**Goals:** separar domínio de I/O; preservar responsividade; tornar telefonia testável sem GUI; manter um processo/executável de aplicação; auditar dependências reais em Linux; demonstrar chamadas no artefato distribuído.
+**Goals:** separate domain from I/O; preserve responsiveness; test telephony without GUI; maintain one application process/executable; audit actual Linux dependencies; demonstrate calls on the distributed artifact.
 
-**Non-Goals:** portar o motor PhotoCraft, traduzir Qt/QML linha por linha, embutir Asterisk, implementar um PBX, criar um framework genérico ou alegar que SQLite e drivers Linux são implementados em Rust puro. O código próprio será Rust; bibliotecas de sistema e SQLite nativo embutido são dependências auditadas. Escopo funcional e adiamentos permanecem em `proposal.md`.
+**Non-Goals:** port PhotoCraft's engine, translate Qt/QML line-by-line, embed Asterisk, implement a PBX/generic framework, or claim pure-Rust SQLite/Linux drivers. Own application code is Rust; system libraries/native embedded SQLite are audited dependencies. Functional scope/deferrals remain in `proposal.md`.
 
 ## Decisions
 
-### 1. UI nativa e arquitetura de comandos
+### 1. Native UI and command architecture
 
-Adotar egui/eframe como direção inicial, com renderização wgpu e fallback gráfico validado no gate. PhotoCraft orienta o workspace e a fronteira motor/UI; não copiar suas crates de imagem nem dependências privadas `craft-*`. Alternativas descartadas: Tauri/Electron por runtime web; GTK/Qt como UI principal por elevar dependências de toolkit e afastar a base Rust solicitada. Se teclado, acessibilidade básica ou fidelidade essencial falharem, revisar a decisão antes de implementar telas definitivas.
+Use egui/eframe as the initial direction, wgpu rendering and gate-validated graphics fallback. PhotoCraft guides workspace/engine-UI boundaries; do not copy its image crates or private `craft-*` dependencies. Rejected alternatives: Tauri/Electron for web runtime; primary GTK/Qt for increased toolkit dependencies and divergence from the requested Rust foundation. If keyboard, basic accessibility, or essential fidelity fails, review this decision before final screens.
 
-Estrutura **planejada**, não criada nesta etapa:
+**Planned** structure, not proof of implementation:
 
 ```text
-apps/rust-microsip/          composição, CLI de diagnóstico e entrada do desktop
-crates/core/          contas, contatos, estados, comandos, eventos e interfaces
-crates/telephony/     adaptação SIP, registro, diálogos e transações
-crates/media/         RTP/SRTP, codecs, jitter, resampling e dispositivos
-crates/config/        fontes, validação, precedência e views sanitizadas
-crates/storage/       SQLite, migrações e repositórios
-crates/platform/      contratos de diretórios, secrets, tema, notificações, tray e IPC
-crates/platform-linux/ implementação Linux dos contratos, sem vazar D-Bus ao core
-crates/ui/            widgets, telas e tokens, sem SQL ou operações SIP diretas
-crates/test-support/  fixtures fictícias e relógio/transporte controláveis
-tests/                integração vertical e interoperabilidade
-packaging/            build Linux, auditoria ELF e AppImage
-docker/               builder e laboratório Asterisk
-docs/                 arquitetura, desenvolvimento, segurança e release
+apps/rust-microsip/    composition, diagnostic CLI, desktop entry
+crates/core/          accounts, contacts, states, commands, events, interfaces
+crates/telephony/     SIP adaptation, registration, dialogs, transactions
+crates/media/         RTP/SRTP, codecs, jitter, resampling, devices
+crates/config/        sources, validation, precedence, sanitized views
+crates/storage/       SQLite, migrations, repositories
+crates/platform/      directory, secret, theme, notification, tray, IPC contracts
+crates/platform-linux/ Linux contracts without leaking D-Bus into core
+crates/ui/            widgets, screens, tokens; no SQL/direct SIP operations
+crates/test-support/  fictional fixtures and controllable clock/transport
+tests/                vertical integration/interoperability
+packaging/            Linux build, ELF audit, AppImage
+docker/               builder and Asterisk lab
+docs/                 architecture, development, security, release
 ```
 
-`core` não depende de UI, SQLite ou adapters. Adapters dependem do domínio; `ui` recebe snapshots e despacha comandos; `apps/rust-microsip` liga implementações. Teste automatizado de dependências bloqueia ciclos e importação de infraestrutura na UI/domínio.
+`core` has no UI/SQLite/adapter dependency. Adapters depend on domain; `ui` receives snapshots/dispatches commands; `apps/rust-microsip` composes implementations. Automated dependency tests block cycles/infrastructure imports into UI/domain.
 
-`platform` expõe interfaces estreitas de diretórios/permissões, armazenamento de segredos, tema, notificações, bandeja e transporte IPC. Tipos públicos não expõem D-Bus, descritores Linux ou APIs Windows. Capabilities explícitas representam serviço ausente; testes usam adapters falsos. `platform-linux` concentra XDG/Secret Service/D-Bus/Unix IPC e seleção por target na composição. macOS/Windows terão adapters próprios e armazenamento/IPC apropriados, apenas em releases futuros, sem stubs que anunciem suporte. Telefonia e mídia usam adapters portáveis próprios, não uma superinterface de SO.
+`platform` exposes narrow directory/permission, secret storage, theme, notification, tray, and IPC transport interfaces. Public types expose no D-Bus, Linux descriptors, or Windows APIs. Explicit capabilities represent absent services; tests use fake adapters. `platform-linux` owns XDG/Secret Service/D-Bus/Unix IPC, target-selected in composition. macOS/Windows get appropriate adapters/storage/IPC in future releases, without support-advertising stubs. Telephony/media use their own portable adapters, not one OS superinterface.
 
-CLI/MCP compartilham serviços via a [mudança vinculada](../add-agent-cli-mcp/design.md); no processo proprietário não há subprocessos SIP, enquanto invocações CLI/MCP opt-in são clientes do mesmo binário por IPC. A [versão web futura](../add-web-wasm-softphone/design.md) compartilha apenas domínio compatível, nunca assume que adapters Linux compilem para WASM.
+CLI/MCP share services through the [linked change](../add-agent-cli-mcp/design.md). The owner has no SIP subprocesses; opt-in CLI/MCP invocations are same-binary IPC clients. The [future web version](../add-web-wasm-softphone/design.md) shares compatible domain only, never assumes Linux adapters compile to WASM.
 
-### 2. Concorrência e estados
+### 2. Concurrency and states
 
-Loop GUI na thread principal. Runtime Tokio em worker dedicado, canais de comandos/eventos com capacidade fixa e feedback de fila cheia; snapshots `watch` permitem coalescer atualizações de estado. Não descartar eventos finais de chamadas. Um ator de telefonia possui os diálogos e um worker exclusivo possui a conexão SQLite. I/O de disco nunca no callback de áudio nem no frame da UI.
+GUI loop on the main thread. Tokio runtime in a dedicated worker, fixed-capacity command/event channels with queue-full feedback; `watch` snapshots coalesce state updates. Never drop final call events. A telephony actor owns dialogs; one exclusive worker owns SQLite. No disk I/O in audio callbacks or UI frames.
 
-Estados de registro: desabilitado → registrando → registrado → recuperando/falha. Estados de chamada: ocioso → discando/tocando → estabelecido ↔ em espera → encerrando → encerrado/falha. Transferência é uma operação pendente vinculada ao diálogo, confirmada por NOTIFY. Cada evento tem identificador de sessão e versão para deduplicação; timers usam relógio monotônico. Horários históricos são UTC, renderizados no fuso local; duração não depende de mudanças no relógio de parede.
+Registration states: disabled → registering → registered → recovering/failed. Call states: idle → dialing/ringing → established ↔ held → terminating → ended/failed. Transfer is a pending dialog-bound operation confirmed by NOTIFY. Events have session IDs/versions for deduplication; timers use monotonic time. History timestamps are UTC, rendered locally; duration is independent of wall-clock changes.
 
-Callbacks de áudio usam buffers circulares pré-alocados, sem mutex bloqueante, logging por pacote ou alocação por frame. `CancellationToken` e supervisão de tasks controlam shutdown; aguardar joins com timeout, em vez de sleeps arbitrários. Estados de saída normal e interrupção precisam ser distinguíveis no próximo início.
+Audio callbacks use preallocated ring buffers without blocking mutexes, per-packet logging, or per-frame allocation. `CancellationToken` and task supervision control shutdown; bounded joins replace arbitrary sleeps. Normal exit/interruption must be distinguishable on next startup.
 
-### 3. Telefonia e gate técnico obrigatório
+### 3. Telephony and mandatory technical gate
 
-`rsipstack` é a primeira candidata de sinalização, atrás de adapter estreito. O parser isolado `rsip` não seria uma stack completa; PJSIP FFI não é a direção padrão porque preservaria um motor C/C++ para a função principal. `rustrtc`/componentes Rust de RTP e SRTP são candidatos de mídia; validar SDES de SIP explicitamente, sem assumir compatibilidade por suporte WebRTC. Não inventar criptografia. G.711 é suficiente no primeiro release; Opus e processamento avançado de eco podem vir depois. Perfil inicial de qualidade é headset, sem prometer viva-voz com cancelamento de eco acústico.
+`rsipstack` is the first signaling candidate behind a narrow adapter. Standalone `rsip` parsing is not a full stack; PJSIP FFI is not the default because it retains C/C++ for the principal function. `rustrtc`/Rust RTP/SRTP components are media candidates; explicitly validate SIP SDES, not inferred from WebRTC support. Do not invent cryptography. G.711 suffices initially; Opus/advanced echo processing may follow. Initial quality profile is a headset, without promising acoustic-echo-canceled speakerphone use.
 
-**Gate G0, bloqueante:** uma prova vertical deve registrar em Asterisk por UDP/TCP/TLS, completar chamada G.711 nos dois sentidos, testar PCMA/PCMU, DTMF, espera, REFER/NOTIFY e TLS+SRTP/SDES. O ELF do spike inclui a mesma pilha eframe/wgpu, áudio, D-Bus/notificações e IPC prevista para produção, não apenas telefonia headless. Deve abrir uma janela mínima em GNOME/Wayland e KDE/X11, exercitar renderer de compatibilidade sem Vulkan dedicado, foco/teclado, enumeração/hotplug de áudio e gerar a auditoria de dependências da allowlist abaixo. Falha de teclado ou renderer bloqueia a decisão egui antes da UI completa. Comparar candidatos e fixar versões/features em `Cargo.lock` e ADR. Se falhar, registrar o bloqueio e revisar esta mudança; não substituir por Qt/PJSIP, remover segurança ou trocar binário único por AppImage sem revisão do escopo.
+**Blocking G0:** register against Asterisk over UDP/TCP/TLS, complete G.711 calls in both directions, and test PCMA/PCMU, DTMF, hold, REFER/NOTIFY, TLS+SRTP/SDES. The spike ELF includes the same production eframe/wgpu, audio, D-Bus/notifications, and IPC stack, not merely headless telephony. Open a minimal window in GNOME/Wayland and KDE/X11, exercise a compatible renderer without dedicated Vulkan, focus/keyboard, audio enumeration/hotplug, and audit the dependency allowlist below. Keyboard/renderer failure blocks egui before complete UI. Compare candidates; pin versions/features in Cargo.lock/ADR. On failure, record the blocker/review this change, never silently substitute Qt/PJSIP, remove security, or replace the single ELF with AppImage.
 
-Perfil seguro default: TLS com hostname/CA validados, SRTP obrigatório e SDES apenas sobre TLS. CA corporativa por caminho explícito. Perfil de laboratório inseguro pode usar UDP/TCP+RTP somente por escolha explícita e aviso. Não registrar SDP com chaves, Authorization ou conteúdo de áudio.
+Secure default: validated TLS hostname/CA, mandatory SRTP, SDES only over TLS. Corporate CA by explicit path. Insecure lab UDP/TCP+RTP requires explicit choice/warning. Never log keyed SDP, Authorization, or audio content.
 
-STUN, rport e RTP simétrico atendem topologias restritas; PBX ancorando mídia ou VPN é recomendado. ICE/TURN, DTLS-SRTP e NAT simétrico arbitrário ficam fora do contrato inicial.
+STUN/rport/symmetric RTP cover restricted topologies; media-anchoring PBX/VPN is recommended. ICE/TURN, DTLS-SRTP, and arbitrary symmetric NAT are outside the initial contract.
 
-### 4. Configuração, segredos e armazenamento
+### 4. Configuration, secrets, storage
 
-Resolver campos em seis camadas, conforme `config-storage`: flags > ambiente > `.env` explícito > TOML > SQLite > defaults. `--config` explícito substitui a fonte TOML XDG, não mescla dois arquivos. Caminhos default: `$XDG_CONFIG_HOME/rust-microsip/config.toml`, `$XDG_DATA_HOME/rust-microsip/rust-microsip.sqlite3`, estado/logs em `$XDG_STATE_HOME/rust-microsip/`; usar defaults XDG quando variáveis ausentes. Sem `.env` implícito do cwd. Namespace de ambiente `RUST_MICROSIP_`, chaves e schema versionados. Configuração inválida interrompe o startup de SIP, mas deixa diagnóstico/ajustes acessíveis.
+Six-layer field resolution per `config-storage`: flags > environment > explicit `.env` > TOML > SQLite > defaults. Explicit `--config` replaces XDG TOML, not merges two files. Defaults: `$XDG_CONFIG_HOME/rust-microsip/config.toml`, `$XDG_DATA_HOME/rust-microsip/rust-microsip.sqlite3`, state/logs `$XDG_STATE_HOME/rust-microsip/`; use XDG defaults when unset. No implicit cwd dotenv. Versioned schema/keys, environment namespace `RUST_MICROSIP_`. Invalid configuration stops SIP startup but leaves diagnostics/settings accessible.
 
-Guardar um `StoredConfig` durável no SQLite e construir `EffectiveConfig` imutável por composição. Nunca gravar o effective inteiro, que pode conter overrides e segredos. Mudanças de transporte/conta durante chamada exigem encerramento confirmado ou ficam pendentes, nunca derrubam áudio silenciosamente. CLI futura no mesmo executável: `--help`, `--version`, `--config`, `--env-file`, `--doctor`, `config validate`, `config import`, `config export`; JSON de diagnóstico sempre sanitizado. `--doctor` não registra ou disca.
+Persist `StoredConfig` in SQLite; compose immutable `EffectiveConfig`. Never persist the whole effective configuration containing overrides/secrets. Account/transport changes during calls require confirmed hangup or stay pending, never silently drop audio. Future same-executable CLI: `--help`, `--version`, `--config`, `--env-file`, `--doctor`, `config validate`, `config import`, `config export`; always-sanitized diagnostic JSON. Doctor never registers/dials.
 
-Secret Service guarda senha; SQLite guarda `secret_ref`. Sem keyring: prompt por sessão ou arquivo privado/ambiente explícito, sem criptografia caseira com chave adjacente ao banco. Senha literal em TOML privado explicitamente selecionado é aceita somente em memória; recomendar `password_env`, nunca exportar o literal. Não oferecer senha em flag CLI (histórico e lista de processos). Permissões 0700/0600 incluem DB/WAL/SHM/backups e há recusa de arquivos secretos acessíveis por outros. `Debug` de tipos sensíveis oculta valores; exports nunca contêm segredo. Um TOML de exemplo pode usar `password_env = "RUST_MICROSIP_SIP_PASSWORD"`, hostname `.invalid` e nenhum valor real.
+Secret Service stores passwords; SQLite stores `secret_ref`. Without keyring: per-session prompt or explicit private file/environment, never homemade encryption with an adjacent key. Explicit private TOML literal passwords are accepted in memory only; recommend `password_env`, never export literals. No password CLI flags (history/process lists). 0700/0600 permissions include DB/WAL/SHM/backups; reject other-readable secret files. Sensitive Debug hides values; exports never contain secrets. Example TOML can use `password_env = "RUST_MICROSIP_SIP_PASSWORD"`, a `.invalid` hostname, no real values.
 
-SQLite via `rusqlite` com feature bundled, foreign keys, busy timeout limitado, queries parametrizadas e WAL. Worker exclusivo serializa escritas. Tabelas previstas: `schema_migrations`, `accounts`, `preferences`, `contacts`, `contact_numbers`, `favorites`, `calls`. IDs estáveis e FK; somente uma conta habilitada. Backup usa API consistente do SQLite, não cópia de arquivo aberto sem WAL. Migração transacional com teste de interrupção; downgrade exige backup compatível, não restauração destrutiva automática.
+SQLite through bundled `rusqlite`, foreign keys, bounded busy timeout, parameterized queries, WAL. Exclusive worker serializes writes. Planned tables: `schema_migrations`, `accounts`, `preferences`, `contacts`, `contact_numbers`, `favorites`, `calls`. Stable IDs/FKs; one enabled account. Backups use SQLite's consistent API, not copying an open file without WAL. Transactional migration/interruption tests; downgrade requires compatible backup, never automatic destructive restoration.
 
-Histórico default 90 dias; exclusão remove registros ativos, sem alegar apagamento forense de SQLite/WAL/backups. CSV tem prévia, limites e transação: cada linha representa nome+número; nome igual agrega números distintos ao contato importado e duplicata exata nome+número é ignorada com contagem. Conflitos com contatos já existentes exigem decisão na prévia. Não há sincronização de agenda externa. DND usa resposta 486 Busy Here neste release.
+Default history retention: 90 days. Deletion removes active records, not guaranteed forensic erasure of SQLite/WAL/backups. CSV preview/limits/transaction: each row is name+number; same-name rows aggregate distinct numbers into the imported contact, exact duplicates are skipped/count-reported. Existing-contact conflicts require preview decisions. No external address-book sync. DND uses 486 Busy Here in this release.
 
-### 5. Fidelidade visual mensurável
+### 5. Measurable visual fidelity
 
-Referência primária: MicroSIP Lite 3.22.16, seus recursos/source e [ajuda oficial](https://www.microsip.org/help), especialmente Single Call Mode. A UI foi aberta em Wine 9/Xvfb, em container sem rede, contas, dispositivos ou HOME pessoais; isso comprova somente abertura/layout. GOnnect é referência complementar de ciclo de chamadas, falhas, dispositivos e integração Linux; não exigir seu dashboard lateral ou agenda. PhotoCraft permanece referência arquitetural.
+Primary reference: MicroSIP Lite 3.22.16, resources/source and [official help](https://www.microsip.org/help), especially Single Call Mode. It opened in Wine 9/Xvfb in a container without network/accounts/personal devices/HOME, proving opening/layout only. GOnnect complements call lifecycle/failure/device/Linux integration references, not mandatory side dashboard/address book. PhotoCraft remains architectural.
 
-Janela única compacta com abas Discador, Chamadas e Contatos; campo de número, teclado 3×4, ligar/encerrar, status de conta, menu de ajustes e DND. Controles de mute, espera e transferência cega aparecem no contexto de chamada; favoritos na aba Contatos, não painel permanente à direita. Dimensão inicial candidata 360×560 pontos lógicos, redimensionável; aprovar mock próprio antes de fixar medidas. Não copiar chat, vídeo, conferência, gravação, autoatendimento ou autoencaminhamento; omitir controles fora de escopo ou identificá-los claramente como indisponíveis. Não importar dial plans, headers arbitrários ou discagem automática da documentação MicroSIP.
+One compact window, Dialpad/Calls/Contacts tabs, number field, 3×4 keypad, call/hangup, account status, settings menu, DND. Mute/hold/blind-transfer controls in call context; favorites in Contacts, no permanent right panel. Candidate initial size 360×560 logical points, resizable; approve own mock before fixing dimensions. No copied chat/video/conference/recording/auto-answer/auto-forwarding; omit or clearly disable out-of-scope controls. Do not import MicroSIP dial plans/arbitrary headers/automatic dialing.
 
-Matriz obrigatória: três abas, busca, entrada, chamada ativa, espera/transferência, ajustes e erro de registro × claro/escuro, mais sistema/teclado/100–200%. A semelhança é hierarquia e fluxo, não identidade pixel a pixel com Win32 ou compatibilidade irrestrita com MicroSIP. Aprovação humana registra diferenças intencionais; snapshots sintéticos medem regressões contra o mock Rust aprovado, não contra decoração Windows. Usar rolagem em 1024×768/HiDPI quando necessário.
+Required matrix: three tabs, search, incoming/active/hold/transfer calls, settings, registration errors × light/dark, plus system/keyboard/100–200%. Similarity means hierarchy/flow, not Win32 pixel identity or unrestricted MicroSIP compatibility. Human approval records intentional differences; synthetic snapshots regress against the approved Rust mock, not Windows decoration. Scroll at 1024×768/HiDPI when needed.
 
-Tokens centralizam cores, tipografia, espaçamento, raios e estados. Recursos Win32 declaram Microsoft Sans Serif, mas nenhum arquivo de fonte foi encontrado no source examinado; não redistribuir fonte proprietária do Windows. Escolher fonte aberta de proporções semelhantes e ícones/tons licenciados, embutidos com atribuição. Nenhum asset ou código C++ será copiado sem auditoria. Fixtures determinísticas e relógio fixo permitem snapshots; contraste e interação são testes separados.
+Tokens centralize colors, typography, spacing, radii, states. Examined Win32 resources name Microsoft Sans Serif but no font files were found; never redistribute proprietary Windows fonts. Select similarly proportioned open fonts/licensed icons/tones and embed with attribution. No copied assets/C++ without auditing. Deterministic fixtures/fixed clock enable snapshots; contrast/interaction are separate tests.
 
-### 6. Contrato de binário único e build Docker
+### 6. Single-binary contract and Docker build
 
-Artefato principal: ELF `rust-microsip` contendo código e recursos da aplicação. SQLite estático e assets embutidos; sem sidecars, subprocessos SIP, plugins de aplicação, download de fontes ou libs próprias soltas. **Não é promessa de ELF 100% estático nem Linux universal.** O host fornece kernel, loader/glibc, serviços gráficos/áudio e drivers. A allowlist inicial abrange somente bibliotecas do desktop limpo suportado: loader/glibc, interfaces X11/Wayland/xkbcommon, loader gráfico/driver de GPU e interfaces ALSA/PulseAudio conforme backend escolhido no G0. Manifesto final fixa nomes SONAME e comprova sua presença na imagem desktop de referência. Dependência fora da allowlist exige incorporação ao ELF ou revisão, não instrução oculta de `apt install`.
+Primary artifact: `rust-microsip` ELF containing application code/resources. Static SQLite/embedded assets; no sidecars, SIP subprocesses, application plugins, font downloads, or loose own libraries. **Not a promise of 100% static ELF or universal Linux.** Host provides kernel, loader/glibc, graphics/audio services/drivers. Initial allowlist includes only supported clean-desktop libraries: loader/glibc, X11/Wayland/xkbcommon interfaces, graphics loader/GPU driver, and ALSA/PulseAudio per G0-selected backend. Final manifest pins SONAMEs/proves their presence in reference desktops. Out-of-allowlist dependencies require embedding or review, never hidden apt-install instructions.
 
-AppImage é conveniência adicional com mesmo núcleo e fallback sem FUSE documentado, não substituto do ELF. Auditar dependências indiretas e bibliotecas carregadas via `dlopen`, não apenas `ldd`/DT_NEEDED. Testar driver real e ambiente sem Vulkan dedicado; não exigir placa específica sem revisão de suporte.
+AppImage is additional convenience with the same core/documented FUSE-free fallback, not ELF replacement. Audit indirect/dlopen libraries, not just ldd/DT_NEEDED. Test real drivers and no dedicated Vulkan; no specific GPU requirement without support review.
 
-Builder multi-stage Ubuntu 24.04 fixado por digest, toolchain stable fixado em `rust-toolchain.toml`, Cargo.lock com `--locked`; downloads de ferramentas por versão+SHA-256. Estágio de fetch seguido de build offline/frozen. BuildKit exporta `scratch`/artefatos, sem rodar UI em container e sem acesso a áudio/desktop do host. `.dockerignore` exclui `base/`, `.git`, `.env*` privados, bancos e artefatos. O host precisa de Docker Engine/BuildKit; não é possível compilar sem ferramenta alguma.
+Multi-stage digest-pinned Ubuntu 24.04 builder, pinned stable toolchain in rust-toolchain.toml, locked Cargo.lock; version/SHA-256 tool downloads. Fetch followed by offline/frozen build. BuildKit scratch artifact export, no container UI/audio/host-desktop access. Docker context excludes base/git/private dotenv/databases/artifacts. Host needs Docker Engine/BuildKit; compiling with no tools whatsoever is impossible.
 
-Comando **planejado, ainda não executável nesta fase**:
+Contract command (the scaffold implements only its current subset):
 
 ```sh
 docker buildx build --target artifacts --output type=local,dest=dist .
 ```
 
-Saída: ELF, AppImage, SHA256SUMS, SBOM, licenças/atribuições, manifesto ELF/runtime, commit/toolchain/digests e recibo de testes. Reprodutibilidade inicial significa entradas fixadas e auditáveis, não garantia não medida de identidade bit a bit. Adicionar comparação de rebuilds e documentar fontes de divergência. CI roda os mesmos caminhos do builder e só promove após gates.
+Full output: ELF, AppImage, SHA256SUMS, SBOM, licenses/attributions, ELF/runtime manifest, commit/toolchain/digests, test receipt. Initial reproducibility means pinned auditable inputs, not unmeasured bitwise identity. Add comparative rebuilds/document divergence. CI uses builder paths and promotes only after gates.
 
-### 7. Laboratório Asterisk em Docker
+### 7. Docker Asterisk lab
 
-Criar na implementação `docker/asterisk/` com Dockerfile, configs fictícias, compose, runner e README. Base Asterisk 22 LTS, patch/source fixados por SHA-256 ou pacote de snapshot pinado após checagem de suporte. Não depender de imagem comunitária `latest`. Asterisk é componente separado de testes, nunca dependência embutida no cliente.
+Implement `docker/asterisk/` with Dockerfile, fictional configs, Compose, runner, README. Asterisk 22 LTS, supported patch/source fixed by SHA-256 or pinned snapshot package. At the user's 2026-10-12 request, use the exact version/digest-pinned [andrius/asterisk image](../../../docs/adr/0002-disposable-asterisk-lab.md); this pins the test runtime without claiming independently reproduced upstream package inputs. Never community `latest`. Asterisk is a separate test component, never embedded in the client.
 
-Topologia default: rede Compose `internal: true` com serviços `pbx`, `peer` e `test-runner`, sem `ports`, sem `network_mode: host`, sem socket Docker, sem acesso a HOME/DBus/dispositivos e sem privilégios. Runner testa o adapter/headless com fontes sintéticas; isso não substitui os testes desktop/hardware. PBX PJSIP com ramais `1001`/`1002`, rotas `600` echo, `601` URA/DTMF e `602` tom de referência; nenhuma rota de saída/PSTN, SIP anônimo ou admin HTTP/AMI remoto. Transferência de `1001` para ramal/rota válida e destino inexistente exercita sucesso/falha.
+Default topology: Compose `internal: true`, `pbx`, `peer`, `test-runner`, no ports/host networking/Docker socket/HOME/DBus/devices/privileges. Runner tests real headless adapters using synthetic sources, never substitutes desktop/hardware acceptance. PJSIP extensions 1001/1002, 600 echo, 601 IVR/DTMF, 602 reference tone. No outbound/PSTN/anonymous SIP/remote HTTP or AMI administration. Transfer to valid extension/route and nonexistent destination proves success/failure.
 
-Gerador local cria senhas aleatórias e CA/certificados efêmeros em `artifacts/asterisk-lab/`, ignorado pelo Git. PBX e runner recebem somente esse diretório específico. Healthcheck prova readiness de PJSIP; runner verifica o registro, não apenas porta aberta. TLS em 5061, UDP/TCP 5060 e RTP UDP 10000–10019 internos. RTCP também coberto pela faixa. Sem gravação por default; qualquer captura para depuração usa apenas tráfego fictício e é excluída de publicação.
+Local generator creates random fictional passwords and ephemeral CA/certificates under ignored `artifacts/asterisk-lab/`. PBX/runner receive only selected lab subdirectories. Healthcheck proves PJSIP readiness; runner verifies registration, not merely open ports. Internal TLS 5061, UDP/TCP 5060, RTP UDP 10000–10019 including RTCP. No default recording; debug captures contain fictional traffic only and are excluded from publication.
 
-Perfil manual opt-in usa override `compose.host.yaml` que retira o PBX da rede interna default e o liga a uma bridge separada **não interna**, sem modo host, para permitir tráfego com o host. Publica somente `127.0.0.1:15060` → 5060 UDP/TCP, `127.0.0.1:15061` → 5061 TCP e `127.0.0.1:10000–10019` → mesma faixa UDP. Asterisk anuncia `127.0.0.1` na mídia/sinalização externa desse perfil, com `local_net`, `external_media_address`, `external_signaling_address`, porta externa e endpoints `direct_media=no`, `rtp_symmetric=yes`, `force_rport=yes`, `rewrite_contact=yes` ajustados à rede bridge. Validar o SDP nos dois sentidos: port mapping sozinho não resolve áudio. O perfil automatizado usa endereços/portas internos, sem herdar o anúncio loopback. Endpoints/fixtures distintos exercitam cada transporte+modo de criptografia e peer exclusivamente RTP, evitando mutação implícita de um único endpoint.
+Opt-in `compose.host.yaml` removes PBX from the internal network onto a separate **non-internal** bridge, never host networking. Publish only `127.0.0.1:15060` → 5060 UDP/TCP, `127.0.0.1:15061` → 5061 TCP, `127.0.0.1:10000–10019` → same UDP range. Advertise 127.0.0.1 externally for media/signaling, with local_net/external_media_address/external_signaling_address/external port and direct_media=no/rtp_symmetric=yes/force_rport=yes/rewrite_contact=yes adjusted to the bridge. Validate SDP both ways: port mapping alone does not solve audio. Automation uses internal addresses/ports without loopback advertisement. Separate transport/encryption and RTP-only negative fixtures prevent implicit endpoint mutation.
 
-**Topologia G4 para VMs limpas:** PBX Docker roda numa VM auxiliar de laboratório, não nas VMs desktop de aceite. Um terceiro override opt-in `compose.vm-lab.yaml` substitui o anúncio/bind loopback por `$LAB_BIND_IP`, endereço da interface host-only da VM auxiliar, sem bridge com a LAN de produção, sem rota externa e com firewall permitindo apenas os IPs das VMs cliente/peer. Nunca bindar `0.0.0.0`. Essa exceção de rede é exclusiva do laboratório G4 e não altera os defaults internos/loopback. VMs desktop recebem só artefatos e dados fictícios, sem Docker, Rust ou pacotes extras. Operador A usa o aplicativo na VM limpa com headset; operador B usa um softphone de referência numa segunda VM/estação de laboratório na mesma rede isolada, com seu próprio headset. O recibo identifica ambos os endpoints e os dois sentidos de voz sem dados pessoais. Peer sintético fica para automação, não substitui esse aceite humano.
+**G4 clean-VM topology:** Docker PBX on an auxiliary lab VM, not acceptance desktops. Opt-in `compose.vm-lab.yaml` replaces loopback bind/advertisement with `$LAB_BIND_IP`, the auxiliary VM's isolated host-only interface, no production-LAN bridge/external route, firewall allowing client/peer test IPs only. Never bind 0.0.0.0. This G4-only exception leaves internal/loopback defaults unchanged. Desktop VMs receive artifacts/fictional data only, no Docker/Rust/extra packages. Operator A uses the app/headset on a clean VM; operator B a reference softphone/own headset on another isolated station. Sanitized receipt identifies both endpoints/two-way voice. Synthetic peers do not replace human acceptance.
 
-**Impairment e NAT:** AUD-02 usa proxy UDP de mídia em espaço de usuário no runner para perda/jitter/reordenação com seed fixo, sem `tc` ou `CAP_NET_ADMIN` nos containers default. AUD-06 é teste manual reproduzível em topologia dedicada: VM cliente atrás de VM roteador Linux com NAT simples, PBX e servidor STUN do outro lado na rede isolada. Provisionar NAT somente na VM roteador descartável, nunca alterar rotas/firewall do host pessoal. Documentar endereços/SDP e bind local do STUN, gerar recibo por hash e remover a topologia ao terminar. Não afirmar que a rede Compose default já demonstra NAT/STUN. Nenhum serviço default recebe modo privileged ou capability de administração de rede.
+**Impairment/NAT:** AUD-02 uses seeded user-space UDP proxy for loss/jitter/reordering, no tc/CAP_NET_ADMIN in default containers. AUD-06 is a reproducible manual isolated topology: client VM behind disposable Linux NAT-router VM, PBX/STUN on the other side. Provision NAT only there, never change personal-host routes/firewall. Document addresses/SDP/local STUN bind, hash-linked receipt, teardown. Default Compose does not demonstrate NAT/STUN. No default privileged/network-administration capability.
 
-Comandos de contrato **a implementar**, não executados nesta proposta:
+Full contract commands; check implementation receipts for which portions exist:
 
 ```sh
 docker compose -f docker/asterisk/compose.yaml up --build --abort-on-container-exit --exit-code-from test-runner
 docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.host.yaml up --build pbx
-LAB_BIND_IP=<ip-host-only-da-vm-auxiliar> docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.vm-lab.yaml up --build pbx
+LAB_BIND_IP=<auxiliary-vm-host-only-ip> docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.vm-lab.yaml up --build pbx
 docker compose -f docker/asterisk/compose.yaml down --volumes --remove-orphans
 ```
 
-Perfis host e VM são alternativas: nunca empilhar `compose.host.yaml` junto com `compose.vm-lab.yaml`. Fixar uma versão do Compose com suporte à substituição explícita de listas (`!override`/`!reset`) para que redes/ports defaults não permaneçam por merge. O teardown de cada perfil repete os mesmos arquivos `-f` utilizados no `up` e remove a rede correspondente. Na VM auxiliar, a restrição de acesso deve filtrar efetivamente tráfego encaminhado pelo Docker (DOCKER-USER quando backend iptables, equivalente quando nftables), não apenas INPUT/UFW; provar acesso negado de um IP não autorizado. AUD-06 inclui o IP externo da VM roteador na ACL de teste. Validar no perfil host que a origem vista através da bridge não impede reescrita correta do SDP por `local_net`.
+Host/VM profiles are alternatives; never stack their overrides. Pin a Compose version supporting explicit list replacement (`!override`/`!reset`) to prevent merged default networks/ports. Teardown repeats the same -f files and removes that profile's network. Auxiliary-VM firewall must filter Docker-forwarded traffic (DOCKER-USER for iptables/equivalent nftables), not just INPUT/UFW; prove unauthorized-IP denial. AUD-06 ACL includes NAT-router external IP. Verify bridge-gateway source classification does not bypass host SDP rewriting through local_net.
 
-Testes: registro/renovação em três transportes, dois sentidos, 401/407, ocupado, CANCEL/200 race, DTMF, hold, REFER/NOTIFY, TLS inválido, SRTP obrigatório e retomada após perda de rede. Teste automatizado de síntese analisa tom/RMS/frequência nos dois sentidos; só echo não prova dois endpoints independentes. Teste manual posterior confirma microfone e reprodução reais no ELF e AppImage exatos.
+Tests: three-transport registration/renewal, both call directions, 401/407, busy, CANCEL/200 race, DTMF, hold, REFER/NOTIFY, invalid TLS, mandatory SRTP, network recovery. Synthetic tests measure tone/RMS/frequency both ways; echo alone does not prove independent endpoints. Later manual tests confirm real microphone/playback on exact ELF/AppImage.
 
-### 8. Qualidade, licença e publicação
+### 8. Quality, license, publication
 
-`//!` explica cada crate/módulo; `///` documenta API pública, erros e exemplos compiláveis. `thiserror` nas bibliotecas, contexto no binário, nenhum `unwrap`/`expect`/`todo!` em caminhos de produção. `unsafe_code=forbid` no código próprio salvo adapter FFI isolado justificado e auditado; dependências nativas/unsafe de terceiros explicitamente inventariadas. Tokio com features mínimas, limites e cancelamento; nada de runtime async dentro do callback de áudio.
+`//!` explains crates/modules; `///` documents public APIs/errors/compilable examples. thiserror in libraries, binary context, no production unwrap/expect/todo. Own unsafe_code=forbid except isolated justified/audited FFI adapter; explicitly inventory third-party native/unsafe dependencies. Minimal Tokio features, limits/cancellation; no async runtime in audio callbacks.
 
-Gates: fmt, clippy warnings-as-errors, testes/doctests, rustdoc warnings-as-errors, cargo-deny/audit com vulnerabilidades avaliadas, propriedades sobre estados/config/URI/CSV, fuzz dos parsers/adapters, integração Asterisk, snapshots/teclado e smoke VM. Plano rastreável em [test-plan.md](test-plan.md). Budget inicial em VM 2 vCPU/4 GiB: startup p95 até 3 s após caches aquecidos, RSS ocioso até 200 MiB, UI interativa durante falha de rede; baseline medido antes de impor regressões. Cobertura alvo 80% de linhas em domínio/config/storage, nunca substitui cenários críticos de I/O.
+Gates: fmt, clippy warnings-as-errors, tests/doctests, rustdoc warnings-as-errors, evaluated cargo-deny/audit vulnerabilities, state/config/URI/CSV properties, parser/adapter fuzzing, Asterisk integration, snapshots/keyboard, VM smoke. See [test-plan.md](test-plan.md). Initial 2-vCPU/4-GiB VM budget: warm-cache startup p95 ≤3 seconds, idle RSS ≤200 MiB, interactive UI during network failure; measure baseline before enforcing regressions. Target 80% domain/config/storage line coverage, never replacing critical I/O scenarios.
 
-Propor GPL-3.0-or-later para futuro código, em vez de assumir licença MIT ao reutilizar referência GPL. Auditar qualquer incorporação do MicroSIP (site GPLv2; headers examinados GPL-2.0-or-later, confirmar cada arquivo) e do GOnnect e a opção de licença de dependências; preservar avisos e não copiar marca/logo como produto oficial. Nenhuma fonte upstream foi copiada para implementação nesta etapa. A decisão de licenciamento entra no G0 antes de incorporar código/assets.
+Propose GPL-3.0-or-later for own code, not assumed MIT when using GPL references. Audit any MicroSIP incorporation (site GPLv2; examined headers GPL-2.0-or-later, confirm each file), GOnnect, and dependency license choices; preserve notices, never copy brands/logos as an official product. No upstream source was copied into application implementation at planning time. G0 licensing decisions precede code/asset incorporation.
 
-Repositório privado inicialmente, proprietário autenticado `jniltinho`; não alterar visibilidade sem instrução. Commit explícito só de planejamento/skills. Auditoria de índice antes de cada push: nenhum caminho `base/`, submódulo, segredo ou artefato pessoal. CI deve repetir esse bloqueio quando for implementado. Tags/releases só após gates; GitHub Actions não pode afirmar release usável por mera compilação.
+Initially private, owner jniltinho; no visibility change without instructions. User now requests commits/pushes at verified implementation milestones. Audit staged content before every push: no base paths, submodules, secrets, or personal artifacts. CI repeats this once implemented. Tags/releases only after gates; compilation alone cannot justify “usable release” in GitHub Actions.
 
 ## Risks / Trade-offs
 
-- [Stack Rust ainda não comprovada para todo o fluxo SIP/SDES] → G0 vertical, ADR e revisão de escopo se falhar; não preencher lacunas com mocks de produção.
-- [Bibliotecas de áudio/gráficos escondidas quebram “um binário”] → allowlist explícita, auditoria dlopen e chamadas em VMs limpas; AppImage testado separadamente.
-- [egui não oferece a mesma acessibilidade/visual de Win32/Qt automaticamente] → validar navegação, contraste, escala e matriz essencial antes da expansão.
-- [NAT/Docker gera chamada estabelecida sem áudio] → mídia ancorada, profiles internos/host separados, SDP e tons nas duas direções.
-- [Sem AEC pode haver eco em alto-falantes] → headset como perfil de qualidade inicial, limitação publicada; não prometer viva-voz profissional.
-- [Bandeja/portais variam] → degradação para janela acessível sem extensão obrigatória.
-- [SQLite e logs contêm metadados pessoais] → permissões, retenção, sanitização, nenhum dado real em testes ou no GitHub.
-- [Paridade total estoura o primeiro release] → mesma experiência nas telas essenciais com exceções registradas; integrações adiadas separadas.
+- [Rust stack unproven across SIP/SDES] → vertical G0, ADR, scope review on failure; no production mocks filling gaps.
+- [Hidden audio/graphics libraries break one-binary contract] → explicit allowlist, dlopen audit, clean-VM calls; separate AppImage tests.
+- [egui does not automatically match Win32/Qt accessibility/visuals] → keyboard/contrast/scaling/essential matrix before expansion.
+- [NAT/Docker establishes calls without audio] → anchored media, separate internal/host profiles, SDP/two-direction tones.
+- [No AEC can cause speaker echo] → initial headset quality profile, published limitation, no professional speakerphone promise.
+- [Tray/portals vary] → accessible-window fallback without mandatory extensions.
+- [SQLite/logs contain personal metadata] → permissions, retention, sanitization, no real data in tests/GitHub.
+- [Full parity overwhelms first release] → same essential-screen experience with recorded exceptions/separate deferred integrations.
 
 ## Migration Plan
 
-1. Aprovar escopo e concluir G0 com recibos; somente então implementar.
-2. Criar workspace, dados fictícios e laboratórios isolados; construir por fatias verticais testadas.
-3. Usar identificador XDG `rust-microsip` independente de `gonnect` e MicroSIP; não ler nem alterar os legados.
-4. Entregar release candidate privado e testar artefatos exatos em GNOME/Wayland e KDE/X11.
-5. Liberar v0.1.0 apenas com checklist, licenças e testes completos. Usuário decide eventual visibilidade pública.
-6. Rollback: restaurar binário anterior com backup compatível do perfil Rust; recusar schema futuro, preservar o banco atual. A instalação GOnnect original permanece disponível e intocada.
+1. Approve scope and complete G0 receipts before full implementation.
+2. Create workspace, fictional data, isolated labs; build tested vertical slices.
+3. Independent XDG identifier rust-microsip, never read/change legacy gonnect/MicroSIP data.
+4. Private release candidate; exact-artifact GNOME/Wayland/KDE/X11 tests.
+5. v0.1.0 only with complete checklist/licenses/tests; user decides eventual public visibility.
+6. Rollback: prior binary/compatible Rust-profile backup; reject future schema and preserve current database. Original GOnnect installation remains available/untouched.

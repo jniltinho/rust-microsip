@@ -1,53 +1,52 @@
-# Validação da proposta
+# Proposal validation
 
-Data: 2026-10-12. Escopo: documentos de planejamento, sem implementação do aplicativo.
+Date: 2026-10-12. Historical scope: planning documents before application implementation. Counts and absent-file statements below describe that planning snapshot, not current implementation progress. See tasks/implementation receipts for current status. English translation; no new runtime approval is implied.
 
-## Verificações locais
+## Local checks at planning time
 
-- OpenSpec CLI 1.10.0: `openspec validate create-native-rust-linux-release --strict --no-interactive` aprovado.
-- `openspec status`: proposta, specs, design e tarefas completos (4/4 artefatos de planejamento).
-- Rastreabilidade desktop conferida: sete specs, 46 cenários únicos, 46 entradas no plano de testes, 54 tarefas não executadas. Extensões CLI/MCP e web acrescentam uma spec e seis cenários cada, com 14 e 16 tarefas; total de 58 cenários e 84 tarefas pendentes.
-- `base/` ignorada por regra raiz `/base/`; nenhum arquivo dela está no índice. Nenhum submódulo de referência foi adicionado.
-- Repositório criado inicialmente como `jniltinho/gonnect-rust` e renomeado para `jniltinho/rust-microsip`, mantido privado. Somente documentos/skills aprovados para envio; nenhum release/tag de aplicativo criado.
-- Snapshot limpo exportado do índice validado pelo OpenSpec sem `base/`; links relativos, IDs únicos, symlinks das skills e ausência de submódulos verificados.
-- `git diff --cached --check` aprovado após normalizar whitespace, incluindo textos importados das skills.
-- Nenhum AppImage pessoal executado ou modificado, nenhum banco/credencial pessoal lido, nenhum PBX iniciado nesta etapa.
+- OpenSpec CLI 1.10.0: strict noninteractive validation passed.
+- Proposal/specs/design/tasks complete: 4/4 planning artifacts.
+- Desktop traceability: seven specs, 46 unique scenarios/test-plan entries, 54 unexecuted tasks. CLI/MCP and web add one spec/six scenarios each and 14/16 tasks: 58 scenarios, 84 pending tasks at planning time.
+- Root `/base/` ignore, no tracked files/submodules from references.
+- Initially jniltinho/gonnect-rust, renamed jniltinho/rust-microsip, private throughout. Only approved documents/skills sent; no application tag/release.
+- Clean index-export snapshot validated without base; relative links, unique IDs, skill symlinks, no submodules verified.
+- Staged whitespace checks passed after normalization, including imported skills.
+- No personal AppImage execution/modification, personal DB/credential reads, or started PBX during planning.
 
-## Revisão independente pelo CLI do Claude
+## Independent Claude CLI review
 
-CLI instalado: 2.1.296. Modo print, ferramentas desabilitadas (`--tools ''`), MCP vazio/estrito, sem hooks ou settings de projeto/usuário e sem persistência de sessão. Entrada: somente documentos sanitizados, não a pasta base ou configurações pessoais. Saída bruta permanece fora do repositório; relatório textual sanitizado preservado em `docs/reviews/`.
+Installed CLI 2.1.296, print mode, no tools, empty/strict MCP, no hooks/project/user settings/session persistence. Input only sanitized documents, never base/personal configuration. Raw output stays outside Git; sanitized reports are in docs/reviews.
 
-Primeira rodada: **REVISE**, com cinco bloqueadores documentais, registrada em [round-1](../../../docs/reviews/claude-proposal-round-1.md).
+Round 1: **REVISE**, five documentary blockers, [report](../../../docs/reviews/claude-proposal-round-1.md). Assessed fixes:
+1. Host override replaces internal network with non-internal loopback-bound bridge.
+2. G4 auxiliary Docker PBX/isolated host-only network; clean clients and specified second human endpoint.
+3. User-space UDP impairment; manual isolated-VM NAT/STUN, no default-container privileges.
+4. G0 ELF includes actual UI/audio/D-Bus/IPC, compatible renderer, keyboard/hotplug before dependency allowlist finalization.
+5. Replace “no installed Qt” with “no extra desktop packages” and “Qt-free ELF dependencies,” permitting standard KDE.
 
-Correções aplicadas após avaliação dos apontamentos:
+Also clarified WAL/SHM/backup permissions, --config replacement, private literal passwords, CSV duplicates, DND response.
 
-1. Perfil host troca a rede interna por bridge não interna com binds somente loopback.
-2. G4 usa PBX Docker numa VM auxiliar e rede host-only restrita; VMs cliente continuam limpas, com segundo endpoint humano definido.
-3. Impairment usa proxy UDP de usuário; NAT/STUN recebe roteiro manual em VMs isoladas, sem privilégio nos containers default.
-4. ELF do G0 inclui a mesma pilha UI/áudio/D-Bus/IPC, renderer compatível, teclado e hotplug antes de fechar allowlist.
-5. “Sem Qt instalado” corrigido para “sem pacotes adicionais ao desktop padrão” e “ELF sem dependência Qt”, permitindo KDE padrão.
+Round 2 (earlier desktop scope, not current extensions): **APPROVE**, [report](../../../docs/reviews/claude-proposal-round-2.md). Input SHA-256 `185fc546a12be27d1f23cbec7b9240751ff5118a0973aa6586a0196a9a9dd540`; exit 0/success/no error. Nonblocking G4 command, override merging, Docker forwarding firewall, teardown observations were explicitly added to design. Review does not prove interoperability/lab execution.
 
-Também explicitados permissões WAL/SHM/backup, comportamento de `--config`, senha literal privada, duplicatas CSV e resposta DND.
+## Planning-stage limits
 
-Segunda rodada (escopo desktop anterior, sem as extensões atuais): **APPROVE**, sem bloqueadores documentais restantes, registrada em [round-2](../../../docs/reviews/claude-proposal-round-2.md). Entrada sanitizada identificada pelo SHA-256 `185fc546a12be27d1f23cbec7b9240751ff5118a0973aa6586a0196a9a9dd540`; processo terminou com exit code 0 e resultado success, sem erro. Observações não bloqueadoras sobre comando G4, merge de overrides, filtro de forwarding Docker e teardown foram explicitadas no design após a aprovação. Revisão não prova interoperabilidade nem execução do futuro laboratório.
+No Cargo, Docker builds, Asterisk tests, voice calls, new-app UI comparison, or ELF validation were run during this snapshot. Own Cargo.toml/Dockerfile/Compose/compiled app did not yet exist. All runtime gates remained pending. Approved implementation starts with G0/Asterisk; later scaffold/PBX receipts do not retroactively change this historical review.
 
-## Limites
+## rust-microsip scope review
 
-Não foram executados Cargo, Docker build, testes Asterisk, chamadas de voz, comparação de UI do novo aplicativo ou validação de ELF. Não existem ainda Cargo.toml próprio, Dockerfile, compose ou aplicativo compilado. Todos os gates runtime do [test-plan](test-plan.md) permanecem pendentes. O próximo trabalho, após aprovação, começa pelas tarefas de G0 e pelo laboratório Asterisk.
+User confirmed project name, compact MicroSIP UI with complementary GOnnect references, platform contracts preparing macOS/Windows, agent CLI/MCP, and full-call web in a later release. Local directory/private repository renamed; base remained local.
 
-## Revisão de escopo rust-microsip
+MicroSIP source/installer/Lite downloads stayed in base. Lite opened in disposable network/account/personal-device-free Wine/Xvfb; visual capture only, no calls/audio proof. See [source hashes/boundaries](../../../docs/reference-sources.md). Official help is a behavior reference, not parity promise.
 
-O usuário confirmou nome/diretório rust-microsip, UI compacta MicroSIP com GOnnect complementar, biblioteca de plataforma preparando macOS/Windows, CLI/MCP para agentes e web com chamadas completas em release posterior. Pasta local e repositório privado foram renomeados; base permaneceu local.
+Three complete planning changes, each strict-validated:
+- create-native-rust-linux-release: compact Linux desktop/platform/persistence.
+- add-agent-cli-mcp: CLI, optional service owner, authorized stdio MCP without SIP/SQLite duplication.
+- add-web-wasm-softphone: later Rust/WASM/browser integration, WSS/WebRTC/PBX-gateway.
 
-MicroSIP source/installer/Lite foram baixados para base; Lite abriu em Wine/Xvfb num container descartável sem rede, contas ou dispositivos pessoais. Captura visual inspecionada, sem chamadas ou teste de áudio; detalhes/hashes em [reference-sources](../../../docs/reference-sources.md). Ajuda oficial adicionada como referência de comportamento, não promessa de paridade.
+Extension gates live in their specs/tasks; older reviews do not automatically approve expanded scope.
 
-Três mudanças completas de planejamento (4/4 cada), validadas individualmente pelo OpenSpec strict:
-- create-native-rust-linux-release: desktop Linux compacto, plataforma e persistência.
-- add-agent-cli-mcp: cliente CLI, service proprietário opcional e MCP stdio, autorizados e sem duplicação SIP/SQLite.
-- add-web-wasm-softphone: release posterior, UI Rust/WASM com integração browser declarada, WSS/WebRTC e PBX/gateway.
+Round 3: **REVISE**, [report](../../../docs/reviews/claude-proposal-round-3.md), input SHA-256 `867b53b47f5e7bc07d95df88c10a15987f4c71cb60411c03a5d543ec673e4648`. Six fixes: approval outside protocol/honest same-UID threat model; global pending-intent idempotency; cross-epoch read-only outcomes; no false service/URI/GUI approval channel; ephemeral DTMF HMAC; planning approval before G0 and AG gates before release.
 
-Os gates das extensões estão nas specs/tarefas respectivas. As rodadas antigas de Claude não aprovam automaticamente o novo escopo. Terceira rodada CLI: **REVISE**, [relatório](../../../docs/reviews/claude-proposal-round-3.md), entrada SHA-256 `867b53b47f5e7bc07d95df88c10a15987f4c71cb60411c03a5d543ec673e4648`. Seis bloqueadores novos foram corrigidos: aprovação fora do protocolo e threat model honesto sobre mesmo UID; namespace/fluxo pendente de idempotência; leitura de resultado entre epochs sem reexecução; service/URI/GUI sem canal falso; HMAC efêmero para DTMF; aprovação antes G0 e gates AG antes do release.
+Round 4: **APPROVE**, [report](../../../docs/reviews/claude-proposal-round-4.md), input SHA-256 `27d5aa3522b9055339478c30f0bb207cd22cfd0e56ae34188b6a307513aa933a`. Both processes exit 0/subtype success/is_error false, no tools/MCP/hooks/settings/persistence. Afterwards clarified: previous-epoch awaiting_approval expires; bootstrap_consumed; grant renewal requires new session; human AG-06 closes in G4 with mode/hash receipts; WSS proxy belongs to operator infrastructure.
 
-Quarta rodada CLI: **APPROVE**, sem bloqueador concreto remanescente, [relatório](../../../docs/reviews/claude-proposal-round-4.md), entrada SHA-256 `27d5aa3522b9055339478c30f0bb207cd22cfd0e56ae34188b6a307513aa933a`. Ambos processos terminaram exit code 0, subtype success/is_error false, com tools desabilitadas, MCP vazio, hooks/settings isolados e nenhuma persistência. Observações não bloqueadoras foram explicitadas depois: awaiting_approval expira após restart; erro bootstrap_consumed; renovação de grant exige nova sessão; parte humana AG-06 fecha em G4 com recibos por modo/hash; proxy WSS pertence à infraestrutura do operador.
-
-Auditoria atual: nove specs, 58 IDs únicos, 84 tarefas pendentes; links relativos e symlinks de skills íntegros, nenhuma base/submódulo no índice. Snapshot limpo dos documentos atuais foi validado individualmente para as três mudanças sem base. git diff --cached --check aprovado. Revisão e smoke Wine não provam aplicação ou telefonia; todos os testes runtime continuam pendentes.
+Final planning audit: nine specs, 58 unique IDs, 84 pending tasks, intact relative links/skill symlinks, no staged base/submodules. Each change validated from clean document snapshot without base; staged whitespace passed. Review/Wine smoke do not prove application telephony; runtime acceptance stayed pending.

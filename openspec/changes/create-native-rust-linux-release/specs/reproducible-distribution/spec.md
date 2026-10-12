@@ -1,51 +1,51 @@
 ## Purpose
 
-Permitir compilar, testar e distribuir o primeiro release Linux sem toolchain no host, com artefatos verificáveis e sem publicar referências locais ou dados pessoais.
+Enable building, testing, and distributing the first Linux release without a host toolchain, with verifiable artifacts and no publication of local references or personal data.
 
 ## ADDED Requirements
 
-### Requirement: Executável com recursos incorporados
-O release SHALL entregar um ELF x86_64 com UI, fontes licenciadas, ícones, tons, codecs essenciais, migrações e SQLite incorporados, sem downloads no primeiro uso ou subprocessos do aplicativo. SHALL executar em Ubuntu 24.04 GNOME/Wayland e KDE/X11 limpos sem instalar Rust, Node, Qt, banco externo ou bibliotecas específicas do aplicativo. Dependências padrão do Linux SHALL ser enumeradas em manifesto auditado.
+### Requirement: Executable with embedded resources
+The release SHALL deliver an x86_64 ELF with embedded UI, licensed fonts, icons, tones, essential codecs, migrations, and SQLite, without first-use downloads or application subprocesses. It SHALL run on clean Ubuntu 24.04 GNOME/Wayland and KDE/X11 without installing Rust, Node, Qt, an external database, or application-specific libraries. Standard Linux dependencies SHALL be enumerated in an audited manifest.
 
-#### Scenario: DIST-01 máquina limpa
-- **WHEN** somente o ELF é copiado para uma VM limpa da matriz suportada com seu desktop e áudio padrão, conectada ao PBX auxiliar e segundo endpoint pela rede isolada de laboratório
-- **THEN** o usuário configura uma conta e completa chamada bidirecional, sem baixar recursos da aplicação ou instalar pacotes extras
+#### Scenario: DIST-01 clean machine
+- **WHEN** only the ELF is copied to a clean supported-matrix VM with its standard desktop/audio, connected to the auxiliary PBX and second endpoint through the isolated lab network
+- **THEN** the user configures an account and completes a two-way call without downloading application resources or installing extra packages
 
-### Requirement: AppImage adicional não mascara dependências
-O release SHALL oferecer AppImage adicional com o mesmo núcleo, checksums e caminho de execução sem FUSE documentado. O AppImage MUST NOT ser apresentado como prova de que o ELF atende ao requisito de binário único.
+### Requirement: Additional AppImage does not hide dependencies
+The release SHALL provide an additional AppImage with the same core, checksums, and documented FUSE-free execution. AppImage MUST NOT be presented as proof that the ELF meets the single-binary requirement.
 
-#### Scenario: DIST-02 ELF e AppImage separados
-- **WHEN** os dois artefatos são testados em ambiente suportado, inclusive sem FUSE para o AppImage
-- **THEN** cada um possui recibo próprio e um sucesso não substitui um teste falho do outro
+#### Scenario: DIST-02 separate ELF and AppImage
+- **WHEN** both artifacts are tested in supported environments, including AppImage without FUSE
+- **THEN** each has its own receipt and one success does not replace the other's failing test
 
-### Requirement: Build Docker sem toolchain no host
-O projeto SHALL oferecer build a partir de clone limpo apenas com Docker Engine e BuildKit, sem exigir Cargo no host ou a pasta `base/`. Toolchain, lockfile, imagens e dependências SHALL ser fixados; artefatos SHALL ser exportados para diretório local sem privilégios de root desnecessários.
+### Requirement: Docker build without host toolchain
+The project SHALL build from a clean clone with only Docker Engine/BuildKit, requiring neither host Cargo nor `base/`. Toolchain, lockfile, images, and dependencies SHALL be pinned; artifacts SHALL export locally without unnecessary root privileges.
 
-#### Scenario: DIST-03 build de clone limpo
-- **WHEN** um operador executa o comando documentado numa máquina com Docker e sem Rust instalado
-- **THEN** recebe ELF, AppImage, SHA256SUMS, licenças, SBOM e manifesto de dependências em `dist/`, sem copiar `.env`, bancos ou referências locais ao contexto
+#### Scenario: DIST-03 clean-clone build
+- **WHEN** an operator runs the documented command on a Docker machine without Rust installed
+- **THEN** `dist/` contains ELF, AppImage, SHA256SUMS, licenses, SBOM, and dependency manifest, without copying `.env`, databases, or local references into the context
 
-### Requirement: Laboratório Asterisk descartável
-O projeto SHALL oferecer laboratório Docker Asterisk com dois ramais fictícios, echo/URA, TLS/SRTP, testes SIP e teardown. O default SHALL isolar a rede sem publicar portas no host; o perfil manual no host SHALL bindar somente loopback, sem credenciais reais ou trunks externos. Um perfil adicional de aceite em VMs SHALL ser opt-in, usar exclusivamente rede host-only isolada, bind no IP explícito da VM auxiliar e ACL apenas para clientes de teste, nunca interface pública ou wildcard. Credenciais de teste SHALL ser geradas localmente e ignoradas pelo Git.
+### Requirement: Disposable Asterisk lab
+The project SHALL provide a Docker Asterisk lab with two fictional extensions, echo/IVR, TLS/SRTP, SIP tests, and teardown. Defaults SHALL isolate the network without publishing host ports; the manual host profile SHALL bind loopback only, without real credentials/external trunks. An additional VM acceptance profile SHALL be opt-in, exclusively on an isolated host-only network, bound to the explicit auxiliary-VM IP with test-client-only ACL, never public/wildcard interfaces. Test credentials SHALL be locally generated and Git-ignored.
 
-#### Scenario: DIST-04 laboratório e isolamento
-- **WHEN** o operador sobe o laboratório default, executa testes e o remove
-- **THEN** o PBX atende os cenários automatizados, nenhuma porta fica publicada, não existem rotas para PSTN e o teardown remove os recursos descartáveis
+#### Scenario: DIST-04 lab and isolation
+- **WHEN** the operator starts the default lab, runs tests, and removes it
+- **THEN** the PBX serves automated scenarios, no ports are published, there are no PSTN routes, and teardown removes disposable resources
 
-#### Scenario: DIST-05 perfil desktop manual
-- **WHEN** o operador ativa explicitamente o perfil local para chamar com o aplicativo no host, ou o perfil isolado de aceite em VMs
-- **THEN** apenas portas SIP e RTP documentadas ficam disponíveis em 127.0.0.1 no perfil host ou no IP/ACL da VM auxiliar no perfil VM, com mídia ancorada e sem exposição em 0.0.0.0 ou rede de produção
+#### Scenario: DIST-05 manual desktop profile
+- **WHEN** the operator explicitly activates the local host-call profile or isolated VM acceptance profile
+- **THEN** only documented SIP/RTP ports are available on 127.0.0.1 for host or the auxiliary-VM IP/ACL for VM, with anchored media and no 0.0.0.0 or production-network exposure
 
-### Requirement: Gates reais e revisão independente
-O release MUST exigir testes unitários, de integração e chamadas com áudio no artefato exato, matriz visual nos dois temas e revisão pelo CLI do Claude. Revisão de texto, mocks ou smoke de janela MUST NOT ser usados como prova de telefonia funcional.
+### Requirement: Real gates and independent review
+The release MUST require unit/integration tests and audio calls on the exact artifact, both-theme visual matrices, and Claude CLI review. Text review, mocks, or window smoke tests MUST NOT count as functional telephony proof.
 
-#### Scenario: DIST-06 bloqueio de release incompleto
-- **WHEN** há apenas uma janela visível, testes mockados ou uma aprovação de arquitetura
-- **THEN** o release continua bloqueado até existir evidência de chamadas e áudio bidirecional, sem anunciar uma versão usável prematuramente
+#### Scenario: DIST-06 incomplete release blocked
+- **WHEN** only a visible window, mocked tests, or architecture approval exists
+- **THEN** release remains blocked until call/two-way audio evidence exists, without prematurely announcing a usable version
 
-### Requirement: Publicação rastreável e privada por padrão
-O projeto SHALL publicar no GitHub somente arquivos próprios auditados e referências documentais, nunca `base/`, credenciais, bancos, dumps, gravações ou logs pessoais. Um release SHALL identificar commit, licença, checksums, SBOM e recibos sanitizados. A visibilidade inicial SHALL ser privada salvo instrução explícita do proprietário.
+### Requirement: Traceable, private-by-default publication
+The project SHALL publish only audited own files and documentary references on GitHub, never `base/`, credentials, databases, dumps, recordings, or personal logs. A release SHALL identify commit, license, checksums, SBOM, and sanitized receipts. Initial visibility SHALL be private unless the owner explicitly instructs otherwise.
 
-#### Scenario: DIST-07 auditoria antes do push
-- **WHEN** o conteúdo staged e os artefatos de release são auditados
-- **THEN** nenhum caminho `base/`, segredo ou dado pessoal é encontrado, e a origem de cada artefato distribuído pode ser identificada
+#### Scenario: DIST-07 pre-push audit
+- **WHEN** staged content and release artifacts are audited
+- **THEN** no `base/` path, secret, or personal data is found, and each distributed artifact's origin is identifiable

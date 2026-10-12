@@ -1,8 +1,8 @@
 schema: spec-driven
 
 context: |
-  Language: pt-BR
-  All artifacts must be written in pt-BR.
+  Language: English
+  All artifacts, tasks, code comments, and CLI messages must be written in English.
   Keep OpenSpec structural headings and SHALL/MUST keywords in English.
   New project: native Rust desktop softphone for Linux first, named rust-microsip; compact MicroSIP UI, complementary GOnnect reference.
   PhotoCraft is an architecture reference, not a telephony engine to copy.
@@ -12,7 +12,7 @@ context: |
   Local TOML or explicit dotenv, SQLite embedded, secrets outside database.
   Docker build and isolated Asterisk Docker tests; release requires actual two-way audio.
   base/ is local-only: never track, upload, package or include in build context.
-  Current change is planning only; implementation requires explicit approval.
+  Planning artifacts are not evidence of implemented features; implementation requires explicit approval.
 
 # Per-artifact rules (optional)
 # Add custom rules for specific artifacts.

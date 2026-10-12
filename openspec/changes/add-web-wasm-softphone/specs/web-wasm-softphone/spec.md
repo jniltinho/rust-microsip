@@ -1,47 +1,47 @@
 ## Purpose
 
-Permitir chamadas de voz completas no navegador sem instalar cliente nativo, usando uma interface Rust/WASM, transporte web seguro e consentimento para acesso a áudio.
+Enable complete browser voice calls without native installation, using Rust/WASM UI, secure web transport, and consented audio access.
 
 ## ADDED Requirements
 
-### Requirement: Acesso web independente
-O produto SHALL carregar por HTTPS sem aplicativo Linux, extensão ou plugin instalado. SHALL oferecer UI compacta Discador/Chamadas/Contatos com temas claro/escuro/sistema, teclado e mensagens de incompatibilidade. Release web SHALL ser posterior e independente do v0.1 Linux.
+### Requirement: Independent web access
+The product SHALL load through HTTPS without installed Linux app/extension/plugin. It SHALL offer compact Dialpad/Calls/Contacts UI, light/dark/system themes, keyboard operation, incompatibility messages. Web release SHALL be later than and independent of Linux v0.1.
 
-#### Scenario: WEB-01 navegador limpo
-- **WHEN** um usuário abre o endereço HTTPS num perfil limpo de Chromium ou Firefox desktop Linux da matriz publicada, sem cliente nativo
-- **THEN** a UI WASM carrega e permite configurar sessão, trocar temas e navegar por teclado sem instalar software
+#### Scenario: WEB-01 clean browser
+- **WHEN** a user opens HTTPS in a clean supported Chromium/Firefox Linux desktop profile without native client
+- **THEN** WASM UI loads and allows session configuration/themes/keyboard navigation without software installation
 
-### Requirement: Telefonia web completa
-O cliente SHALL registrar uma conta SIP por WSS e suportar uma chamada simultânea via WebRTC DTLS-SRTP, interoperando com PBX compatível ou gateway. SHALL permitir discar/receber/aceitar/recusar/encerrar, DTMF, mute, espera, DND e transferência cega confirmada, sem downgrade para WS/RTP inseguros. SHALL negociar ao menos um codec interoperável validado por navegador com G.711 no PBX.
+### Requirement: Complete web telephony
+Client SHALL register one SIP account through WSS and support one WebRTC DTLS-SRTP call, interoperating with compatible PBX/gateway. It SHALL support dial/incoming/answer/reject/hangup/DTMF/mute/hold/DND/confirmed blind transfer without insecure WS/RTP downgrade. It SHALL negotiate at least one browser-validated interoperable codec with PBX G.711.
 
-#### Scenario: WEB-02 chamada e controles
-- **WHEN** duas sessões/ramais de laboratório fazem e recebem chamada e exercitam controles no navegador suportado
-- **THEN** PBX confirma registro/DTMF/espera/REFER-NOTIFY/DND e ambos participantes ouvem voz por cinco minutos, com resultado real no histórico
+#### Scenario: WEB-02 call and controls
+- **WHEN** two lab sessions/extensions make/receive calls and exercise controls in supported browsers
+- **THEN** PBX confirms registration/DTMF/hold/REFER-NOTIFY/DND, both participants hear five-minute voice, and real outcomes enter history
 
-### Requirement: Áudio consentido e ciclo da aba
-O cliente SHALL solicitar microfone somente após ação consciente de preparar áudio ou aceitar/originar chamada; SHALL mostrar captura ativa, tratar recusa/ausência/hotplug e parar tracks quando não necessários. SHALL informar limites de autoplay, aba suspensa/fechada e notificações; MUST NOT prometer recebimento permanente com navegador fechado.
+### Requirement: Consented audio and tab lifecycle
+Client SHALL request microphone only after deliberate prepare-audio/answer/dial actions; it SHALL show active capture, handle denial/missing devices/hotplug, and stop unneeded tracks. It SHALL explain autoplay/suspended/closed-tab/notification limits; it MUST NOT promise permanent reception with closed browser.
 
-#### Scenario: WEB-03 permissão e suspensão
-- **WHEN** usuário recusa/revoga microfone, remove headset, fecha/recarrega ou suspende aba durante sessão
-- **THEN** erro/limitação fica visível quando a UI estiver ativa, nenhuma captura alternativa inicia silenciosamente e recursos são encerrados em melhor esforço, sem rediscagem automática
+#### Scenario: WEB-03 permission and suspension
+- **WHEN** the user denies/revokes microphone, removes headset, closes/reloads/suspends a session tab
+- **THEN** active UI shows errors/limits, no alternative capture starts silently, and resources close best-effort without automatic redial
 
-### Requirement: Credenciais e armazenamento web
-O cliente SHALL manter senha SIP e credenciais TURN somente na memória da sessão, sem localStorage, sessionStorage, IndexedDB, URL, logs, service worker ou assets. SHALL persistir apenas preferências e, por escolha explícita, contatos/histórico locais, com limpeza/export sanitizado. SHALL distinguir dados locais por origem/perfil e não importar automaticamente SQLite/TOML/.env do desktop.
+### Requirement: Web credentials and storage
+Client SHALL keep SIP passwords/TURN credentials only in session memory, never localStorage/sessionStorage/IndexedDB/URLs/logs/service workers/assets. It SHALL persist only preferences and explicitly opted-in local contacts/history with cleanup/sanitized export. It SHALL distinguish origin/profile-local data and never automatically import desktop SQLite/TOML/dotenv.
 
-#### Scenario: WEB-04 armazenamento e limpeza
-- **WHEN** usuário configura conta, chama, escolhe salvar dados locais e depois encerra sessão/limpa armazenamento
-- **THEN** senha não aparece em armazenamento/export/log, captura/registro são encerrados em melhor esforço e dados consentidos podem ser removidos, sem prometer apagamento forense ou persistência no modo privado
+#### Scenario: WEB-04 storage and cleanup
+- **WHEN** the user configures an account, calls, opts into local data, then ends session/clears storage
+- **THEN** no password appears in storage/export/logs, capture/registration stop best-effort, and consented data can be removed without forensic-erasure/private-mode-persistence promises
 
-### Requirement: Rede e implantação explícitas
-A distribuição SHALL documentar HTTPS, WSS, certificados, PBX WebRTC/gateway, ICE/STUN/TURN e acesso de rede necessários, incluindo emissor/gerador externo de credenciais temporárias quando usar TURN e reverse proxy WSS com validação de Origin; não SHALL prometer acesso direto SIP UDP/TCP pelo WASM ou funcionamento de chamadas offline. Configuração pública MUST NOT conter segredos. Laboratório SHALL isolar contas e mídia e não expor admin PBX, PSTN ou ambiente pessoal.
+### Requirement: Explicit network and deployment
+Distribution SHALL document HTTPS/WSS/certificates/WebRTC PBX or gateway/ICE/STUN/TURN/network needs, including external temporary-TURN-credential issuer/generator and Origin-validating WSS proxy. It SHALL NOT promise direct WASM SIP UDP/TCP or offline calls. Public config MUST NOT contain secrets. Lab SHALL isolate accounts/media and expose no PBX admin/PSTN/personal environment.
 
-#### Scenario: WEB-05 conectividade e NAT
-- **WHEN** usuário usa PBX legado sem WSS/WebRTC, certificado inválido, rede bloqueada ou cenário de laboratório que exige relay TURN
-- **THEN** recebe diagnóstico honesto sem bypass de TLS e o cenário TURN suportado completa mídia nos dois sentidos sem publicar credenciais permanentes; credencial efêmera vem de infraestrutura externa documentada e logs SIP/SDP/Authorization estão desabilitados/sanitizados
+#### Scenario: WEB-05 connectivity and NAT
+- **WHEN** users encounter legacy PBX without WSS/WebRTC, invalid certificates, blocked networks, or a relay-required lab scenario
+- **THEN** honest diagnostics offer no TLS bypass, supported TURN completes two-way media without permanent credentials, ephemeral credentials come from documented external infrastructure, and SIP/SDP/Authorization logs are disabled/sanitized
 
-### Requirement: Build e aceite próprios
-O projeto SHALL oferecer build Docker fixado exportando assets web, checksums, licenças/SBOM e guia de hospedagem HTTPS. Release SHALL exigir testes em versões fixadas/publicadas de Chromium e Firefox Linux, teclado/temas, duas pontas reais, privacidade e teste do deploy exato. Aprovação desktop ou fake media MUST NOT substituir áudio humano no navegador.
+### Requirement: Separate build and acceptance
+Project SHALL offer pinned Docker export of web assets/checksums/licenses/SBOM/HTTPS hosting guide. Release SHALL require published pinned Chromium/Firefox Linux tests, keyboard/themes, two real endpoints, privacy, exact-deployment tests. Desktop approval/fake media MUST NOT replace browser human audio.
 
-#### Scenario: WEB-06 clone e deploy limpos
-- **WHEN** operador compila clone sem base com Docker e publica o bundle em ambiente de laboratório HTTPS
-- **THEN** browsers limpos usam os assets verificados, passam os cenários WEB-01..05 e voz real possui recibo por hash/versão, sem instalar o cliente Linux
+#### Scenario: WEB-06 clean clone and deployment
+- **WHEN** an operator Docker-builds a clone without base and deploys bundle to lab HTTPS
+- **THEN** clean browsers use verified assets, pass WEB-01..05, and real voice has hash/version receipts without Linux-client installation

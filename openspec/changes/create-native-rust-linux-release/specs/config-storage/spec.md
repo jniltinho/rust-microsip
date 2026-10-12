@@ -1,56 +1,56 @@
 ## Purpose
 
-Permitir configuração local simples por arquivo ou ambiente e persistência SQLite, com precedência verificável, proteção de credenciais e preservação de dados em falhas.
+Provide simple local file/environment configuration and SQLite persistence with verifiable precedence, credential protection, and data preservation on failure.
 
 ## ADDED Requirements
 
-### Requirement: Precedência determinística
-O aplicativo SHALL resolver cada campo na ordem flags CLI > ambiente do processo > `.env` explícito > TOML explícito ou XDG > SQLite > defaults, distinguindo ausência de valor inválido. `.env` SHALL ser carregado apenas via caminho explícito, nunca por busca automática no diretório atual. SHALL mostrar origem e efetividade dos ajustes sem revelar segredos.
+### Requirement: Deterministic precedence
+The application SHALL resolve each field in this order: CLI flags > process environment > explicit `.env` > explicit or XDG TOML > SQLite > defaults, distinguishing missing from invalid values. `.env` SHALL load only through an explicit path, never automatic current-directory discovery. It SHALL display setting provenance/effectiveness without exposing secrets.
 
-#### Scenario: CFG-01 precedência e origem
-- **WHEN** o mesmo campo aparece em todas as fontes
-- **THEN** vence a fonte de maior precedência, a UI indica sua origem e nenhuma override temporária é gravada automaticamente no SQLite
+#### Scenario: CFG-01 precedence and provenance
+- **WHEN** the same field appears in every source
+- **THEN** the highest-precedence source wins, the UI identifies it, and no temporary override is automatically persisted in SQLite
 
-#### Scenario: CFG-02 arquivo inválido
-- **WHEN** um arquivo explicitamente solicitado está ausente ou contém tipo, enum ou campo desconhecido
-- **THEN** a validação falha antes de registro SIP e informa campo/caminho sem mostrar o conteúdo secreto, sem fallback silencioso
+#### Scenario: CFG-02 invalid file
+- **WHEN** an explicitly requested file is missing or contains an unknown type, enum, or field
+- **THEN** validation fails before SIP registration and identifies the field/path without exposing secret content or silently falling back
 
-### Requirement: Persistência e edição
-O aplicativo SHALL salvar preferências e configuração não secreta em SQLite embarcado nos diretórios XDG e oferecer edição validada na UI. Campos sobrepostos por fonte superior SHALL indicar a sobreposição e impedir uma falsa confirmação de mudança efetiva.
+### Requirement: Persistence and editing
+The application SHALL save preferences and non-secret configuration in embedded SQLite under XDG directories and offer validated UI editing. Fields overridden by a higher source SHALL indicate the override and prevent false confirmation of an effective change.
 
-#### Scenario: CFG-03 ajuste durável
-- **WHEN** um campo não sobreposto é salvo pela UI e o aplicativo reinicia
-- **THEN** o novo valor reaparece sem servidor de banco ou configuração externa obrigatória
+#### Scenario: CFG-03 durable setting
+- **WHEN** a non-overridden field is saved through the UI and the application restarts
+- **THEN** the new value reappears without a database server or mandatory external configuration
 
-#### Scenario: CFG-04 override externo ativo
-- **WHEN** o usuário tenta editar na UI um campo fixado por ambiente ou TOML
-- **THEN** recebe indicação da fonte que deve alterar e o aplicativo não afirma que uma mudança ineficaz foi aplicada
+#### Scenario: CFG-04 active external override
+- **WHEN** the user tries to edit a UI field fixed by environment or TOML
+- **THEN** the application identifies the source to change and does not claim an ineffective change was applied
 
-### Requirement: Segredos fora do banco
-O aplicativo MUST NOT gravar senhas SIP em claro em SQLite, logs, exports ou diagnósticos. SHALL guardar apenas referência ao Secret Service quando disponível; na ausência dele SHALL aceitar segredo efêmero de ambiente/arquivo explícito privado ou pedir senha por sessão, sem impedir uso básico. Arquivos privados e banco SHALL usar permissões 0600 e diretórios 0700.
+### Requirement: Secrets outside the database
+The application MUST NOT write plaintext SIP passwords to SQLite, logs, exports, or diagnostics. It SHALL store only a Secret Service reference when available; otherwise it SHALL accept an ephemeral secret from an explicit private file/environment or request a per-session password without preventing basic use. Private files/databases SHALL use 0600 permissions and directories 0700.
 
-#### Scenario: CFG-05 credencial e ausência de keyring
-- **WHEN** a senha é fornecida com ou sem Secret Service disponível
-- **THEN** o registro pode ser realizado, o SQLite contém no máximo referência ao segredo e um export não contém senha, token ou chave de mídia
+#### Scenario: CFG-05 credentials and missing keyring
+- **WHEN** a password is supplied with or without Secret Service
+- **THEN** registration can proceed, SQLite contains at most a secret reference, and exports contain no password, token, or media key
 
-#### Scenario: CFG-06 arquivo de segredo inseguro
-- **WHEN** um arquivo `.env` ou TOML contendo segredo é legível por outros usuários
-- **THEN** o aplicativo recusa seu uso e explica como corrigir permissões sem imprimir o segredo
+#### Scenario: CFG-06 insecure secret file
+- **WHEN** a secret-containing `.env` or TOML file is readable by other users
+- **THEN** the application refuses it and explains how to fix permissions without printing the secret
 
-### Requirement: Migração e falhas preservam dados
-O aplicativo SHALL usar migrações versionadas e transacionais, backup consistente antes de migrar e recusar banco de versão futura. Falta de espaço, lock, corrupção ou erro de migração MUST preservar o arquivo existente e mostrar caminho de recuperação, nunca recriá-lo silenciosamente.
+### Requirement: Migrations and failures preserve data
+The application SHALL use versioned transactional migrations, consistent pre-migration backups, and reject future database versions. Full disk, locks, corruption, or migration errors MUST preserve the existing file and show recovery instructions, never silently recreate it.
 
-#### Scenario: CFG-07 migração interrompida
-- **WHEN** o processo é interrompido durante uma migração
-- **THEN** a próxima abertura encontra versão anterior íntegra ou versão nova completa, com backup recuperável e sem estado parcialmente aplicado
+#### Scenario: CFG-07 interrupted migration
+- **WHEN** the process is interrupted during a migration
+- **THEN** the next opening finds either an intact previous version or a complete new version with a recoverable backup and no partially applied state
 
-#### Scenario: CFG-08 banco indisponível ou futuro
-- **WHEN** o banco está bloqueado, corrompido, sem espaço ou tem versão futura
-- **THEN** o aplicativo informa a falha, não apaga dados e não registra conta antes de resolver o armazenamento obrigatório
+#### Scenario: CFG-08 unavailable or future database
+- **WHEN** the database is locked, corrupt, out of space, or has a future version
+- **THEN** the application reports failure, does not delete data, and does not register an account before resolving mandatory storage
 
-### Requirement: Importação e exportação conscientes
-O aplicativo SHALL exportar TOML não secreto e importar configuração por confirmação explícita e transação, preservando fontes externas. Configurações INI antigas do GOnnect e MicroSIP MUST NOT ser lidas ou convertidas automaticamente.
+### Requirement: Deliberate import and export
+The application SHALL export non-secret TOML and import configuration with explicit confirmation and a transaction, preserving external sources. Legacy GOnnect and MicroSIP INI settings MUST NOT be automatically read or converted.
 
-#### Scenario: CFG-09 importação sem tocar o legado
-- **WHEN** o usuário importa TOML válido e depois exporta sua configuração
-- **THEN** vê uma prévia sanitizada, pode confirmar a gravação no SQLite e os arquivos do aplicativo instalado permanecem intactos
+#### Scenario: CFG-09 import without touching legacy data
+- **WHEN** the user imports valid TOML and exports configuration
+- **THEN** a sanitized preview allows confirmation of SQLite writes, and installed-application files remain intact

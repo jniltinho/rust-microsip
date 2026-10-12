@@ -1,4 +1,4 @@
-# Referências locais: nunca publicar, nem como submódulos ou artefatos.
+# Local references: never publish, including submodules or artifacts.
 /base/
 /target/
 /dist/

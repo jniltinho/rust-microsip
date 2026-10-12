@@ -1,0 +1,27 @@
+# Allowlist: no local file is included by default.
+**
+!Dockerfile
+!.dockerignore
+!Cargo.toml
+!Cargo.lock
+!rust-toolchain.toml
+!LICENSE
+!NOTICE
+!apps/
+apps/**
+!apps/rust-microsip/
+apps/rust-microsip/**
+!apps/rust-microsip/Cargo.toml
+!apps/rust-microsip/src/
+apps/rust-microsip/src/**
+!apps/rust-microsip/src/*.rs
+!apps/rust-microsip/tests/
+apps/rust-microsip/tests/**
+!apps/rust-microsip/tests/*.rs
+!docker/
+docker/**
+!docker/rust-components.sha256
+!packaging/
+packaging/**
+!packaging/verify.sh
+!packaging/export-scaffold.sh

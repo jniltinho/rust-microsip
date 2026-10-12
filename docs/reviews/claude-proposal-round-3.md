@@ -1,109 +1,53 @@
-# Revisão Claude CLI — rust-microsip, CLI/MCP e web
+# Claude CLI review — rust-microsip, CLI/MCP, web, round 3
 
-Data: 2026-10-12. Somente planejamento sanitizado.
+Date: 2026-10-12. Sanitized planning only. English summary translation of the historical findings, not a new review.
 
-# Veredito: **REVISE**
+# Verdict: REVISE
 
-A proposta desktop continua coerente após a primeira revisão, e o recorte web como release posterior está bem delimitado. Os bloqueadores estão na extensão CLI/MCP e na forma como ela interage com o desktop: a fronteira de autorização, a semântica de idempotência e restart e o proprietário headless.
+Desktop remains coherent; later web scope is well bounded. Blockers concern CLI/MCP authorization, idempotency/restarts, and headless ownership.
 
----
+## Blockers
 
-## Bloqueadores
+### B1. TTY approval is not outside agent control
+Same-UID shell agents can invoke cli approve/grant and allocate ptys through script/expect. TTY does not prove human presence; claimed external authorization/AG-04 protection is false.
 
-### B1. A aprovação por TTY não fica fora do canal do agente
-**Onde:** `add-agent-cli-mcp/design.md`, seção "Autorização…": *"CLI humano pode aprovar via terminal TTY local dedicado; comando approve/grant não é tool MCP"*. Também *"concessão criada explicitamente pelo humano antes do agente"*.
+Minimum fix: owner-GUI operation approval; pre-agent-session service grant creation; honestly document unrestricted same-UID shell as user-equivalent/outside boundary; test pty self-approval attempts with GUI requirement or explicitly documented exclusion. Later revised design chooses GUI-only issuance with no cli approve/grant.
 
-**Problema:** agentes como Claude Code e Codex têm shell com o mesmo UID. Eles podem executar `rust-microsip cli approve`/`grant` e alocar um pty com `script` ou `expect`. Ter TTY não prova presença humana. Com isso, o requisito confirmado ("autorização fora do canal do agente") e o cenário AG-04 ("tenta autoaprovar") passam a afirmar uma proteção que não existe.
+### B2. Idempotency namespace and pending approval are inconsistent
+Including authenticated scope in the key allows different CLI/MCP grants to produce duplicate INVITEs despite AG-05. Approval bound to request_id conflicts with five-second request/60-second human deadlines and unspecified resending.
 
-**Correção mínima:**
-- Restringir aprovação por operação à GUI do proprietário.
-- Para o modo `service`, permitir a criação de grant apenas antes da sessão do agente, pela GUI ou pelo comando CLI.
-- Declarar no threat model e em AG-04 que um agente com shell irrestrito no mesmo UID está fora da fronteira e equivale ao próprio usuário.
-- Acrescentar a AG-04 o caso "agente invoca `cli approve` via pty" com o resultado esperado: GUI exigida, ou "fora do modelo" documentado na doc de configuração de agentes.
+Minimum fix: global profile/epoch/idempotency_key; changed payload/scope returns conflict. Bind approval to key/payload fingerprint, not request_id. Specify/test either owner-pending intent executed on approval and operation_get, or same-key resending. Updated plan chooses pending execution/querying.
 
-### B2. O namespace de idempotência contradiz AG-05 e o fluxo de aprovação fica indefinido
-**Onde:** `design.md`, seção "Idempotência": *"Ledger … associa chave, perfil, escopo autenticado, hash do payload"*. Spec AG-05: *"CLI e MCP repetem dial … com a mesma chave → no máximo um efeito"*. Seção "Autorização": *"aprovação … single-use vinculada ao payload/request_id"*. Prazo do cliente: 5 s.
+### B3. Restart/epoch semantics conflict with durable outcomes
+Old-epoch rejection and blanket post-restart denial leave outcome_unknown/terminal outcome queries undefined despite durable ledger.
 
-**Problemas:**
-1. Se a chave inclui o escopo autenticado, CLI e MCP com grants diferentes caem em namespaces distintos e podem gerar dois INVITEs, o que viola AG-05.
-2. O fluxo `approval_required` → humano aprova (até 60 s) → ? não está definido. Não se sabe se o proprietário executa a intenção pendente ou se o cliente reenvia. Se reenviar, o novo `request_id` quebra o vínculo da aprovação.
+Minimum fix: old results are read-only, never execute; operation_get works across epochs for 24 hours with current read grant; distinct typed old-mutation error; explicit AG-05 case.
 
-**Correção mínima:**
-- Usar como chave `(perfil, epoch, idempotency_key)`. O mesmo key com escopo ou payload diferente retorna `conflict`.
-- Vincular a aprovação a `idempotency_key + hash do payload`, não ao `request_id`.
-- Especificar um dos dois fluxos e testá-lo em AG-04/AG-05:
-  - (a) a intenção fica pendente no proprietário e executa após aprovação, consultável por `operation_get`; ou
-  - (b) o cliente reenvia com a mesma chave.
+### B4. Headless ownership lacks URI/approval channel
+Service has no window to confirm external URIs, a later GUI loses the same lock, and approval-required operations have no channel.
 
-### B3. A semântica de restart e epoch é contraditória
-**Onde:** `design.md`: *"persistir aceitação/resultado … em SQLite … antes de executar"*, *"rejeitar chave … de epoch de proprietário antigo"* e *"negar tudo após restart"*.
+Minimum fix: visible invoker URI error/no dialing; specify later-GUI exit or read-only behavior without registration; service requires prior grant; align LIN-03/AG-01.
 
-**Problema:** o ledger é durável justamente para sobreviver a crash, mas a chave de epoch antiga é rejeitada. Fica indefinido se, após o restart, o cliente consegue obter `outcome_unknown` ou o resultado terminal, e se `operation_get` funciona entre epochs. Sem isso, o crash em AG-05 não tem resultado verificável.
+### B5. Durable DTMF hash leaks PINs
+Short DTMF/PIN sequences can be trivially brute-forced from a plain stored hash, violating AG-05 despite no plaintext digits.
 
-**Correção mínima:**
-- Após restart, uma chave de epoch anterior retorna, somente para leitura, o resultado persistido ou `outcome_unknown`, e nunca executa.
-- `operation_get` consulta entre epochs dentro da janela de 24 h, sujeito a um grant de leitura vigente.
-- Mutações de epoch antiga recebem um erro tipado distinto de `conflict`.
-- Escrever isso como cenário explícito em AG-05.
+Minimum fix: random per-epoch memory-only HMAC key or no persisted DTMF fingerprint; include scanner test in task2.5.
 
-### B4. Proprietário headless e confirmação de URI e operações
-**Onde:** desktop `linux-integration/spec.md` LIN-03 (*"a janela original apresenta a confirmação"*) e LIN-02. Extensão: *"GUI e service disputam o mesmo lock"* e *"GUI mostra origem … usuário confirma ali"*.
+### B6. Approval/gate order conflicts between changes
+Desktop approves both plans before G0; earlier CLI task said approve after G0. AG gates were missing from G0–G5 order.
 
-**Problema:** quando o `service` é o proprietário, não existe janela.
-- Uma URI `tel:`/`sip:` encaminhada não pode ser confirmada.
-- Uma GUI iniciada depois perde o lock, e não está definido se ela vira cliente IPC, se recusa a abrir ou se mostra um aviso.
-- Operações por aprovação ficam sem canal.
+Minimum fix: approve both plans before G0, implement CLI/MCP after technical G0; place AG-01..06 explicitly before G4/G5 (G3b), align desktop9.10/CLI3.5.
 
-**Correção mínima:**
-- No modo `service`, rejeitar URIs encaminhadas com erro visível no processo invocador.
-- Definir o comportamento da GUI quando o `service` é o dono: sair com mensagem, ou atuar como cliente somente leitura, sem registro.
-- Para `approval_required` em `service`, responder "use grant prévio".
-- Acrescentar um cenário em LIN-03 ou AG-01.
+## Nonblocking observations
 
-### B5. O payload de DTMF vaza pelo hash durável
-**Onde:** `design.md`, ledger *"hash do payload"* persistido por 24 h, contra a spec AG-05 *"sem dígitos DTMF"*.
+**Scope/docs:** README must list requested CLI/MCP; AG-02 should say planned config/doctor, not existing; web proposal must include required DND.
 
-**Problema:** sequências DTMF (PINs, senhas de URA) são curtas. Um hash simples no SQLite é revertido por força bruta trivial, o que contorna o MUST da spec.
+**Ownership/IPC:** no-DISPLAY service still needs private XDG runtime/user audio/optional session D-Bus/keyring; document preparation/errors. Add owner-global request limit beyond per-connection limits. Default status masks remote number.
 
-**Correção mínima:** usar HMAC com chave aleatória por epoch mantida só em memória, ou não persistir o hash de payload em operações DTMF. Incluir esse caso no scanner de segredos (task 2.5).
+**Grants:** separate answer scope/incoming-origin policy, not outbound allowlist; GUI shows read scope/lifetime/quota before confirmation.
 
-### B6. A ordem de aprovação e de gates é contraditória entre as mudanças
-**Onde:** desktop `tasks.md` 1.1 (*"Obter aprovação desta proposta e da extensão CLI/MCP vinculada"*, antes de G0) e CLI `tasks.md` 1.1 (*"Aprovar esta extensão junto ao desktop após G0"*). Além disso, o `test-plan.md` G0–G5 não posiciona os gates AG.
+**Desktop:** reference extension production IPC-v1/SO_PEERCRED in design/task1.8; unavailable storage must block CLI/MCP mutation before effects/ledger writes.
 
-**Correção mínima:**
-- Fixar uma única ordem, por exemplo: aprovar o planejamento das duas mudanças antes de G0 e iniciar a implementação CLI/MCP só após G0.
-- Inserir os cenários AG-01..06 na sequência de gates do `test-plan.md`, por exemplo como G3b, antes de G4/G5.
-- Fazer task 9.10 e CLI 3.5 referenciarem o mesmo gate.
+**Web:** disable/inspect SIP.js console/Authorization/SDP logs; mandatory Origin-validating WSS reverse proxy; explicitly external temporary-TURN issuer and lab ticket delivery; no JS/WASM zeroization guarantee; expect/justify wasm-unsafe-eval in ADR.
 
----
-
-## Observações não bloqueadoras
-
-**Escopo e documentação**
-- O `README.md` lista o que "o primeiro release proposto inclui", mas omite CLI/MCP, que agora integra o candidato Linux. Acrescentar uma linha.
-- A spec AG-02 diz *"Config validate/import/export e doctor existentes"*. Trocar "existentes" por "planejados na mudança desktop", para não sugerir implementação.
-- O proposal web lista os controles sem DND, mas a spec WEB-02 exige DND. Alinhar.
-
-**Proprietário e IPC**
-- O `service` "sem sessão gráfica" ainda depende de `XDG_RUNTIME_DIR`, de PipeWire/PulseAudio do usuário e do D-Bus de sessão para o Secret Service. Documentar os pré-requisitos (logind/linger) e o erro tipado quando faltarem.
-- O limite de 10 req/s é por conexão. Vários processos MCP abrem várias conexões. Acrescentar um limite global no proprietário.
-- `status_get` por default não pode expor o número remoto da chamada ativa. Mascarar sem grant de leitura.
-
-**Grants**
-- `call_answer` não tem escopo próprio. A allowlist de destinos cobre apenas a discagem. Definir se o answer exige grant separado ou filtro por origem.
-- Um grant de leitura pode ser solicitado por um agente e aprovado sem atenção. A GUI deve mostrar escopo, prazo e quota antes da confirmação.
-
-**Desktop**
-- O G0 inclui "IPC de produção", mas o contrato IPC (handshake v1, `SO_PEERCRED`) está detalhado só na extensão. Referenciar esse contrato a partir de `design.md` §1 e da task 1.8.
-- Com armazenamento indisponível (CFG-08), as mutações via CLI/MCP devem falhar antes de executar, já que o ledger é gravado antes. Explicitar isso.
-
-**Web**
-- O SIP.js registra mensagens SIP no console por padrão, inclusive Authorization/digest. Exigir nível de log configurado e incluir no teste WEB-04.
-- O Asterisk não valida `Origin` do WSS de forma nativa. Tornar o reverse proxy obrigatório no guia de deploy, não "proxy/PBX".
-- A credencial TURN efêmera pressupõe um emissor (REST com segredo compartilhado), ou seja, um serviço externo mesmo no "modo básico". Deixar isso explícito no WEB-05 e no guia, inclusive como ela chega ao formulário no laboratório.
-- Memória WASM e JS não é zeroizável. Registrar essa limitação junto à afirmação "senha só em memória".
-- `wasm-unsafe-eval` será quase certamente necessário para eframe/wasm-bindgen. Tratar como esperado no ADR, não como exceção.
-
-**Gates**
-- O smoke em Wine/Xvfb está corretamente limitado a layout. Manter essa distinção nos recibos de G3.
-- A contagem de 46 cenários desktop confere: 6 + 9 + 4 + 4 + 6 + 7 + 10.
+**Gates:** Wine/Xvfb proves layout only; preserve this distinction. Desktop count 46 =6+9+4+4+6+7+10 is correct.

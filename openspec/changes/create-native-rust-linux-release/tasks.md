@@ -1,80 +1,80 @@
-## 1. Aprovação e prova vertical G0
+## 1. Approval and G0 vertical proof
 
-- [ ] 1.1 Obter aprovação desta proposta e da extensão CLI/MCP vinculada, registrando web para release posterior e limites do v0.1.0, verificando explicitamente uma conta/chamada simultânea, integrações adiadas e contrato ELF versus AppImage.
-- [ ] 1.2 Criar scaffold mínimo Rust para a prova vertical com toolchain fixado e lockfile; verificar build limpo no builder Docker sem `base/` ou Cargo no host (DIST-03).
-- [ ] 1.3 Inventariar licenças, fontes/ícones e dependências nativas; entregar ADR de compatibilidade e licença antes de copiar qualquer recurso upstream.
-- [ ] 1.4 Criar PBX Asterisk Docker pinado com ramais 1001/1002, echo, URA e tons; verificar readiness PJSIP e ausência de portas publicadas no perfil default (DIST-04).
-- [ ] 1.5 Criar gerador de segredos/CA fictícios, perfil host com bridge não interna/loopback e perfil G4 host-only em VM auxiliar; verificar `docker compose config`, binds/ACL, SDP, mídia ancorada e teardown sem acesso a dados pessoais (DIST-05).
-- [ ] 1.6 Provar registro UDP/TCP/TLS e G.711 PCMA/PCMU nos dois sentidos com stack Rust candidata; anexar recibos PBX e medição de mídia sintética (SIP-01, SIP-03, AUD-01).
-- [ ] 1.7 Provar DTMF, hold, REFER/NOTIFY e TLS+SRTP/SDES com casos negativos; aprovar adapter/versões apenas com testes verdes (SIP-06, SIP-08, SIP-09, AUD-05).
-- [ ] 1.8 Gerar spike ELF com mesma pilha eframe/wgpu, áudio, D-Bus/notificações e IPC v1/SO_PEERCRED da extensão CLI/MCP de produção; verificar janela, foco/teclado, hotplug e renderer compatível em GNOME/Wayland e KDE/X11, auditar DT_NEEDED/dlopen e bloquear G0 se exigir pacotes extras (DIST-01, ND-05, AUD-03).
-- [ ] 1.9 Registrar decisão G0 e revisão read-only pelo CLI do Claude; verificar recibo vinculado aos commits/resultados, impedindo avanço para UI completa se houver bloqueador.
+- [x] 1.1 Obtain approval of this proposal and its linked CLI/MCP extension, recording web as a later release and v0.1.0 limits; explicitly verify one simultaneous account/call, deferred integrations, and the ELF versus AppImage contract. Evidence: [implementation approval](../../../docs/implementation-approval.md).
+- [x] 1.2 Create a minimal Rust scaffold for the vertical proof with a pinned toolchain and lockfile; verify a clean Docker builder build without `base/` or host Cargo (DIST-03). Evidence: [scaffold receipt](../../../docs/receipts/g0-scaffold-2026-10-12.md); this is not full DIST-03 or G0 approval.
+- [ ] 1.3 Inventory licenses, fonts/icons, and native dependencies; deliver a compatibility/license ADR before copying any upstream resource.
+- [ ] 1.4 Create a pinned Asterisk Docker PBX with extensions 1001/1002, echo, IVR, and tones; verify PJSIP readiness and no published ports in the default profile (DIST-04).
+- [ ] 1.5 Create a fictional secrets/CA generator, a host profile with a non-internal bridge/loopback, and a G4 host-only profile in an auxiliary VM; verify `docker compose config`, binds/ACL, SDP, anchored media, and teardown without accessing personal data (DIST-05).
+- [ ] 1.6 Prove UDP/TCP/TLS registration and two-way G.711 PCMA/PCMU with the candidate Rust stack; attach PBX receipts and synthetic media measurements (SIP-01, SIP-03, AUD-01).
+- [ ] 1.7 Prove DTMF, hold, REFER/NOTIFY, and TLS+SRTP/SDES with negative cases; approve the adapter/versions only with green tests (SIP-06, SIP-08, SIP-09, AUD-05).
+- [ ] 1.8 Produce a spike ELF with the same eframe/wgpu, audio, D-Bus/notifications, and IPC v1/SO_PEERCRED stack as the production CLI/MCP extension; verify window, focus/keyboard, hotplug, and compatible renderer in GNOME/Wayland and KDE/X11, audit DT_NEEDED/dlopen, and block G0 if extra packages are required (DIST-01, ND-05, AUD-03).
+- [ ] 1.9 Record the G0 decision and read-only Claude CLI review; verify a receipt linked to commits/results, preventing full UI work if a blocker exists.
 
-## 2. Workspace e contratos documentados
+## 2. Workspace and documented contracts
 
-- [ ] 2.1 Estruturar crates e binário conforme design; verificar grafo de dependências sem ciclos e domínio sem UI/SQL/network adapters; incluir contratos platform, adapter Linux, capabilities e fakes sem tipos de SO vazando, preparando macOS/Windows sem prometer suporte.
-- [ ] 2.2 Implementar tipos/IDs, máquina de estados e erros tipados; verificar propriedades de transição e ausência de panic em entradas inválidas.
-- [ ] 2.3 Implementar comandos/eventos com filas limitadas, deduplicação e supervisão; verificar saturação, cancelamento e retenção de eventos finais sem bloquear UI/áudio.
-- [ ] 2.4 Adicionar rustdoc de crates/APIs, exemplos e README de arquitetura; verificar `cargo test --doc` e rustdoc com warnings como erros.
-- [ ] 2.5 Criar fixtures, relógio falso e regra de camadas; verificar teste automatizado que rejeita dependência de infraestrutura no domínio/UI.
+- [ ] 2.1 Structure crates and binary according to the design; verify an acyclic dependency graph and a domain free of UI/SQL/network adapters; include platform contracts, Linux adapter, capabilities, and fakes without leaking OS types, preparing macOS/Windows without promising support.
+- [ ] 2.2 Implement types/IDs, the state machine, and typed errors; verify transition properties and no panic on invalid input.
+- [ ] 2.3 Implement commands/events with bounded queues, deduplication, and supervision; verify saturation, cancellation, and final-event retention without blocking UI/audio.
+- [ ] 2.4 Add crate/API rustdoc, examples, and an architecture README; verify `cargo test --doc` and rustdoc with warnings as errors.
+- [ ] 2.5 Create fixtures, a fake clock, and a layering rule; verify an automated test rejects infrastructure dependencies in domain/UI.
 
-## 3. Configuração, banco e segredos
+## 3. Configuration, database, and secrets
 
-- [ ] 3.1 Implementar schema/validação e resolver CLI/env/dotenv/TOML/SQLite/defaults; verificar todas as combinações, origem e falha antes de SIP (CFG-01, CFG-02).
-- [ ] 3.2 Implementar repositórios SQLite, permissões XDG e edição durável sem persistir effective config; verificar reinício, override e constraints de conta habilitada (CFG-03, CFG-04).
-- [ ] 3.3 Integrar Secret Service e fallback efêmero; verificar scanner no DB/logs/export, arquivos secretos 0600 e ausência de keyring (CFG-05, CFG-06).
-- [ ] 3.4 Implementar migrações transacionais e backup SQLite consistente; verificar interrupção, lock, disco cheio, corrupção e schema futuro sem perda de arquivo (CFG-07, CFG-08).
-- [ ] 3.5 Implementar import/export TOML com prévia sanitizada; verificar atomicidade e legado intocado (CFG-09).
-- [ ] 3.6 Implementar CLI `--doctor`, validação, import/export e mensagens; verificar JSON sem segredos e diagnóstico sem registro/chamada.
+- [ ] 3.1 Implement schema/validation and CLI/env/dotenv/TOML/SQLite/default resolution; verify all combinations, provenance, and failure before SIP (CFG-01, CFG-02).
+- [ ] 3.2 Implement SQLite repositories, XDG permissions, and durable editing without persisting effective configuration; verify restart, overrides, and enabled-account constraints (CFG-03, CFG-04).
+- [ ] 3.3 Integrate Secret Service and ephemeral fallback; verify DB/log/export scanning, 0600 secret files, and missing-keyring behavior (CFG-05, CFG-06).
+- [ ] 3.4 Implement transactional migrations and consistent SQLite backups; verify interruption, locks, full disk, corruption, and future schemas without file loss (CFG-07, CFG-08).
+- [ ] 3.5 Implement TOML import/export with sanitized preview; verify atomicity and untouched legacy data (CFG-09).
+- [ ] 3.6 Implement CLI `--doctor`, validation, import/export, and messages; verify secret-free JSON and diagnostics without registration/calls.
 
-## 4. Telefonia completa do release
+## 4. Complete release telephony
 
-- [ ] 4.1 Consolidar registro, renovação e backoff por transporte no adapter escolhido; verificar 401/407, senha errada, conta duplicada e ausência de retry infinito (SIP-01, SIP-02).
-- [ ] 4.2 Implementar receber/originar/aceitar/recusar/BYE/CANCEL; verificar entrada/saída e corrida CANCEL/200 OK sem sessão fantasma (SIP-03, SIP-04).
-- [ ] 4.3 Implementar ocupado e DND com estado coerente; verificar segunda entrada preserva chamada ativa e DND não a interrompe (SIP-05, SIP-07).
-- [ ] 4.4 Consolidar DTMF e re-INVITE hold/resume; verificar sequência reconhecida pela URA e restauração do áudio (SIP-06).
-- [ ] 4.5 Consolidar transferência cega com NOTIFY; verificar sucesso final e destino inválido sem perder chamada original quando diálogo preservado (SIP-08).
-- [ ] 4.6 Implementar validação TLS/CA customizada e recuperação rede/suspensão; verificar certificados negativos, retries limitados e nenhuma rediscagem automática (SIP-09, SIP-10).
+- [ ] 4.1 Consolidate registration, renewal, and per-transport backoff in the selected adapter; verify 401/407, wrong passwords, duplicate accounts, and no infinite retries (SIP-01, SIP-02).
+- [ ] 4.2 Implement incoming/outgoing calls, acceptance/rejection, BYE/CANCEL; verify both directions and the CANCEL/200 OK race without ghost sessions (SIP-03, SIP-04).
+- [ ] 4.3 Implement busy and DND with coherent state; verify a second incoming call preserves the active call and DND does not interrupt it (SIP-05, SIP-07).
+- [ ] 4.4 Consolidate DTMF and hold/resume re-INVITE; verify the IVR recognizes the sequence and audio is restored (SIP-06).
+- [ ] 4.5 Consolidate blind transfer with NOTIFY; verify final success and an invalid destination without losing the original call when its dialog is preserved (SIP-08).
+- [ ] 4.6 Implement TLS/custom-CA validation and network/suspend recovery; verify negative certificates, bounded retries, and no automatic redial (SIP-09, SIP-10).
 
-## 5. Áudio e mídia de produção
+## 5. Production audio and media
 
-- [ ] 5.1 Consolidar RTP, G.711, resampling e jitter buffer limitado; verificar loss/jitter/reorder por proxy UDP de usuário com seed fixo, codec incompatível e buffers limitados sem privilégios de rede no runner (AUD-01, AUD-02).
-- [ ] 5.2 Implementar seleção de captura/reprodução/toque e persistência por ID; verificar headset, dispositivo ausente, permissão e confirmação de novo microfone no hotplug (AUD-03).
-- [ ] 5.3 Implementar teste local e mute; verificar voz bloqueada no peer sem interromper recepção e nenhum bloqueio/alocação no callback (AUD-04).
-- [ ] 5.4 Consolidar SRTP/SDES obrigatório no perfil TLS; verificar rejeição de downgrade e nenhum vazamento de chaves (AUD-05).
-- [ ] 5.5 Implementar STUN/rport/keepalive/RTP simétrico e roteiro manual com VM roteador NAT e servidor STUN em rede isolada; verificar áudio nos dois sentidos, SDP e teardown sem mudar o host pessoal, documentando ausência de TURN (AUD-06).
+- [ ] 5.1 Consolidate RTP, G.711, resampling, and a bounded jitter buffer; verify loss/jitter/reordering through a seeded user-space UDP proxy, incompatible codecs, and bounded buffers without runner network privileges (AUD-01, AUD-02).
+- [ ] 5.2 Implement capture/playback/ringing device selection and persistence by ID; verify headsets, missing devices, permissions, and confirmation of a new microphone on hotplug (AUD-03).
+- [ ] 5.3 Implement local testing and mute; verify voice is blocked at the peer without interrupting reception, and no blocking/allocation in the callback (AUD-04).
+- [ ] 5.4 Consolidate mandatory SRTP/SDES in the TLS profile; verify downgrade rejection and no key leakage (AUD-05).
+- [ ] 5.5 Implement STUN/rport/keepalive/symmetric RTP and a manual procedure with a NAT router VM and STUN server on an isolated network; verify two-way audio, SDP, and teardown without changing the personal host, documenting no TURN support (AUD-06).
 
-## 6. Contatos e histórico
+## 6. Contacts and history
 
-- [ ] 6.1 Implementar contatos, múltiplos números e favoritos SQLite; verificar persistência, busca e seleção antes de discar (CH-01).
-- [ ] 6.2 Implementar prévia/importação CSV limitada e transacional; verificar duplicatas, UTF-8, tamanho e registros inválidos sem escrita parcial (CH-02).
-- [ ] 6.3 Persistir resultados de sessão, duração monotônica e recuperação após crash; verificar unicidade por sessão e resultados reais (CH-03).
-- [ ] 6.4 Implementar filtros, busca local, retenção 90 dias e limpeza confirmada; verificar zero tráfego de busca e remoção das entradas ativas (CH-04).
+- [ ] 6.1 Implement SQLite contacts, multiple numbers, and favorites; verify persistence, search, and selection before dialing (CH-01).
+- [ ] 6.2 Implement bounded, transactional CSV preview/import; verify duplicates, UTF-8, size, and invalid records without partial writes (CH-02).
+- [ ] 6.3 Persist session outcomes, monotonic duration, and crash recovery; verify session uniqueness and real outcomes (CH-03).
+- [ ] 6.4 Implement filters, local search, 90-day retention, and confirmed cleanup; verify zero search traffic and removal of active entries (CH-04).
 
-## 7. UI compacta MicroSIP com temas
+## 7. Compact MicroSIP UI and themes
 
-- [ ] 7.1 Completar referências MicroSIP Lite/Wine e ajuda oficial em ambiente isolado com fixtures, sem usar configuração pessoal; entregar matriz por tela/tema e registrar exceções de escopo (ND-01, ND-02).
-- [ ] 7.2 Implementar janela compacta, abas Discador/Chamadas/Contatos, teclado 3×4, status/menu, busca nas listas e tokens; verificar snapshots contra mock Rust aprovado e semelhança de fluxo MicroSIP com diferenças explicadas (ND-01).
-- [ ] 7.3 Implementar telas de contatos, discador, entrada, chamada/hold/transferência e erros, conectadas a comandos reais; verificar estados exibidos a partir de backend e funções adiadas indisponíveis (ND-02, ND-06).
-- [ ] 7.4 Implementar ajustes validados e claro/escuro/sistema; verificar persistência, troca durante chamada e serviço de tema ausente (ND-03, ND-04).
-- [ ] 7.5 Implementar foco, rótulos, navegação de teclado, contraste e layout escalável; verificar matriz 1024x768 e 100/150/200% com ações essenciais acessíveis (ND-05).
+- [ ] 7.1 Complete MicroSIP Lite/Wine references and official-help research in an isolated fixture-based environment without personal settings; deliver a per-screen/theme matrix and record scope exceptions (ND-01, ND-02).
+- [ ] 7.2 Implement the compact window, Dialpad/Calls/Contacts tabs, 3×4 keypad, status/menu, list search, and tokens; verify snapshots against the approved Rust mock and MicroSIP flow similarity with explained differences (ND-01).
+- [ ] 7.3 Implement contact, dialpad, incoming-call, active/hold/transfer, and error screens connected to real commands; verify backend-derived state and unavailable deferred features (ND-02, ND-06).
+- [ ] 7.4 Implement validated settings and light/dark/system themes; verify persistence, switching during a call, and missing theme service (ND-03, ND-04).
+- [ ] 7.5 Implement focus, labels, keyboard navigation, contrast, and scalable layout; verify 1024x768 and 100/150/200% scaling with essential actions accessible (ND-05).
 
-## 8. Integração Linux e shutdown
+## 8. Linux integration and shutdown
 
-- [ ] 8.1 Implementar notificações e bandeja opcionais; verificar desktop com e sem suporte e entrada sempre acessível (LIN-01).
-- [ ] 8.2 Implementar parsing de URI e integração opt-in; verificar confirmação, CR/LF, entradas longas e comandos shell rejeitados (LIN-02).
-- [ ] 8.3 Implementar instância única e IPC local protegido; verificar segunda instância sem novo registro ou disputa destrutiva de banco (LIN-03).
-- [ ] 8.4 Implementar fechar/ocultar/sair, confirmação e shutdown com prazo; verificar saída em chamada, SIGTERM, PBX sem resposta e áudio liberado (LIN-04).
+- [ ] 8.1 Implement optional notifications and tray; verify desktops with and without support and always-accessible incoming calls (LIN-01).
+- [ ] 8.2 Implement URI parsing and opt-in integration; verify confirmation, CR/LF, long input, and rejected shell commands (LIN-02).
+- [ ] 8.3 Implement single instance and protected local IPC; verify a second instance causes neither new registration nor destructive database contention (LIN-03).
+- [ ] 8.4 Implement close/hide/quit, confirmation, and bounded shutdown; verify exit during a call, SIGTERM, an unresponsive PBX, and released audio (LIN-04).
 
-## 9. Build, segurança e release candidate
+## 9. Build, security, and release candidate
 
-- [ ] 9.1 Completar builder Docker fixado, fetch/build offline e export; verificar build de clone limpo sem pasta base e sem toolchain no host (DIST-03).
-- [ ] 9.2 Implementar empacotamento ELF/AppImage, licenças e auditoria runtime; verificar separadamente ambos os artefatos, incluindo AppImage sem FUSE (DIST-01, DIST-02).
-- [ ] 9.3 Implementar CI para fmt/clippy/test/doc, camadas, audit/deny e fuzz limitado; verificar falhas injetadas bloqueiam pipeline e toda API pública tem documentação.
-- [ ] 9.4 Implementar scanner de publicação/artefatos e regra de proteção de `base/`; verificar testes negativos com caminho proibido ou segredo fictício (DIST-07).
-- [ ] 9.5 Executar suíte Asterisk inteira com relatório por cenário e metadados de build; verificar todas as linhas SIP/AUD/CFG relevantes no plano sem aprovações herdadas.
-- [ ] 9.6 Executar checklist manual no ELF e AppImage exatos em VMs GNOME/Wayland e KDE/X11 limpas, ligadas ao PBX auxiliar e segundo endpoint humano via rede G4 isolada; verificar headset, áudio bidirecional cinco minutos/codec, recibos por hash/tema/transporte e nenhuma instalação extra nas VMs cliente (AUD-01, DIST-01, DIST-02, DIST-06).
-- [ ] 9.7 Medir startup p95/RSS/estabilidade e revisar matriz visual com operador; verificar budgets do design e nenhum defeito crítico de usabilidade/áudio.
-- [ ] 9.8 Executar revisão final pelo CLI do Claude com contexto sanitizado; verificar relatório de bloqueadores e sua resolução, distinguindo revisão de evidência runtime (DIST-06).
-- [ ] 9.9 Preparar SBOM, checksums, notas, limitações, guia Docker e rollback; verificar cada artefato corresponde ao commit/tag candidato e não contém dados pessoais (DIST-07).
-- [ ] 9.10 Publicar v0.1.0 somente após todos os gates desta mudança e AG-01..06 no G3b da extensão CLI/MCP, além de G4/G5 e decisão de visibilidade do proprietário; verificar checklist completo, download/checksums e ausência de promessa de paridade total.
+- [ ] 9.1 Complete the pinned Docker builder, offline fetch/build, and export; verify a clean-clone build without base or a host toolchain (DIST-03).
+- [ ] 9.2 Implement ELF/AppImage packaging, licenses, and runtime auditing; verify both artifacts separately, including AppImage without FUSE (DIST-01, DIST-02).
+- [ ] 9.3 Implement CI for fmt/clippy/test/doc, layering, audit/deny, and bounded fuzzing; verify injected failures block the pipeline and every public API is documented.
+- [ ] 9.4 Implement publication/artifact scanning and the `base/` protection rule; verify negative tests with a forbidden path or fictional secret (DIST-07).
+- [ ] 9.5 Run the complete Asterisk suite with per-scenario reports and build metadata; verify all relevant SIP/AUD/CFG test-plan rows without inherited approvals.
+- [ ] 9.6 Run the manual checklist on the exact ELF and AppImage in clean GNOME/Wayland and KDE/X11 VMs, connected to the auxiliary PBX and a second human endpoint through the isolated G4 network; verify headsets, five-minute two-way audio per codec, receipts per hash/theme/transport, and no extra packages in client VMs (AUD-01, DIST-01, DIST-02, DIST-06).
+- [ ] 9.7 Measure startup p95/RSS/stability and review the visual matrix with an operator; verify design budgets and no critical usability/audio defects.
+- [ ] 9.8 Run final Claude CLI review with sanitized context; verify the blocker report and resolution, distinguishing review from runtime evidence (DIST-06).
+- [ ] 9.9 Prepare SBOM, checksums, notes, limitations, Docker guide, and rollback; verify each artifact matches the candidate commit/tag and contains no personal data (DIST-07).
+- [ ] 9.10 Publish v0.1.0 only after all gates in this change and AG-01..06 in the CLI/MCP extension's G3b, plus G4/G5 and the owner's visibility decision; verify the full checklist, download/checksums, and no claim of full parity.

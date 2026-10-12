@@ -1,47 +1,47 @@
 ## Purpose
 
-Permitir operação local por terminal e agentes com CLI e MCP verificáveis, mantendo um único proprietário de telefonia e armazenamento e autorização explícita para efeitos externos.
+Enable verifiable local terminal/agent CLI/MCP operation with one telephony/storage owner and explicit external-effect authorization.
 
 ## ADDED Requirements
 
-### Requirement: Proprietário único e modos locais
-O executável SHALL oferecer GUI, service headless explícito, cliente CLI e servidor MCP stdio. CLI/MCP SHALL conectar ao proprietário do perfil via IPC local autenticado pelo usuário do SO, sem abrir SQLite, registrar SIP ou capturar áudio por conta própria. Sem proprietário SHALL retornar engine_unavailable, sem iniciá-lo silenciosamente.
+### Requirement: Single owner and local modes
+The executable SHALL offer GUI, explicit headless service, CLI client, and stdio MCP server. CLI/MCP SHALL connect to the profile owner through OS-user-authenticated local IPC, never independently opening SQLite/registering SIP/capturing audio. Without an owner they SHALL return engine_unavailable, never silently start one.
 
-#### Scenario: AG-01 múltiplos clientes
-- **WHEN** GUI ou service é proprietário e dois clientes CLI/MCP consultam o perfil, ou nenhum proprietário existe
-- **THEN** há no máximo um registro SIP/worker SQLite; clientes recebem snapshots coerentes ou engine_unavailable sem spawn oculto; GUI iniciada contra service informa engine_owned_by_service, URI externa informa uri_confirmation_unavailable sem discagem e service sem grant informa grant_required
+#### Scenario: AG-01 multiple clients
+- **WHEN** GUI/service owns the profile and two CLI/MCP clients query it, or no owner exists
+- **THEN** at most one SIP registration/SQLite worker exists; coherent snapshots or engine_unavailable are returned without hidden spawning; GUI against service returns engine_owned_by_service, external URI uri_confirmation_unavailable without dialing, and service without grant grant_required
 
-### Requirement: CLI estruturado e comandos reais
-O cliente CLI SHALL oferecer status, devices list, contacts search, history list, config show sanitizado e controles call dial/answer/reject/hangup/dtmf/mute/hold/transfer e dnd. SHALL suportar saída humana e JSON v1, filtros/paginação limitada, IDs de sessão e códigos de saída documentados. Config validate/import/export e doctor planejados na mudança desktop SHALL permanecer compatíveis e sem segredo; alterações de configuração pelo MCP ficam fora deste release.
+### Requirement: Structured CLI and real commands
+CLI SHALL provide status, devices list, contacts search, history list, sanitized config show, call dial/answer/reject/hangup/dtmf/mute/hold/transfer, and dnd. It SHALL support human/JSON-v1 output, bounded filtering/pagination, session IDs, documented exit codes. Desktop config validate/import/export/doctor SHALL remain compatible/secret-free; MCP configuration mutation is outside this release.
 
-#### Scenario: AG-02 contrato CLI
-- **WHEN** um operador consulta estado e depois executa controle autorizado em uma sessão válida ou inexistente
-- **THEN** recebe JSON v1 ou saída humana coerente, resultado assíncrono rastreável e código de saída distinto para sucesso, validação, autorização, indisponibilidade e timeout
+#### Scenario: AG-02 CLI contract
+- **WHEN** an operator queries state and runs authorized controls against a valid/missing session
+- **THEN** coherent human/JSON-v1 output, traceable asynchronous outcomes, and distinct success/validation/authorization/unavailable/timeout exits are returned
 
-### Requirement: MCP stdio interoperável
-O servidor SHALL negociar versão MCP compatível, anunciar tools com schemas estritos e oferecer capacidades equivalentes à CLI, com leituras e controles separados. stdout MUST conter apenas mensagens MCP; logs sanitizados SHALL ir para stderr. HTTP/SSE, shell arbitrário e abertura arbitrária de arquivos MUST NOT ser expostos.
+### Requirement: Interoperable stdio MCP
+Server SHALL negotiate compatible MCP, advertise strictly schematized tools, and provide CLI-equivalent capabilities with separate reads/controls. stdout MUST contain only MCP messages; sanitized logs SHALL use stderr. HTTP/SSE, arbitrary shell, and arbitrary file opening MUST NOT be exposed.
 
-#### Scenario: AG-03 protocolo e limites
-- **WHEN** um cliente MCP inicializa, lista tools, chama uma leitura válida e envia argumento desconhecido, mensagem excessiva ou requisição inválida
-- **THEN** recebe respostas de protocolo corretas e erros limitados, sem logs em stdout, panic, acesso a arquivos ou execução shell
+#### Scenario: AG-03 protocol and limits
+- **WHEN** a client initializes/lists tools/makes a valid read and sends unknown arguments, excessive messages, or invalid requests
+- **THEN** correct protocol responses/bounded errors occur without stdout logs, panic, file access, or shell execution
 
-### Requirement: Autorização local e proteção de dados
-O proprietário SHALL negar mutações por default. Leituras default SHALL limitar-se a status resumido e diagnóstico não pessoal; contatos, histórico, dispositivos identificáveis e config exigem concessão de leitura local. Cada mutação SHALL exigir aprovação humana no proprietário ou concessão emitida pela GUI antes da sessão headless, fora do canal CLI/MCP do agente, com escopo, destinos/sessões permitidos, prazo, limites e revogação. Tool annotations e campos confirm/yes do agente MUST NOT ser autorização. Service sem UI SHALL exigir concessão humana prévia single-use no bootstrap. TTY/pty MUST NOT criar aprovação; shell irrestrito/GUI automation no mesmo UID SHALL ser declarados fora do boundary, não impedidos por promessa falsa. Credenciais SIP, áudio e referências de segredo MUST NOT ser retornados.
+### Requirement: Local authorization and data protection
+Owner SHALL deny mutations by default. Default reads SHALL expose only summarized status/nonpersonal diagnostics; contacts/history/identifiable devices/config need local read grants. Each mutation SHALL require owner-side human approval or a GUI-issued pre-headless-session grant outside agent CLI/MCP, bounded by scope, permitted destinations/sessions, expiry, limits, revocation. Tool annotations/agent confirm/yes MUST NOT authorize. UI-less service SHALL require prior single-use human bootstrap. TTY/pty MUST NOT create approval; unrestricted same-UID shell/GUI automation SHALL be documented outside the boundary, never falsely promised prevention. SIP credentials, audio, and secret references MUST NOT be returned.
 
-#### Scenario: AG-04 negar e conceder
-- **WHEN** agente solicita discagem ou histórico sem permissão, tenta autoaprovar via confirm/yes ou cli approve em pty e depois usa concessão válida, expirada ou revogada
-- **THEN** a autoaprovação é rejeitada (não existe cli approve); aprovação GUI usa intenção pendente e operation_get, ou grant prévio ativo, e somente operações dentro dessa autorização executam, sem chamada, captura, exposição de dados ou alteração na negação
+#### Scenario: AG-04 deny and grant
+- **WHEN** an agent requests dial/history without permission, attempts confirm/yes or cli approve in pty, then uses valid/expired/revoked grants
+- **THEN** self-approval is rejected (no cli approve exists); pending-intent GUI approval plus operation_get or active prior grants allow only authorized operations; denial causes no call/capture/data disclosure/change
 
-### Requirement: Idempotência, concorrência e auditoria
-Com armazenamento/ledger indisponível, mutações MUST falhar antes de qualquer efeito. Mutações SHALL exigir chave de idempotência e sessão/versão alvo quando aplicável; retransmissão da mesma intenção MUST NOT duplicar chamada, DTMF ou transferência. Namespace SHALL ser global por perfil/epoch/chave, não por grant/cliente. Reuso da chave com payload ou escopo diferente SHALL falhar. Mutações de epoch antiga SHALL retornar stale_epoch sem efeito; operation_get SHALL retornar resultado persistido ou outcome_unknown por 24 h somente com leitura vigente após restart, depois result_expired. Operações SHALL ser limitadas, com timeout e identificador de resultado; timeout do cliente MUST NOT provocar retry automático. Auditoria local SHALL registrar decisão/resultado sanitizados sem dígitos DTMF, segredos ou número completo por default.
+### Requirement: Idempotency, concurrency, audit
+Unavailable storage/ledger MUST block effects before mutation. Mutations SHALL require idempotency keys and target session/version where applicable; retransmission MUST NOT duplicate calls/DTMF/transfers. Namespace SHALL be global profile/epoch/key, not grant/client. Different payload/scope reuse SHALL fail. Old-epoch mutation SHALL return stale_epoch without effects; operation_get SHALL return persisted outcome/outcome_unknown for 24 hours with current post-restart read authorization, then result_expired. Operations SHALL be bounded with timeouts/result IDs; client timeout MUST NOT automatically retry. Local audit SHALL retain sanitized decisions/outcomes without digits/secrets/full numbers by default.
 
-#### Scenario: AG-05 repetição e corrida
-- **WHEN** CLI e MCP repetem dial/dtmf/transfer com a mesma chave, reusam chave com outro payload ou disputam sessão já encerrada ou consultam resultado após crash/restart
-- **THEN** há no máximo um efeito por intenção aceita, conflito explícito ou resultado terminal estável, sem segundo diálogo SIP; resultado antigo continua consultável com novo grant de leitura e nunca reexecuta; DTMF/PIN não pode ser recuperado por hash simples no DB
+#### Scenario: AG-05 replay and race
+- **WHEN** CLI/MCP repeat dial/dtmf/transfer with one key, reuse it for different payloads, race an ended session, or query after crash/restart
+- **THEN** at most one effect per accepted intent occurs, explicit conflict/stable terminal result, no second dialog; current read grants access old outcomes without reexecution, and DTMF/PIN cannot be recovered through plain DB hashes
 
-### Requirement: Telefonia comprovada e encerramento independente
-O aceite SHALL testar controles CLI e MCP no artefato Linux exato contra Asterisk e verificar voz bidirecional com dispositivos reais no modo proprietário GUI e service. Encerrar cliente CLI/MCP SHALL liberar sua conexão sem derrubar o proprietário ou chamada já aceita; sair do proprietário SHALL seguir o shutdown seguro desktop.
+### Requirement: Proven telephony and independent client shutdown
+Acceptance SHALL test CLI/MCP controls on exact Linux artifacts against Asterisk and real-device bidirectional voice in GUI/service ownership. Closing CLI/MCP SHALL release its connection without terminating owner/accepted calls; owner exit SHALL follow safe desktop shutdown.
 
-#### Scenario: AG-06 operação real e desconexão
-- **WHEN** cliente autorizado estabelece e controla chamada no laboratório e encerra sua conexão
-- **THEN** o PBX confirma os efeitos, a chamada continua no proprietário até encerramento explícito e o recibo distingue protocolo, mídia sintética e áudio humano real
+#### Scenario: AG-06 real operation and disconnection
+- **WHEN** an authorized client establishes/controls a lab call and disconnects
+- **THEN** PBX confirms effects, call stays with owner until explicit termination, and receipt distinguishes protocol/synthetic media/real human audio

@@ -1,27 +1,27 @@
 ## Why
 
-Usuários precisam fazer chamadas sem instalar um cliente. A opção confirmada pelo usuário é um softphone web completo em release posterior, não um painel remoto que dependa do aplicativo Linux instalado.
+Users need calls without client installation. The user confirmed a complete web softphone in a later release, not a remote panel dependent on the installed Linux app.
 
 ## What Changes
 
-- Entregar UI Rust compilada para WASM, compacta como o desktop, com temas claro/escuro/sistema, contatos e histórico locais.
-- Usar WebRTC do navegador para áudio e SIP sobre WSS para sinalização a PBX compatível, com ponte mínima para APIs web.
-- Oferecer uma conta/chamada, discar/receber/aceitar/recusar/encerrar, DTMF, mute, espera, DND e transferência cega conforme gate de interoperabilidade.
-- Publicar assets estáticos por HTTPS; nenhuma instalação do cliente nativo, extensão ou plugin.
-- Documentar requisito de PBX WebRTC ou gateway separado para redes SIP legadas, STUN/TURN quando necessário e limites de chamadas em segundo plano.
-- Manter credenciais em memória por sessão; usar armazenamento web não secreto, sem transportar configurações/SQLite nativos silenciosamente.
-- Criar build Docker/deploy e laboratório Asterisk WebRTC próprios, com testes de navegador e voz real.
+- Rust/WASM compact desktop-like UI, light/dark/system themes, local contacts/history.
+- Browser WebRTC audio and SIP/WSS to a compatible PBX, minimal web-API bridge.
+- One account/call, dial/incoming/answer/reject/hangup/DTMF/mute/hold/DND/confirmed blind transfer per interoperability gate.
+- HTTPS static assets, no native client/extension/plugin installation.
+- Document WebRTC PBX/separate legacy-SIP gateway, needed STUN/TURN, background-call limits.
+- In-memory per-session credentials, non-secret web storage, no silent native config/SQLite import.
+- Separate Docker build/deployment and Asterisk WebRTC lab, browser/real-voice tests.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `web-wasm-softphone`: softphone web sem instalação, WebRTC/WSS, permissões, privacidade, operação e distribuição.
+- `web-wasm-softphone`: installation-free web softphone, WebRTC/WSS, permissions, privacy, operation, distribution.
 
 ### Modified Capabilities
 
-Nenhuma spec canônica existente. Contrato separado, sem reduzir os requisitos desktop.
+No existing canonical specs. Separate contract without reducing desktop requirements.
 
 ## Impact
 
-Release posterior ao v0.1 Linux e CLI/MCP; depende de domínio compartilhável, contratos de plataforma e gate WebRTC próprio. Não prometer SIP UDP/TCP, SQLite nativo, keyring, tray, escuta permanente ou execução offline de chamadas no navegador. Assets web são múltiplos arquivos, não o ELF único. Implantação precisa de HTTPS e PBX/gateway acessível; não embutir servidor SIP no WASM. macOS/Windows nativos continuam roadmap separado. Nenhum código web/deploy implementado nesta etapa.
+Later than Linux v0.1/CLI/MCP; depends on shareable domain/platform contracts and its own WebRTC gate. No promise of browser UDP/TCP SIP, native SQLite/keyring/tray, permanent listening, or offline calls. Web assets are multiple files, not one ELF. Deployment needs HTTPS/access to PBX/gateway; no WASM SIP server. Native macOS/Windows remain separate roadmap. No web/deployment code implemented at planning time.

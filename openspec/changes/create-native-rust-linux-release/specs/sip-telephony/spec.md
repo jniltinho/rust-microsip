@@ -1,60 +1,60 @@
 ## Purpose
 
-Permitir telefonia SIP de voz interoperável e previsível no primeiro release Linux, com controles reais e recuperação limitada de falhas de rede.
+Provide interoperable, predictable SIP voice telephony in the first Linux release, with real controls and bounded network-failure recovery.
 
 ## ADDED Requirements
 
-### Requirement: Registro e transportes
-O aplicativo SHALL registrar uma conta habilitada por vez via UDP, TCP ou TLS, autenticar desafios 401/407, renovar registro e exibir seu estado real. Uma segunda conta habilitada MUST ser rejeitada com erro claro neste release.
+### Requirement: Registration and transports
+The application SHALL register one enabled account at a time over UDP, TCP, or TLS, authenticate 401/407 challenges, renew registration, and display its real state. A second enabled account MUST be rejected with a clear error in this release.
 
-#### Scenario: SIP-01 registro e renovação
-- **WHEN** uma conta válida é configurada no PBX de laboratório para cada transporte
-- **THEN** o registro e a renovação são confirmados pelo PBX e pela UI sem duplicação ou loop de autenticação
+#### Scenario: SIP-01 registration and renewal
+- **WHEN** a valid account is configured on the lab PBX for each transport
+- **THEN** PBX/UI confirm registration and renewal without duplication or authentication loops
 
-#### Scenario: SIP-02 configuração e autenticação inválidas
-- **WHEN** a senha está incorreta ou existem duas contas habilitadas
-- **THEN** o erro é informado sem vazamento de segredo, sem registro parcial silencioso e sem retry contínuo de credenciais rejeitadas
+#### Scenario: SIP-02 invalid configuration and authentication
+- **WHEN** the password is wrong or two accounts are enabled
+- **THEN** an error is reported without secret leakage, silent partial registration, or continuous rejected-credential retry
 
-### Requirement: Ciclo de chamada
-O aplicativo SHALL originar, receber, aceitar, recusar, cancelar e encerrar chamadas SIP com uma chamada simultânea. SHALL distinguir chamada atendida, ocupada, recusada, cancelada, perdida e falha; uma segunda chamada de entrada SHALL receber ocupado sem derrubar a existente.
+### Requirement: Call lifecycle
+The application SHALL originate, receive, answer, reject, cancel, and end SIP calls with one simultaneous call. It SHALL distinguish answered, busy, rejected, canceled, missed, and failed calls; a second incoming call SHALL receive busy without dropping the existing one.
 
-#### Scenario: SIP-03 chamadas nos dois sentidos
-- **WHEN** o aplicativo chama um segundo ramal e depois recebe uma chamada dele
-- **THEN** ambos completam estabelecimento e encerramento, e cada sessão possui exatamente um resultado no histórico
+#### Scenario: SIP-03 calls in both directions
+- **WHEN** the application calls a second extension and then receives a call from it
+- **THEN** both complete establishment/termination and each session has exactly one history outcome
 
-#### Scenario: SIP-04 cancelamento e corrida de atendimento
-- **WHEN** o usuário cancela antes do atendimento, inclusive quando o 200 OK cruza o cancelamento
-- **THEN** a sessão termina corretamente sem chamada fantasma, toque persistente ou recursos retidos
+#### Scenario: SIP-04 cancellation and answer race
+- **WHEN** the user cancels before answering, including a crossing 200 OK
+- **THEN** the session ends correctly without ghost calls, persistent ringing, or retained resources
 
-#### Scenario: SIP-05 recusa e segunda chamada
-- **WHEN** o usuário recusa uma entrada ou recebe outra enquanto já está em chamada
-- **THEN** o PBX recebe resposta adequada e a chamada existente permanece funcional
+#### Scenario: SIP-05 rejection and second call
+- **WHEN** the user rejects an incoming call or receives another while already in a call
+- **THEN** the PBX receives the appropriate response and the existing call remains functional
 
-### Requirement: Controles de chamada
-O aplicativo SHALL enviar DTMF por RTP telephone-event negociado, colocar/retirar espera por renegociação SDP e oferecer DND que recusa novas entradas sem afetar chamada em curso.
+### Requirement: Call controls
+The application SHALL send DTMF through negotiated RTP telephone-event, hold/resume through SDP renegotiation, and offer DND rejecting new incoming calls without affecting an ongoing call.
 
-#### Scenario: SIP-06 DTMF e espera
-- **WHEN** o usuário envia dígitos para uma URA e alterna espera/retorno
-- **THEN** a URA reconhece a sequência e o áudio retorna bidirecional sem encerrar a chamada
+#### Scenario: SIP-06 DTMF and hold
+- **WHEN** the user sends digits to an IVR and toggles hold/resume
+- **THEN** the IVR recognizes the sequence and bidirectional audio returns without ending the call
 
-#### Scenario: SIP-07 não perturbe
-- **WHEN** DND é habilitado antes de uma nova entrada
-- **THEN** a entrada é recusada com indicação coerente, sem tocar e sem interromper uma sessão já estabelecida
+#### Scenario: SIP-07 do not disturb
+- **WHEN** DND is enabled before a new incoming call
+- **THEN** it is rejected with coherent indication, without ringing or interrupting an established session
 
-### Requirement: Transferência cega confirmada
-O aplicativo SHALL transferir a chamada por REFER e acompanhar o resultado final por NOTIFY, sem informar sucesso apenas por receber 202. Em falha, SHALL manter ou recuperar a chamada original quando o diálogo ainda existir.
+### Requirement: Confirmed blind transfer
+The application SHALL transfer through REFER and track the final result through NOTIFY, never report success on 202 alone. On failure, it SHALL maintain/recover the original call when the dialog still exists.
 
-#### Scenario: SIP-08 transferência e falha
-- **WHEN** o usuário transfere primeiro para um destino válido e depois para um destino inválido no laboratório
-- **THEN** o sucesso só aparece após confirmação final, e a falha deixa a sessão original operável quando preservada pelo PBX
+#### Scenario: SIP-08 transfer and failure
+- **WHEN** the user transfers first to a valid and then to an invalid lab destination
+- **THEN** success appears only after final confirmation, and failure leaves the original session operable when the PBX preserves it
 
-### Requirement: Segurança e recuperação de sinalização
-O aplicativo SHALL validar certificado e hostname no TLS, aceitar CA customizada explícita e nunca fazer downgrade silencioso. Após perda de rede ou suspensão SHALL marcar indisponibilidade e tentar registrar com backoff limitado; não SHALL recriar automaticamente uma chamada perdida.
+### Requirement: Signaling security and recovery
+The application SHALL validate TLS certificate/hostname, accept an explicit custom CA, and never silently downgrade. After network loss/suspend it SHALL mark unavailability and attempt registration with bounded backoff; it SHALL NOT automatically recreate a lost call.
 
-#### Scenario: SIP-09 certificado inválido
-- **WHEN** o servidor apresenta certificado expirado, hostname diferente ou CA não confiável
-- **THEN** a conexão segura falha de modo visível sem fallback para TCP ou UDP
+#### Scenario: SIP-09 invalid certificate
+- **WHEN** the server presents an expired certificate, wrong hostname, or untrusted CA
+- **THEN** the secure connection fails visibly without TCP/UDP fallback
 
-#### Scenario: SIP-10 rede e suspensão
-- **WHEN** a rede cai e retorna ou a máquina retoma de suspensão
-- **THEN** o registro é recuperado sem tempestade de requests, e sessões encerradas não são rediscadas
+#### Scenario: SIP-10 network and suspend
+- **WHEN** the network fails/returns or the machine resumes
+- **THEN** registration recovers without request storms and ended sessions are not redialed

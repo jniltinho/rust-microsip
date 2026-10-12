@@ -1,47 +1,59 @@
 # rust-microsip
 
-Proposta para um softphone desktop nativo em Rust, com interface compacta inspirada no [MicroSIP](https://www.microsip.org/) e referências complementares do [GOnnect](https://github.com/gonicus/gonnect), com primeiro release voltado ao Linux.
+A native Rust desktop softphone under development, with a planned compact interface inspired by [MicroSIP](https://www.microsip.org/) and complementary references from [GOnnect](https://github.com/gonicus/gonnect). Linux is the first release target.
 
-**Estado: planejamento, sem aplicativo ou release compilado.** Projeto independente, não oficial do MicroSIP ou da GONICUS.
+**Status: implementation has started with the G0 scaffold; no usable softphone or release yet.** The experimental binary provides help, version, and static diagnostics only; it does not open a desktop window, register, or dial. This is an independent project, not an official MicroSIP or GONICUS product.
 
-## Proposta
+## Build the scaffold
 
-[Proposta OpenSpec](openspec/changes/create-native-rust-linux-release/proposal.md) · [Arquitetura](openspec/changes/create-native-rust-linux-release/design.md) · [Tarefas](openspec/changes/create-native-rust-linux-release/tasks.md) · [Plano de testes](openspec/changes/create-native-rust-linux-release/test-plan.md) · [Fontes e evidências](docs/reference-sources.md)
+Only Docker Engine with BuildKit/buildx is required on the host. Rust is installed exclusively inside the Ubuntu 24.04 builder, pinned by version and SHA-256.
 
-O primeiro release proposto inclui:
+```sh
+docker buildx build --platform linux/amd64 --target artifacts --output type=local,dest=dist .
+./dist/rust-microsip --help
+./dist/rust-microsip --doctor --json
+```
 
-- Interface compacta com abas Discador, Chamadas e Contatos, inspirada no MicroSIP, com temas claro, escuro e do sistema.
-- Cliente CLI e MCP local por stdio para agentes, com autorização explícita e proprietário único.
-- Registro SIP e chamadas de voz reais, dispositivos de áudio, DTMF, espera e transferência cega.
-- Configuração TOML ou `.env`, ajustes pela UI e SQLite embutido, sem servidor de banco.
-- Contatos locais/CSV, favoritos, histórico e integração básica ao desktop Linux.
-- Um executável com recursos da aplicação incorporados; as dependências do sistema Linux serão explicitamente auditadas. AppImage adicional não substitui silenciosamente esse requisito.
-- Build Docker sem instalar o toolchain Rust no host e laboratório Asterisk descartável em Docker.
+After fetching, the build runs fmt, clippy, tests, and rustdoc without network access. It exports a **scaffold ELF**, checksums, licenses, preliminary inventory, and metadata. **It does not produce an AppImage or independently satisfy full DIST-03/G0.** See the [development guide and limitations](docs/development.md).
 
-## Revisar e aplicar depois
+## Proposal
 
-Requer OpenSpec CLI 1.10.0 para os comandos de planejamento:
+[OpenSpec proposal](openspec/changes/create-native-rust-linux-release/proposal.md) · [Architecture](openspec/changes/create-native-rust-linux-release/design.md) · [Tasks](openspec/changes/create-native-rust-linux-release/tasks.md) · [Test plan](openspec/changes/create-native-rust-linux-release/test-plan.md) · [Sources and evidence](docs/reference-sources.md)
+
+The proposed first release includes:
+
+- A compact MicroSIP-inspired interface with Dialpad, Calls, and Contacts tabs and light, dark, and system themes.
+- A local CLI and stdio MCP client for agents, with explicit authorization and a single owner.
+- Real SIP registration and voice calls, audio devices, DTMF, hold, and blind transfer.
+- TOML or explicit `.env` configuration, UI settings, and embedded SQLite without a database server.
+- Local/CSV contacts, favorites, history, and basic Linux desktop integration.
+- One executable with embedded application resources and explicitly audited Linux system dependencies. An additional AppImage does not silently replace this requirement.
+- Docker builds without a host Rust toolchain and a disposable Docker Asterisk lab.
+
+## OpenSpec workflow
+
+Planning commands require OpenSpec CLI 1.10.0:
 
 ```sh
 openspec status --change create-native-rust-linux-release
 openspec validate create-native-rust-linux-release --strict --no-interactive
 ```
 
-A implementação só começa após aprovação da proposta. No Codex: `$openspec-apply-change`; no Claude, usar o fluxo OpenSpec instalado ou pedir para aplicar a mudança.
+[Implementation approval](docs/implementation-approval.md) was given on 2026-10-12. In Codex, use `$openspec-apply-change`; in Claude, use the installed OpenSpec workflow or request change application. Check tasks only after obtaining evidence. G0 remains pending until the complete vertical proof passes.
 
-O comando de build Docker e o laboratório são contratos planejados, descritos no design; **ainda não existem Dockerfile, compose ou binário Rust neste repositório**.
+The scaffold builder exists. The disposable PBX lab is being implemented using a [pinned andrius/asterisk image](docs/adr/0002-disposable-asterisk-lab.md). Application telephony, media, UI, persistence, and CLI/MCP controls remain planned contracts, not implemented features.
 
-## Referências locais e skills
+## Local references and skills
 
-`base/` é apenas material local, ignorado pelo Git e não necessário para consultar a proposta num clone novo. As referências reproduzíveis estão documentadas por URL e revisão, sem incluir fontes, AppImages, logs pessoais ou bancos de dados.
+`base/` is local-only material, ignored by Git and unnecessary to read the proposal in a fresh clone. Reproducible references are documented by URL/revision without including upstream sources, AppImages, personal logs, or databases.
 
-Skills Rust instaladas no projeto: Apollo `rust-best-practices`, `rust-async-patterns` e `rust-testing`, compartilhadas entre Codex e Claude. São apoio ao desenvolvimento, não dependências do aplicativo. [Proveniência](docs/development-skills.md).
+Project-installed Rust skills: Apollo `rust-best-practices`, `rust-async-patterns`, and `rust-testing`, shared by Codex and Claude. These support development; they are not application dependencies. See [provenance](docs/development-skills.md).
 
-## Interfaces e evolução
+## Interfaces and roadmap
 
-- Biblioteca de plataforma: contratos portáveis e adapter Linux; macOS/Windows em releases futuros.
-- [CLI e MCP local para agentes](openspec/changes/add-agent-cli-mcp/proposal.md): modos do mesmo binário, sem duplicar SIP/SQLite; controle autorizado explicitamente.
-- [Web/WASM](openspec/changes/add-web-wasm-softphone/proposal.md): chamadas completas via WebRTC em release posterior, sem instalar cliente, com PBX compatível ou gateway. Não integra o v0.1 Linux.
-- [Ajuda oficial do MicroSIP](https://www.microsip.org/help). Não é manual do futuro rust-microsip nem promessa de paridade.
+- Platform library: portable contracts and a Linux adapter; macOS/Windows in later releases.
+- [Local agent CLI and MCP](openspec/changes/add-agent-cli-mcp/proposal.md): modes of the same binary without duplicated SIP/SQLite; explicitly authorized control.
+- [Web/WASM](openspec/changes/add-web-wasm-softphone/proposal.md): full WebRTC calls in a later release, without client installation, using a compatible PBX or gateway. Not part of Linux v0.1.
+- [Official MicroSIP help](https://www.microsip.org/help): neither a manual for the future rust-microsip nor a promise of parity.
 
-Diretório local renomeado para `/home/nilton/Projetos/nilton/NOVOS/rust-microsip`. Repositório privado: https://github.com/jniltinho/rust-microsip .
+Private repository: [jniltinho/rust-microsip](https://github.com/jniltinho/rust-microsip).

@@ -1,91 +1,86 @@
-# Fontes e limites das evidências
+# Sources and evidence boundaries
 
-Levantamento de 2026-10-12. Este documento não comprova funcionalidade do futuro aplicativo.
+Research dated 2026-10-12. This historical reference inventory does not prove future application functionality. Personal absolute paths are deliberately omitted.
 
-## Bases locais
+## Local reference inventory
 
-| Referência | Revisão ou identificação | Observação |
+| Reference | Revision/identity | Boundary |
 |---|---|---|
-| GOnnect upstream | https://github.com/gonicus/gonnect ; checkout local `7c48ed6b5dc81e93458053d4de025bc3a4b28738` (`v2.4.1-12`) | `base/gonnect-native`; não é automaticamente a revisão do AppImage |
-| Cópia local stable | `base/gonnect-native-stable` | Ponteiro de worktree quebrado após cópia de diretório. Não alegar revisão Git exata; arquivos identificados abaixo por hash |
-| PhotoCraft | https://github.com/storytold/photocraft/tree/b3222ee8e7e6bcb4799c37f904c595f20f9baf5e | Referência de organização Rust, UI nativa egui/eframe, não base de telefonia |
-| AppImage instalado | `GOnnect-2.4.1-ubuntu24.04-x86_64.AppImage` em `/home/nilton/Applications/` | SHA-256 `28a3ecb8692a7d7eadcb6ab69364fceb42048ba45f4192911e3b03ecce729cc4`; identificado sem executar, registrar contas ou acessar configuração pessoal |
+| GOnnect upstream | https://github.com/gonicus/gonnect ; local checkout `7c48ed6b5dc81e93458053d4de025bc3a4b28738` (`v2.4.1-12`) | base/gonnect-native; not automatically the installed AppImage revision |
+| Local stable copy | base/gonnect-native-stable | Copied worktree has a broken Git pointer; no exact revision claim, individual hashes below |
+| PhotoCraft | https://github.com/storytold/photocraft/tree/b3222ee8e7e6bcb4799c37f904c595f20f9baf5e | Rust/egui/eframe organization reference, not telephony engine |
+| Installed AppImage | GOnnect-2.4.1-ubuntu24.04-x86_64.AppImage | SHA-256 `28a3ecb8692a7d7eadcb6ab69364fceb42048ba45f4192911e3b03ecce729cc4`; identified without execution, account registration, or personal-config access |
 
-Arquivos stable usados na análise (SHA-256):
+Stable files examined (SHA-256):
+- src/Main.qml: `0a684c3a33178c2612133a2751488155ba0f111d085e8f9141d9685b98ba8ad1`.
+- src/sip/SIPManager.h: `1dcff0b33b79a4c9c57657324105b49b1141b7aba52f696c88ee7d173dd57bf4`.
+- src/sip/SIPCallManager.h: `4d65ceab2a1fea379addb79b2df288d394b2baeb9951f6ffdca7aa201a3ef400`.
+- media/main-screen.png: `4bf10bf45f431944cdb17ffe16beb5ba4c323ccd3e329b8ad482ef82f88b0abf`.
 
-- `src/Main.qml`: `0a684c3a33178c2612133a2751488155ba0f111d085e8f9141d9685b98ba8ad1`.
-- `src/sip/SIPManager.h`: `1dcff0b33b79a4c9c57657324105b49b1141b7aba52f696c88ee7d173dd57bf4`.
-- `src/sip/SIPCallManager.h`: `4d65ceab2a1fea379addb79b2df288d394b2baeb9951f6ffdca7aa201a3ef400`.
-- `media/main-screen.png`: `4bf10bf45f431944cdb17ffe16beb5ba4c323ccd3e329b8ad482ef82f88b0abf`.
+The local public screenshot showed left navigation, top search, central history, right address book/favorites. It is upstream layout evidence, not a capture of the installed AppImage. Exact screen/theme comparison still needs an isolated fictional-data session.
 
-O screenshot público local foi inspecionado: navegação vertical à esquerda, busca superior, histórico central, agenda/favoritos à direita. É evidência do layout do projeto, não captura do AppImage instalado. A comparação exata com o AppImage, nas telas e nos dois temas, ainda precisa de uma sessão isolada com dados fictícios.
+## Historical codebase-memory-mcp research
 
-## codebase-memory-mcp
+Original graph gonnect-rust, fast mode, generation 2026-10-12T21:30:11Z, directed Tier 2 exploration. Located/read snippets: PhotoCraft desktop main/eframe/UI wiring; GOnnect SIPManager Qt/PJSIP pj::Endpoint boundary; SIPCallManager call/hold/DTMF/transfer/conference surface; Main.qml windows/credential dialog/registration failure/close lifecycle.
 
-Indexado como `gonnect-rust`, modo fast, geração inicial `2026-10-12T21:30:11Z`; exploração dirigida Tier 2. Símbolos localizados pelo grafo e lidos por `get_code_snippet`:
+Coverage checked all four files and PhotoCraft Cargo.toml. C++ headers had partial Qt-macro parsing; complete direct reads supplemented them. Rust main, QML, and manifest had no recorded gaps, a best-effort signal, not completeness proof. Main call tracing was exploratory, never exhaustive dependency evidence.
 
-- `gonnect-rust.base.photocraft.apps.photocraft.src.main.main`: inicialização da aplicação desktop, `eframe` e ligação com a UI.
-- `gonnect-rust.base.gonnect-native-stable.src.sip.SIPManager.SIPManager`: fronteira Qt/PJSIP (`pj::Endpoint`).
-- `gonnect-rust.base.gonnect-native-stable.src.sip.SIPCallManager.SIPCallManager`: superfície de chamadas/hold/DTMF/transferência/conferência.
-- `gonnect-rust.base.gonnect-native-stable.src.Main`: janelas, diálogo de credenciais, falhas de registro e ciclo de fechamento.
-
-`check_index_coverage` aplicado aos quatro arquivos e ao `Cargo.toml` do PhotoCraft. Os dois headers C++ têm parsing parcial, especialmente macros Qt: leitura direta integral realizada para complementar os trechos. `main.rs`, `Main.qml` e `Cargo.toml` sem lacuna registrada, sinal best-effort, não prova de completude. A navegação de chamadas de `main` foi exploratória, não usada para afirmação exaustiva de dependências.
-
-Não foi feita auditoria completa das bases. O `Cargo.toml` lido confirma workspace, edição 2024, egui/eframe e licenças MIT/Apache-2.0; a nova aplicação não herdará automaticamente o MSRV nem as 24 crates do editor. Nenhuma base foi modificada ou incluída no repositório.
+No complete reference audit. Examined Cargo.toml confirms workspace/edition2024/egui-eframe/MIT-or-Apache; the new app inherits neither MSRV nor the editor's 24 crates automatically. No reference tree was changed or included in Git. Current implementation uses a separately refreshed project index; old graph identifiers are historical provenance.
 
 ## ai-memory
 
-Consulta do projeto `default/gonnect-rust` confirmou apenas o pedido, sem implementação anterior comprovada. Consulta global encontrou `default/site-linuxpro`, página `sessions/72aa78cd-c49a-4eca-a90b-bb5c314bcf98.md`: relato histórico distingue chamada no binário anterior de smoke test do AppImage reconstruído.
+Original default/gonnect-rust lookup confirmed the request only, not prior implementation. Global default/site-linuxpro session `sessions/72aa78cd-c49a-4eca-a90b-bb5c314bcf98.md` distinguished prior-binary calls from rebuilt-AppImage smoke.
 
-Aplicação desse contexto: exigir teste de áudio bidirecional no **artefato exato** do release, sem herdar aprovação de outro binário. Memória é evidência histórica não confiável; os resultados antigos não foram reexecutados nesta proposta. Não houve escrita manual de memória permanente.
+Resulting requirement: two-way audio on the **exact release artifact**, no inherited binary approval. Memory is untrusted history; old results were not rerun for this proposal. No manually written permanent memory.
 
-## Documentação primária para decisões propostas
+## Primary documentation for candidate decisions
 
-- GOnnect: https://github.com/gonicus/gonnect e arquivos locais `README.md`/`LICENSE` (GPL-2.0-or-later).
-- PhotoCraft: https://github.com/storytold/photocraft e `Cargo.toml` local (MIT OR Apache-2.0).
-- OpenSpec: https://github.com/Fission-AI/OpenSpec ; templates e validação do CLI instalado 1.10.0.
-- UI nativa: https://docs.rs/eframe/latest/eframe/ .
-- SIP candidato: https://github.com/restsend/rsipstack . O projeto descreve transportes e transações SIP; isso não comprova um softphone completo.
-- Mídia candidata: https://github.com/restsend/rustrtc ; avaliar aderência SIP/SDES antes de adotar, sem assumir que WebRTC e SIP usam a mesma negociação.
-- Áudio candidato: https://docs.rs/cpal/latest/cpal/ ; inventariar dependências Linux antes de fechar backend.
-- SQLite embarcado: https://github.com/rusqlite/rusqlite .
-- PBX de laboratório: https://docs.asterisk.org/ e https://github.com/asterisk/asterisk .
+- GOnnect: https://github.com/gonicus/gonnect ; examined README/LICENSE, GPL-2.0-or-later.
+- PhotoCraft: https://github.com/storytold/photocraft ; examined Cargo.toml, MIT OR Apache-2.0.
+- OpenSpec: https://github.com/Fission-AI/OpenSpec ; installed CLI 1.10.0 templates/validation.
+- Native UI: https://docs.rs/eframe/latest/eframe/ .
+- SIP candidate: https://github.com/restsend/rsipstack ; transport/transaction descriptions do not prove a complete softphone.
+- Media candidate: https://github.com/restsend/rustrtc ; validate SIP/SDES, never infer identical WebRTC/SIP negotiation.
+- Audio candidate: https://docs.rs/cpal/latest/cpal/ ; inventory Linux dependencies before backend selection.
+- Embedded SQLite: https://github.com/rusqlite/rusqlite .
+- Lab PBX: https://docs.asterisk.org/ and https://github.com/asterisk/asterisk .
+- Requested Docker PBX foundation: https://github.com/andrius/asterisk ; exact version/digest and limitations in [ADR 0002](adr/0002-disposable-asterisk-lab.md).
 
-As bibliotecas acima são candidatas, não dependências já aprovadas ou lockadas. Gate técnico inicial decidirá versões, features, licenças e integração. A licença proposta para o futuro código é GPL-3.0-or-later, sujeita à revisão de compatibilidade antes de incorporar qualquer código/asset de terceiros; sem alegar parecer jurídico.
+Candidates are not automatically approved/locked dependencies. G0 decides versions/features/licenses/integration. Proposed own-code license is GPL-3.0-or-later, with compatibility review before third-party code/assets; not a legal opinion.
 
-## MicroSIP: referência principal da UI compacta
+## MicroSIP: primary compact-UI reference
 
-Adição de 2026-10-12, após pedido de renomear o produto para rust-microsip. Referências oficiais:
+Added 2026-10-12 after rename request. Official sources:
 - https://www.microsip.org/ .
-- https://www.microsip.org/help : modos, discador, contatos, conta e ajustes; o modo de chamada única orienta o fluxo inicial, sem herdar todos os recursos ou permissões de URI.
-- https://www.microsip.org/source : arquivo incremental de fontes; dependências de compilação não estão incluídas.
+- https://www.microsip.org/help : modes/dialpad/contacts/account/settings, especially single-call mode; no inheritance of all features/URI permissions.
+- https://www.microsip.org/source : incremental source archive without full build dependencies.
 - https://www.microsip.org/download/MicroSIP-3.22.16-src.7z .
 - https://www.microsip.org/download/MicroSIP-3.22.16.exe .
 - https://www.microsip.org/download/MicroSIP-Lite-3.22.16.zip .
 
-Downloads HTTPS preservados somente em `base/microsip/downloads/`:
+HTTPS downloads remained only in ignored base/microsip/downloads:
 
-| Arquivo | SHA-256 |
+| File | SHA-256 |
 |---|---|
 | MicroSIP-3.22.16-src.7z | `9c1ff942ae1ae56bdfcdd04c3d6e242a056d7f0dd50bb19f6e13226e7c819b83` |
 | MicroSIP-3.22.16.exe | `e351bbac5e0337091cc0e55a80715208e5550e758028f36efa266c604304daaa` |
 | MicroSIP-Lite-3.22.16.zip | `17dcaa628dfd1ea4ba6686c436fb62f42eb9ed124cd671c9d81f3d1580e1207e` |
 
-Arquivo fonte extraído em `base/microsip/source/MicroSIP-3.22.16-src/`, após verificação de caminhos do archive. Site declara GPLv2; headers C++ examinados declaram GPL-2.0-or-later, portanto revisar cada componente antes de incorporação. Não alegar que o pacote incremental contém PJSIP e todas as dependências. `res/dialog.rc2` declara Microsoft Sans Serif; varredura do source extraído não encontrou arquivos TTF/OTF/WOFF. Fonte Windows não será redistribuída; Rust usará fonte aberta licenciada de proporções semelhantes.
+Source extracted under base/microsip/source after archive-path validation. Site declares GPLv2; examined C++ headers GPL-2.0-or-later, so review each component before incorporation. Incremental source does not contain PJSIP/all dependencies. res/dialog.rc2 names Microsoft Sans Serif; examined source scan found no TTF/OTF/WOFF. Never redistribute proprietary Windows fonts; select similarly proportioned open fonts.
 
-Grafo de referência `gonnect-rust-microsip-reference`, fast, geração `2026-10-12T21:51:48Z`: pesquisa localizou CmainDlg.OnInitDialog, OnTcnSelchangeTab e operações do discador. Snippet de troca de abas confirma mostrar/ocultar página, foco, aba ativa e reset de perdidas em Calls. `check_index_coverage` verificou `mainDlg.cpp`, `Dialer.cpp`, `main.rc` e escopo `res`; os C++ têm macros parcialmente parseadas, complementadas por leitura direta dos intervalos reportados. Recursos RC não rastreados foram lidos diretamente, especialmente `main.rc` e `res/dialog.rc2`. Não usar o grafo como inventário completo de recursos/licenças.
+Historical graph gonnect-rust-microsip-reference, fast, generation 2026-10-12T21:51:48Z located CmainDlg.OnInitDialog/OnTcnSelchangeTab/dialpad operations. Tab snippet confirmed page visibility/focus/active-tab/missed-call reset. Coverage checked mainDlg.cpp, Dialer.cpp, main.rc, res scope. Partially parsed C++ macros were supplemented by reported-range reads; untracked RC resources read directly, especially main.rc/res/dialog.rc2. Graph is not a complete resource/license inventory.
 
-MicroSIP Lite PE32 foi executado com Wine 9.0, prefixo win32 privado e Xvfb em container descartável sem rede, capabilities, privilégios, HOME/áudio/display pessoais ou conta SIP. Somente runtime `/usr` read-only e scratch dedicado foram montados. Primeira tentativa falhou no GLX/EGL Nvidia; nova execução com GLX desabilitado/software gráfico abriu janela MicroSIP 243×459 com abas Phone/Logs/Contacts, campo de número, teclado e status. Captura `base/microsip/wine-runtime/microsip-wine.png` inspecionada localmente; evidência não enviada ao GitHub. Sem window manager, sem placa de áudio e com avisos ALSA esperados; sem teste de chamadas, temas ou interoperabilidade. Instalador completo baixado, mas não executado. Container removido e Wine encerrado.
+MicroSIP Lite PE32 ran in Wine9.0/private win32 prefix/Xvfb in a disposable container, without network/capabilities/privileges/personal HOME/audio/display/SIP account. Only read-only runtime /usr and dedicated scratch were mounted. Initial NVIDIA GLX/EGL failure was followed by software/no-GLX opening: 243×459 window, Phone/Logs/Contacts, number/keypad/status. Capture stayed in ignored base/microsip/wine-runtime; not sent to GitHub. No window manager/audio hardware, expected ALSA warnings, no calls/themes/interoperability tests. Full installer downloaded, never executed. Container/Wine terminated.
 
-## Renomeação e extensões
+## Rename and linked interfaces
 
-Repositório privado renomeado de `jniltinho/gonnect-rust` para `jniltinho/rust-microsip`; diretório movido para `/home/nilton/Projetos/nilton/NOVOS/rust-microsip`, com base preservada e ignorada. Nomes antigos de grafos/consultas ai-memory acima são proveniência histórica, não identificadores atuais inferidos. A mudança de caminho torna os caminhos antigos do índice históricos; antes de nova exploração estrutural, reindexar/conferir freshness e coverage no caminho novo. Não renomear/migrar memória ou apagar índices históricos sem necessidade.
+Private repository renamed jniltinho/gonnect-rust → jniltinho/rust-microsip. Local references preserved/ignored. Old graph/memory names are historical, not inferred current routing. After path changes, verify current index freshness/coverage before structural discovery; do not unnecessarily migrate memory/delete historical indexes.
 
-Fontes oficiais adicionais para os contratos planejados:
-- MCP stdio: https://modelcontextprotocol.io/specification/2025-11-25/basic/transports ; stdout exclusivo de mensagens, stderr para logs.
-- SDK MCP Rust: https://github.com/modelcontextprotocol/rust-sdk ; candidato sujeito a versão/auditoria.
-- Sinalização web candidata: https://github.com/onsip/SIP.js ; SIP sobre WebSocket, WebRTC, espera/transfer e DTMF precisam de prova no nosso bundle.
-- Browser: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia ; contexto seguro e permissão de microfone.
-- Asterisk WebRTC: https://docs.asterisk.org/Configuration/WebRTC/Configuring-Asterisk-for-WebRTC-Clients/ ; WSS e endpoint WebRTC, sem copiar exposição pública dos exemplos.
+Additional official contract sources:
+- MCP stdio: https://modelcontextprotocol.io/specification/2025-11-25/basic/transports ; protocol-only stdout, stderr logs.
+- Rust MCP SDK: https://github.com/modelcontextprotocol/rust-sdk ; version/audit candidate.
+- Web signaling: https://github.com/onsip/SIP.js ; WSS/WebRTC/hold/transfer/DTMF need exact-bundle proof.
+- Browser microphone: https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getUserMedia ; secure context/permission.
+- Asterisk WebRTC: https://docs.asterisk.org/Configuration/WebRTC/Configuring-Asterisk-for-WebRTC-Clients/ ; never copy public exposure from examples.
 
-CLI/MCP foram solicitados para operação por agentes; web foi confirmada como chamadas completas em release posterior. A arquitetura prepara adapters macOS/Windows futuros; nenhum desses recursos está implementado.
+CLI/MCP are requested agent interfaces; web is confirmed full-call functionality in a later release. macOS/Windows adapters are future preparation. None of these application features is implemented merely by planning/research.

@@ -1,33 +1,33 @@
 ## Purpose
 
-Permitir que o usuário encontre contatos, acompanhe chamadas e mantenha favoritos localmente, sem exigir serviços externos ou compartilhar sua agenda.
+Let users find contacts, track calls, and maintain favorites locally without external services or sharing their address book.
 
 ## ADDED Requirements
 
-### Requirement: Contatos e favoritos locais
-O aplicativo SHALL criar, editar, remover e pesquisar contatos locais com nome e múltiplos números, mantendo favoritos persistentes. Selecionar um contato SHALL preencher uma chamada proposta, sem discagem automática inesperada.
+### Requirement: Local contacts and favorites
+The application SHALL create, edit, remove, and search local contacts with names/multiple numbers and persist favorites. Selecting a contact SHALL populate a proposed call without unexpected automatic dialing.
 
-#### Scenario: CH-01 contato e favorito
-- **WHEN** um contato com dois números é salvo como favorito e o aplicativo reinicia
-- **THEN** contato e favorito reaparecem e o usuário pode escolher o número antes de confirmar a chamada
+#### Scenario: CH-01 contact and favorite
+- **WHEN** a two-number contact is saved as a favorite and the application restarts
+- **THEN** the contact/favorite reappear and the user can choose a number before confirming the call
 
-### Requirement: CSV validado e atômico
-O aplicativo SHALL importar CSV UTF-8 com colunas nome e número, oferecer prévia/contagem de duplicatas e rejeitar conteúdo inválido sem importação parcial. SHALL impor limite de 10 MiB e 100 mil registros por arquivo.
+### Requirement: Validated atomic CSV
+The application SHALL import UTF-8 CSV with name and number columns, offer preview/duplicate counts, and reject invalid content without partial import. It SHALL enforce 10 MiB and 100,000-record limits per file.
 
-#### Scenario: CH-02 CSV inválido e duplicado
-- **WHEN** o CSV contém registros repetidos, números inválidos ou ultrapassa os limites
-- **THEN** a prévia informa os problemas e nenhuma gravação parcial acontece; arquivo válido só é aplicado após confirmação
+#### Scenario: CH-02 invalid and duplicate CSV
+- **WHEN** CSV contains repeated records, invalid numbers, or exceeds limits
+- **THEN** preview reports the problems without partial writes, and valid files are applied only after confirmation
 
-### Requirement: Histórico coerente
-O aplicativo SHALL registrar direção, destino, início, atendimento, fim, resultado e duração da chamada, persistir chamadas perdidas e permitir filtros e rediscagem confirmada. Uma sessão recuperada após crash SHALL indicar interrupção, nunca atendimento fictício.
+### Requirement: Coherent history
+The application SHALL record call direction, destination, start, answer, end, outcome, and duration, persist missed calls, and allow filtering/confirmed redial. A crash-recovered session SHALL indicate interruption, never fabricated answering.
 
-#### Scenario: CH-03 resultados e recuperação
-- **WHEN** ocorrem chamada atendida, perdida, cancelada e interrupção abrupta do processo
-- **THEN** cada sessão aparece uma única vez com resultado correto e a duração considera apenas tempo efetivamente estabelecido
+#### Scenario: CH-03 outcomes and recovery
+- **WHEN** answered, missed, canceled calls and abrupt process interruption occur
+- **THEN** each session appears exactly once with the correct outcome and duration includes only actually established time
 
-### Requirement: Busca e privacidade
-O aplicativo SHALL pesquisar nome e número localmente em contatos, favoritos e histórico, sem enviar consultas a serviço externo. SHALL permitir apagar histórico e configurar retenção, com default de 90 dias.
+### Requirement: Search and privacy
+The application SHALL search names/numbers locally across contacts, favorites, and history without sending queries to external services. It SHALL allow history deletion and configurable retention, defaulting to 90 days.
 
-#### Scenario: CH-04 busca e retenção
-- **WHEN** o usuário busca um contato e depois confirma exclusão do histórico ou expira a retenção
-- **THEN** a busca não gera tráfego externo e as entradas removidas deixam de aparecer, sem prometer apagamento forense de backups
+#### Scenario: CH-04 search and retention
+- **WHEN** the user searches a contact and confirms history deletion or retention expires
+- **THEN** search generates no external traffic and removed entries disappear, without promising forensic erasure of backups

@@ -1,26 +1,26 @@
 ## Why
 
-Operadores e agentes precisam consultar estado e controlar o rust-microsip sem automatizar pixels. Um cliente CLI e um servidor MCP locais devem usar os mesmos serviços e limites do desktop, evitando registros SIP duplicados, gravações diretas no banco e chamadas inesperadas.
+Operators and agents need to query/control rust-microsip without pixel automation. Local CLI/MCP clients must share desktop services/limits, avoiding duplicate SIP registration, direct database writes, and unexpected calls.
 
 ## What Changes
 
-- Acrescentar modos do mesmo executável: `rust-microsip cli ...`, `rust-microsip mcp --stdio` e `rust-microsip service` headless opcional iniciado explicitamente.
-- Manter um processo proprietário por usuário/perfil, responsável por SIP, áudio, SQLite e autorização; CLI/MCP são clientes via IPC protegido.
-- Consultar status, dispositivos, contatos, histórico e configuração sanitizada; controlar discagem, atender/recusar/encerrar, DTMF, mute, espera, transferência cega e DND.
-- Default MCP somente leitura; controles exigem aprovação humana por operação ou concessão local explícita, limitada e revogável.
-- Oferecer saídas JSON versionadas, erros tipados, idempotência de mutações e auditoria sanitizada.
-- Incluir teste real CLI/MCP com Asterisk e documentação de conexão a agentes sem instalar/configurar clientes automaticamente.
+- Add same-executable modes: `rust-microsip cli ...`, `rust-microsip mcp --stdio`, and explicitly started optional headless `rust-microsip service`.
+- One owner per user/profile handles SIP, audio, SQLite, authorization; CLI/MCP connect through protected IPC.
+- Query status/devices/contacts/history/sanitized configuration; control dial/answer/reject/hangup/DTMF/mute/hold/blind transfer/DND.
+- Read-only MCP defaults; controls require per-operation human approval or explicit bounded/revocable local grants.
+- Versioned JSON, typed errors, mutation idempotency, sanitized auditing.
+- Real CLI/MCP Asterisk tests and agent-connection documentation, no automatic client installation/configuration.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `agent-cli-mcp`: CLI e MCP stdio, proprietário único, autorização, privacidade e contratos testáveis.
+- `agent-cli-mcp`: CLI/stdio MCP, single owner, authorization, privacy, testable contracts.
 
 ### Modified Capabilities
 
-Nenhuma spec canônica existente. Complementa a mudança desktop ainda não implementada.
+No existing canonical spec. Complements the unimplemented desktop change.
 
 ## Impact
 
-Depende de [create-native-rust-linux-release](../create-native-rust-linux-release/proposal.md), especialmente G0, domínio, IPC, plataforma e configuração. Planejar crates application/control/cli/mcp e modos do mesmo binário, sem daemon obrigatório, HTTP público, dependência de Node ou chamada de LLM embutida. Esta extensão integra o candidato Linux solicitado, após G0; publicação do conjunto depende dos gates das duas mudanças. Não habilita gravação, transcrição, PSTN automático, multi-chamadas ou consulta de segredos. Artefatos são somente planejamento; nenhum CLI/MCP implementado.
+Depends on [create-native-rust-linux-release](../create-native-rust-linux-release/proposal.md), especially G0/domain/IPC/platform/configuration. Plan application/control/cli/mcp crates and same-binary modes, without mandatory daemon, public HTTP, Node, or embedded LLM calls. This requested extension joins the Linux candidate after G0; combined publication requires both changes' gates. No recording/transcription/automatic PSTN/multiple calls/secret queries. Planning artifacts only, no implemented CLI/MCP.

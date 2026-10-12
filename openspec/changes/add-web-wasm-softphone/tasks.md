@@ -1,24 +1,24 @@
-## 1. Gate web GW0 após Linux
+## 1. Web gate GW0 after Linux
 
-- [ ] 1.1 Confirmar Linux/CLI/MCP concluídos e aprovar release web separado; verificar roadmap/escopo e nenhuma promessa de web no v0.1.
-- [ ] 1.2 Criar apps/web e separação de core/platform-web; verificar wasm32 sem CPAL/SQLite/Secret Service/IPC Linux e build Docker sem toolchain no host (WEB-01, WEB-06).
-- [ ] 1.3 Fixar/auditar egui web, wasm-bindgen, SIP.js full framework e bridge; verificar ADR de versões/MSRV/licenças e nenhum CDN/recurso remoto implícito.
-- [ ] 1.4 Criar laboratório Asterisk WebRTC/WSS/DTLS e CA isolada; verificar readiness, bind/ACL host-only, SDP e nenhuma rota PSTN/admin pública (WEB-05).
-- [ ] 1.5 Criar cenário NAT/TURN forçado em VMs isoladas com coturn fixado e secrets efêmeros; verificar mídia relayed nos dois sentidos e teardown (WEB-05).
-- [ ] 1.6 Provar GW0 em Chromium/Firefox: WASM/UI/CSP, registro/chamada, G.711, DTMF, hold, REFER/NOTIFY e permissões; verificar recibos por versão e bloquear UI completa se candidato falhar (WEB-01, WEB-02).
+- [ ] 1.1 Confirm Linux/CLI/MCP completion and approve a separate web release; verify roadmap/scope and no promise of web in v0.1.
+- [ ] 1.2 Create apps/web and core/platform-web separation; verify wasm32 without CPAL/SQLite/Secret Service/Linux IPC and Docker builds without a host toolchain (WEB-01, WEB-06).
+- [ ] 1.3 Pin/audit egui web, wasm-bindgen, the full SIP.js framework, and the bridge; verify the versions/MSRV/licenses ADR and no implicit CDN/remote resources.
+- [ ] 1.4 Create an isolated Asterisk WebRTC/WSS/DTLS lab and CA; verify readiness, host-only binds/ACL, SDP, and no public PSTN/admin routes (WEB-05).
+- [ ] 1.5 Create a forced NAT/TURN scenario in isolated VMs with pinned coturn and ephemeral secrets; verify relayed media in both directions and teardown (WEB-05).
+- [ ] 1.6 Prove GW0 in Chromium/Firefox: WASM/UI/CSP, registration/calls, G.711, DTMF, hold, REFER/NOTIFY, and permissions; verify versioned receipts and block full UI work if the candidate fails (WEB-01, WEB-02).
 
-## 2. UI, dados e telefonia
+## 2. UI, data, and telephony
 
-- [ ] 2.1 Implementar UI compacta/temas/foco e diagnóstico browser; verificar snapshots do mock aprovado e teclado/escalas nas três abas (WEB-01).
-- [ ] 2.2 Implementar adapter WSS/WebRTC e máquina de estados; verificar entrada/saída, recusa/BYE/CANCEL, DND, mute/hold/transfer e resultado real no PBX (WEB-02).
-- [ ] 2.3 Implementar preparar áudio, permissões e seleção degradável de dispositivos; verificar autoplay/recusa/revogação/hotplug/indicador e nenhum microfone no carregamento (WEB-03).
-- [ ] 2.4 Implementar lifecycle/lock por aba e reconciliação; verificar reload/close/suspensão, aba duplicada, sem rediscagem/takeover automático e tracks liberadas em melhor esforço (WEB-03).
-- [ ] 2.5 Implementar IndexedDB não secreto e consentimento de contatos/histórico; verificar quota/modo privado, import/export/limpeza e ausência de senha/TURN em todos os stores/logs/URLs/console SIP.js e documentação sem garantia de zeroização (WEB-04).
-- [ ] 2.6 Implementar validação de endpoints/URI, CSP/Permissions-Policy, proxy WSS obrigatório/Origin e erro de rede/TLS; verificar inputs maliciosos, origem WSS bloqueada e nenhum bypass de certificado (WEB-04, WEB-05).
+- [ ] 2.1 Implement compact UI/themes/focus and browser diagnostics; verify approved mock snapshots and keyboard/scaling across all three tabs (WEB-01).
+- [ ] 2.2 Implement the WSS/WebRTC adapter and state machine; verify incoming/outgoing calls, rejection/BYE/CANCEL, DND, mute/hold/transfer, and real PBX outcomes (WEB-02).
+- [ ] 2.3 Implement audio preparation, permissions, and gracefully degrading device selection; verify autoplay/denial/revocation/hotplug/indicators and no microphone on page load (WEB-03).
+- [ ] 2.4 Implement per-tab lifecycle/locking and reconciliation; verify reload/close/suspension, duplicate tabs, no automatic redial/takeover, and best-effort track release (WEB-03).
+- [ ] 2.5 Implement non-secret IndexedDB and contact/history consent; verify quota/private mode, import/export/cleanup, absence of passwords/TURN in all stores/logs/URLs/SIP.js console output, and documentation without a zeroization guarantee (WEB-04).
+- [ ] 2.6 Implement endpoint/URI validation, CSP/Permissions-Policy, mandatory WSS proxy/Origin checks, and network/TLS errors; verify malicious input, blocked WSS origins, and no certificate bypass (WEB-04, WEB-05).
 
-## 3. Build, deploy e aceite
+## 3. Build, deployment, and acceptance
 
-- [ ] 3.1 Completar bundle Docker com locks/checksums/SBOM/licenças; verificar clone sem base, assets self-hosted e ausência de segredos de build/runtime no bundle (WEB-06).
-- [ ] 3.2 Documentar HTTPS, certificados, PBX/gateway, STUN/TURN e headers; verificar deploy isolado reproduzível sem app nativo e sem acesso a config/PBX pessoais (WEB-05, WEB-06).
-- [ ] 3.3 Executar WEB-01..06 com versões congeladas de Chromium/Firefox, integração sintética e dois operadores/headsets; verificar cinco minutos por codec acordado no bundle exato, incluindo relay forçado (WEB-02, WEB-05, WEB-06).
-- [ ] 3.4 Revisar com Claude CLI, security/dependency audit e operador; verificar zero bloqueadores, limites de background documentados e rollback de bundle/dados compatível antes de release separado.
+- [ ] 3.1 Complete the Docker bundle with locks/checksums/SBOM/licenses; verify a clone without base, self-hosted assets, and no build/runtime secrets in the bundle (WEB-06).
+- [ ] 3.2 Document HTTPS, certificates, PBX/gateway, STUN/TURN, and headers; verify reproducible isolated deployment without a native app or access to personal settings/PBX (WEB-05, WEB-06).
+- [ ] 3.3 Run WEB-01..06 with frozen Chromium/Firefox versions, synthetic integration, and two operators/headsets; verify five minutes per agreed codec on the exact bundle, including forced relay (WEB-02, WEB-05, WEB-06).
+- [ ] 3.4 Review with Claude CLI, security/dependency auditing, and an operator; verify zero blockers, documented background limitations, and compatible bundle/data rollback before the separate release.
