@@ -81,6 +81,7 @@ allowed = {
     "rust-toolchain.toml", "LICENSE", "NOTICE",
     "apps/rust-microsip/Cargo.toml", "docker/rust-components.sha256",
     "packaging/verify.sh", "packaging/export-scaffold.sh",
+    "packaging/check-g0-dependencies.py", "packaging/tests/test_g0_dependencies.py",
 }
 files = [p for p in root.rglob("*") if p.is_file()]
 unexpected = []

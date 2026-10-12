@@ -13,7 +13,8 @@ trap 'exit 143' TERM
 for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml LICENSE NOTICE \
     apps/rust-microsip/Cargo.toml apps/rust-microsip/src/main.rs apps/rust-microsip/src/lib.rs \
     apps/rust-microsip/tests/cli.rs docker/rust-components.sha256 \
-    packaging/verify.sh packaging/export-scaffold.sh; do
+    packaging/verify.sh packaging/export-scaffold.sh \
+    packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py; do
     if [ -L "$path" ] || [ ! -f "$path" ]; then
         echo "ERROR: missing or symlinked test source: $path" >&2
         exit 1

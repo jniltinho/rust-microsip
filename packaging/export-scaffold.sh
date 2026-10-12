@@ -21,6 +21,7 @@ files = [root / name for name in ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.to
 files += sorted((root / 'apps').rglob('*.rs'))
 files += sorted((root / 'apps').rglob('Cargo.toml'))
 files += sorted((root / 'packaging').glob('*.sh'))
+files += sorted((root / 'packaging').rglob('*.py'))
 sources = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
 digest = hashlib.sha256(json.dumps(sources, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 report = json.loads(subprocess.check_output(['/out/rust-microsip', '--doctor', '--json']))

@@ -1,0 +1,386 @@
+{
+  "schema_version": 1,
+  "observed_date": "2026-10-12",
+  "scope": "Pre-adoption direct-candidate inventory, not the current lockfile, transitive release SBOM, security audit, or G0 acceptance",
+  "items": [
+    {
+      "name": "rsipstack",
+      "version": "0.7.3",
+      "role": "SIP signaling candidate",
+      "manifest_license_expression": "MIT",
+      "crate_sha256": "fd6577026d74d23d0eb114d158ea1a036275129e9b2a791be1679baad6821948",
+      "crate_url": "https://static.crates.io/crates/rsipstack/rsipstack-0.7.3.crate",
+      "source_repository": "https://github.com/restsend/rsipstack",
+      "source_revision": "2dfa0d17ce68be3f48f8afe99dff8d8c9eba76a7",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "201cdf3379ac39b37e6b8b2b3f2bc35c3f62bce339939990418f047b2833545c"
+        }
+      ]
+    },
+    {
+      "name": "rustrtc",
+      "version": "0.4.7",
+      "role": "RTP/SRTP data-plane candidate",
+      "manifest_license_expression": "MIT",
+      "crate_sha256": "7fc50a0fd78b4b7a61fab57d1e4ee915eb9a8d710c22333f231cf8fc79f3befe",
+      "crate_url": "https://static.crates.io/crates/rustrtc/rustrtc-0.4.7.crate",
+      "source_repository": "https://github.com/restsend/rustrtc",
+      "source_revision": "b89dc2c4edf96b872b8114689fcc483dec318c58",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "b99ee9026d880eccbeb6952f85479f2118b1bb919f4017aca97b916bcfbcc0d6"
+        }
+      ]
+    },
+    {
+      "name": "audio-codec",
+      "version": "0.4.9",
+      "role": "G.711 candidate; adoption blocked pending complete license notice",
+      "manifest_license_expression": "MIT",
+      "crate_sha256": "ea15c6045e9aff4c1a9c44f6668abd25d0dca80a0cf75fb9f66c71dc804d4be0",
+      "crate_url": "https://static.crates.io/crates/audio-codec/audio-codec-0.4.9.crate",
+      "source_repository": "https://github.com/restsend/audio-codec",
+      "source_revision": "049c06976b5df437216f5c079cea0bc58f2c8d6d",
+      "adoption_status": "blocked-missing-complete-license-notice",
+      "reviewed_notice_files": []
+    },
+    {
+      "name": "eframe",
+      "version": "0.36.2",
+      "role": "Native GUI candidate, default fonts disabled",
+      "manifest_license_expression": "MIT OR Apache-2.0",
+      "crate_sha256": "55ad41fac6e3149abb4866e93df37dbd33baa95db525c3368c944584e95a5dc2",
+      "crate_url": "https://static.crates.io/crates/eframe/eframe-0.36.2.crate",
+      "source_repository": "https://github.com/emilk/egui/tree/main/crates/eframe",
+      "source_revision": "49682f8baa058bf49e011035cfbd6e825f88a5ef",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "vcs-at-source_revision",
+          "path": "LICENSE-APACHE",
+          "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
+        },
+        {
+          "origin": "vcs-at-source_revision",
+          "path": "LICENSE-MIT",
+          "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
+        }
+      ]
+    },
+    {
+      "name": "cpal",
+      "version": "0.18.2",
+      "role": "Audio-device candidate, ALSA backend first",
+      "manifest_license_expression": "Apache-2.0",
+      "crate_sha256": "6f02e8d0327b42d3e2e4ab2119af397344eb9fc54a34bf0ddeaa1277af8681f1",
+      "crate_url": "https://static.crates.io/crates/cpal/cpal-0.18.2.crate",
+      "source_repository": "https://github.com/RustAudio/cpal",
+      "source_revision": "e1612d5d98152f8dc2a62e1b51ef7cbf4f7f26b7",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+        }
+      ],
+      "apache_notice_status": "No NOTICE in inspected archive; exact-revision workspace NOTICE must be checked before redistribution."
+    },
+    {
+      "name": "rusqlite",
+      "version": "0.40.2",
+      "role": "Embedded SQLite candidate",
+      "manifest_license_expression": "MIT",
+      "crate_sha256": "23f2a97da3e3873c73cb2a2e71b35c40ff95e0b1eefa8d72d8499a6928c3b5b3",
+      "crate_url": "https://static.crates.io/crates/rusqlite/rusqlite-0.40.2.crate",
+      "source_repository": "https://github.com/rusqlite/rusqlite",
+      "source_revision": "e88f112bef7899234a497baed5cc3c3d553deeb8",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "c10c1f27337546471e5f7e4e97fdd398b35b9d4e126115dcd22de8d8e65abf6f"
+        }
+      ]
+    },
+    {
+      "name": "zbus",
+      "version": "5.19.0",
+      "role": "D-Bus/Secret Service/notification candidate",
+      "manifest_license_expression": "MIT",
+      "crate_sha256": "5db4be7c075cb421e4b7ee645541604239bd243ba7c357511f4ff3a74b555907",
+      "crate_url": "https://static.crates.io/crates/zbus/zbus-5.19.0.crate",
+      "source_repository": "https://github.com/z-galaxy/zbus/",
+      "source_revision": "7518d73db4dbf830ec1c9c43865bf8aeae9a8ffd",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "260e4ff3fc493695880c90774283eb1e3d018f898fabe655bbd52dd2cbd2fcad"
+        }
+      ]
+    },
+    {
+      "name": "ksni",
+      "version": "0.3.6",
+      "role": "Optional tray candidate",
+      "manifest_license_expression": "Unlicense",
+      "crate_sha256": "814b44c24cd2cb236c3b8a41c7f08237b452a8e76ecaa81f1cec40b5b678215b",
+      "crate_url": "https://static.crates.io/crates/ksni/ksni-0.3.6.crate",
+      "source_repository": "https://github.com/iovxw/ksni",
+      "source_revision": "4e31ee48d91b0babb472d05936b9b68bca736b06",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "UNLICENSE",
+          "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+        }
+      ]
+    },
+    {
+      "name": "rmcp",
+      "version": "3.5.1",
+      "role": "Local stdio MCP candidate",
+      "manifest_license_expression": "Apache-2.0",
+      "crate_sha256": "ab5023804cbe0304cbe06197ac16e645a0a0d0ffa2953bf735c15c2fa0213350",
+      "crate_url": "https://static.crates.io/crates/rmcp/rmcp-3.5.1.crate",
+      "source_repository": "https://github.com/modelcontextprotocol/rust-sdk/",
+      "source_revision": "79437f291b2c44053d00dcd5db969fd0cca7c887",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "vcs-at-source_revision",
+          "path": "LICENSE",
+          "sha256": "0382b0057770ca05e9c350a50aa3b1c1fea84da0bc81d723bf00b9aa841be58a"
+        }
+      ],
+      "apache_notice_status": "No NOTICE in inspected archive; exact-revision workspace NOTICE must be checked before redistribution."
+    },
+    {
+      "name": "tokio",
+      "version": "1.53.2",
+      "role": "Async runtime candidate",
+      "manifest_license_expression": "MIT",
+      "crate_sha256": "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044",
+      "crate_url": "https://static.crates.io/crates/tokio/tokio-1.53.2.crate",
+      "source_repository": "https://github.com/tokio-rs/tokio",
+      "source_revision": "ff0c4068a4ba5f3af0fe3c5657ba42879b6ea599",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "253cd04c6714889df2d32f3f64d669179a1c95c76ac43c40882c52eb06bc3552"
+        }
+      ]
+    },
+    {
+      "name": "rustls",
+      "version": "0.23.45",
+      "role": "Validated TLS with ring provider candidate",
+      "manifest_license_expression": "Apache-2.0 OR ISC OR MIT",
+      "crate_sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
+      "crate_url": "https://static.crates.io/crates/rustls/rustls-0.23.45.crate",
+      "source_repository": "https://github.com/rustls/rustls",
+      "source_revision": "2976d90fd1c2db6b518700dd101b714069cfcb17",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-MIT",
+          "sha256": "709e3175b4212f7b13aa93971c9f62ff8c69ec45ad8c6532a7e0c41d7a7d6f8c"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-ISC",
+          "sha256": "7cfafc877eccc46c0e346ccbaa5c51bb6b894d2b818e617d970211e232785ad4"
+        }
+      ]
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "role": "Serialization candidate",
+      "manifest_license_expression": "MIT OR Apache-2.0",
+      "crate_sha256": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba",
+      "crate_url": "https://static.crates.io/crates/serde/serde-1.0.229.crate",
+      "source_repository": "https://github.com/serde-rs/serde",
+      "source_revision": "7fc3b4c30c94f73a96ebd1553f2b090d928fc3a8",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.154",
+      "role": "JSON serialization candidate",
+      "manifest_license_expression": "MIT OR Apache-2.0",
+      "crate_sha256": "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6",
+      "crate_url": "https://static.crates.io/crates/serde_json/serde_json-1.0.154.crate",
+      "source_repository": "https://github.com/serde-rs/json",
+      "source_revision": "20572a6d066958542d79cdd6cf1a7cd9f0c8e1f8",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.21",
+      "role": "Typed errors candidate",
+      "manifest_license_expression": "MIT OR Apache-2.0",
+      "crate_sha256": "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e",
+      "crate_url": "https://static.crates.io/crates/thiserror/thiserror-2.0.21.crate",
+      "source_repository": "https://github.com/dtolnay/thiserror",
+      "source_revision": "b1827ee06f81a7d7f954e676771e19a97f9f8e3b",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-MIT",
+          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        }
+      ]
+    },
+    {
+      "name": "secrecy",
+      "version": "0.10.3",
+      "role": "Redacted secret wrappers candidate",
+      "manifest_license_expression": "Apache-2.0 OR MIT",
+      "crate_sha256": "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a",
+      "crate_url": "https://static.crates.io/crates/secrecy/secrecy-0.10.3.crate",
+      "source_repository": "https://github.com/iqlusioninc/crates/tree/main/secrecy",
+      "source_revision": "70eaa76ea3f4bacd67f3027c4a52948485a67d32",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-MIT",
+          "sha256": "1264c45618bccf48df48b9e9beefdc704dc094ddedccf5ddef0243a031b9e114"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-APACHE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    },
+    {
+      "name": "zeroize",
+      "version": "1.9.1",
+      "role": "Secret memory cleanup candidate",
+      "manifest_license_expression": "Apache-2.0 OR MIT",
+      "crate_sha256": "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879",
+      "crate_url": "https://static.crates.io/crates/zeroize/zeroize-1.9.1.crate",
+      "source_repository": "https://github.com/RustCrypto/utils",
+      "source_revision": "34a6ebcb9b920ec7ae5809e470fce94fe7c0cb55",
+      "adoption_status": "candidate-not-yet-adopted",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-MIT",
+          "sha256": "8c7516d4b27b1e495be5e38b612298b63de48d05f49cdac94f70f3cd70f8864b"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-APACHE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        }
+      ]
+    }
+  ],
+  "adoption_boundary": {
+    "blocked_anywhere_in_selected_tree": [
+      "audio-codec",
+      "rsip",
+      "aws-lc-rs",
+      "aws-lc-sys",
+      "openssl",
+      "openssl-sys",
+      "openssl-src",
+      "boring",
+      "boring-sys",
+      "bssl-sys",
+      "srtp-sys",
+      "epaint_default_fonts"
+    ],
+    "tls_provider": "ring =0.17.14 only; rustls =0.23.45 default-features=false, ring explicitly selected",
+    "media_provider": "rustrtc =0.4.7 no-default-features; RustCrypto data plane only; specific transitive pins/notices checked at adoption"
+  },
+  "reviewed_transitive_crypto": [
+    {
+      "name": "ring",
+      "version": "0.17.14",
+      "crate_sha256": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7",
+      "crate_url": "https://static.crates.io/crates/ring/ring-0.17.14.crate",
+      "manifest_license_expression": "Apache-2.0 AND ISC",
+      "reviewed_notice_files": [
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE",
+          "sha256": "b3d734001a94efff3579978d953391aa7115f877657d25eb54037a43875d078a"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-BoringSSL",
+          "sha256": "005fc765ddc5115da796cca915baa9557abae13ff35e0a47c47affc56f6c414d"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "LICENSE-other-bits",
+          "sha256": "f025ccfb7dfb6bdfedc75ca0f67acc69e6fb4998143d834f7c2f38a29989680f"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "src/polyfill/once_cell/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "origin": "published-crate-archive",
+          "path": "src/polyfill/once_cell/LICENSE-MIT",
+          "sha256": "6ee2ed6c77710de911761acd5fc1ad1da00f476beb1a7ef27e78c2d1858deafc"
+        }
+      ],
+      "adoption_status": "candidate-not-yet-adopted"
+    }
+  ]
+}

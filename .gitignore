@@ -20,3 +20,7 @@
 *.pem
 .DS_Store
 /.claude/settings.local.json
+
+# Development-only Python bytecode is not source.
+__pycache__/
+*.py[cod]

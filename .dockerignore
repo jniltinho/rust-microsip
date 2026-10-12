@@ -25,3 +25,7 @@ docker/**
 packaging/**
 !packaging/verify.sh
 !packaging/export-scaffold.sh
+!packaging/check-g0-dependencies.py
+!packaging/tests/
+packaging/tests/**
+!packaging/tests/test_g0_dependencies.py

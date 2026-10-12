@@ -5,3 +5,8 @@ Copyright (C) 2026 rust-microsip contributors.
 Independent project; not an official MicroSIP or GONICUS product.
 No code, fonts, icons, sounds, or AppImages from local references are incorporated.
 Development skills have their own licenses and are not part of the binary.
+
+The scaffold binary export preserves Rust component and third-party notices in
+toolchain-licenses/, including generated-notices/COPYRIGHT-library.html and
+the generated licenses/ tree. They retain their own terms; this NOTICE does
+not relicense those components or replace the export's complete notices.
