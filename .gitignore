@@ -1,0 +1,22 @@
+# Referências locais: nunca publicar, nem como submódulos ou artefatos.
+/base/
+/target/
+/dist/
+/artifacts/
+/.codebase-memory/
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite3
+*.db
+*.db-wal
+*.db-shm
+*.sqlite*
+*.AppImage
+*.pcap
+*.pcapng
+*.key
+*.pem
+.DS_Store
+/.claude/settings.local.json
