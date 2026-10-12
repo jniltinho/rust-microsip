@@ -1,0 +1,8 @@
+**
+!Dockerfile
+!.dockerignore
+!lab.py
+!sip_probe.py
+!tests/
+tests/**
+!tests/test_*.py

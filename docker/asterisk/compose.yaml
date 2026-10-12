@@ -1,0 +1,74 @@
+name: rust-microsip-lab
+x-lab-service: &lab-service
+  image: rust-microsip-asterisk:22.11.0-lab.1
+  build:
+    context: .
+    target: runtime
+  user: "${LAB_UID:-1000}:${LAB_GID:-1000}"
+  platform: linux/amd64
+  init: true
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  pids_limit: 160
+  mem_limit: 512m
+  cpus: 2
+  networks: [isolated]
+  tmpfs:
+    - /tmp:rw,noexec,nosuid,nodev,mode=1777,size=32m
+    - /run/asterisk:rw,noexec,nosuid,nodev,mode=0700,uid=${LAB_UID:-1000},gid=${LAB_GID:-1000},size=64m
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+  stop_grace_period: 25s
+
+services:
+  pbx:
+    <<: *lab-service
+    command: [pbx]
+    volumes:
+      - type: bind
+        source: ../../artifacts/asterisk-lab/pbx
+        target: /lab
+        read_only: true
+        bind:
+          create_host_path: false
+    healthcheck:
+      test: [CMD, python3, /opt/lab/lab.py, health]
+      interval: 3s
+      timeout: 10s
+      retries: 20
+      start_period: 5s
+  peer:
+    <<: *lab-service
+    command: [peer]
+    volumes:
+      - type: bind
+        source: ../../artifacts/asterisk-lab/clients
+        target: /lab
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      pbx: {condition: service_healthy}
+    healthcheck:
+      test: [CMD, python3, -c, "from pathlib import Path; assert Path('/tmp/peer-ready').read_text().splitlines() == ['registered UDP TCP TLS']"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+  test-runner:
+    <<: *lab-service
+    command: [probe]
+    volumes:
+      - type: bind
+        source: ../../artifacts/asterisk-lab/clients
+        target: /lab
+        read_only: true
+        bind:
+          create_host_path: false
+    depends_on:
+      pbx: {condition: service_healthy}
+      peer: {condition: service_healthy}
+
+networks:
+  isolated:
+    internal: true

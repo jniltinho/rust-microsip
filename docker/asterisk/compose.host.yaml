@@ -1,0 +1,18 @@
+# Opt-in. Do not combine with compose.vm-lab.yaml.
+services:
+  pbx:
+    networks: !override [host-lab]
+    environment:
+      LAB_PROFILE: host
+    ports: !override
+      - 127.0.0.1:15060:5060/udp
+      - 127.0.0.1:15060:5060/tcp
+      - 127.0.0.1:15061:5061/tcp
+      - 127.0.0.1:10000-10019:10000-10019/udp
+  peer:
+    profiles: [automation-internal-only]
+  test-runner:
+    profiles: [automation-internal-only]
+networks:
+  host-lab:
+    internal: false

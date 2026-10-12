@@ -1,0 +1,75 @@
+# Disposable Asterisk lab
+
+**Registration infrastructure, not a working softphone or completed G0.** Based on the user's requested [andrius/asterisk](https://github.com/andrius/asterisk) project, pinned to Asterisk 22.11.0 and an exact linux/amd64 image manifest. See [provenance and license boundaries](../../docs/adr/0002-disposable-asterisk-lab.md) and the [executed receipt](../../docs/receipts/asterisk-lab-2026-10-12.md).
+
+## Prerequisites
+
+- Linux, Docker Engine **28.0.0 or newer**, BuildKit/buildx and Compose with `!override` support. Tested with Engine 29.1.3 and Compose 5.6.0. Older engines have a [localhost port-publishing exposure caveat](https://docs.docker.com/engine/network/port-publishing/).
+- Run as your ordinary non-root user with Docker access. Scripts propagate that numeric UID/GID; they do not change host permissions or install host packages.
+- POSIX shell and GNU `timeout`; `config-check` additionally uses host Python 3 (standard library only). Runtime Python/OpenSSL/Asterisk come from the pinned container.
+- Run commands below from the repository root. Only the image build needs registry access. Default runtime networking is internal; no host ports are published.
+
+## Build and test
+
+```sh
+sh docker/asterisk/lab.sh build
+sh docker/asterisk/lab.sh init
+sh docker/asterisk/lab.sh unit-test
+sh docker/asterisk/lab.sh config-check
+sh docker/asterisk/lab.sh test
+```
+
+`init` creates new random fictional passwords and a three-day private CA/server certificate under ignored `artifacts/asterisk-lab/`, requiring an empty, real, owned 0700 directory. It never overwrites an existing lab. Do not print, commit, upload, or reuse these credentials. CA private keys are kept only in `issuer/`, never mounted; the PBX and clients get separate read-only directories. Clients never receive the server key. Passwords have **no intrinsic expiry**: teardown stops their use but leaves their files on disk.
+
+`test` runs the PBX, a registration peer and a registration-only probe with a 120-second outer deadline (20-second kill grace). It checks UDP/TCP/TLS digest challenges and authenticated registration, rejects a wrong password on all three transports and an unknown TLS CA, then unregisters and removes containers/networks/volumes. Sanitized-by-design operational logs stay ignored in `artifacts/asterisk-smoke.log`; do not publish raw logs. Exit 0 is required, not merely an “Asterisk Ready” line.
+
+The peer registers 1002/1102/1202 and renews every 60 seconds; **it does not answer calls**. The probe registers 1001/1101/1201. It is a small infrastructure fixture, not the candidate Rust SIP stack. Its receipt explicitly says `calls_tested=false` and `g0_passed=false`.
+
+To leave the isolated PBX/peer up temporarily:
+
+```sh
+sh docker/asterisk/lab.sh up
+sh docker/asterisk/lab.sh down
+```
+
+Do not run the default and host profiles concurrently: they share one Compose project. The default has no host networking, published ports, privileges, devices, Docker socket, desktop session, HOME, or production configuration mounts. Filesystem is read-only except private tmpfs. Resource limits and explicit module loading bound the fixture; they are not a defense against every vulnerability in an upstream image.
+
+## Fictional dialplan and security fixtures
+
+| Extensions | Signaling | Media policy |
+| --- | --- | --- |
+| 1001 / 1002 | UDP | Explicit insecure lab RTP |
+| 1101 / 1102 | TCP | Explicit insecure lab RTP |
+| 1201 / 1202 | Validated TLS | Mandatory SDES SRTP, no optimistic downgrade |
+| 1301 / 1302 | TLS | RTP-only negative fixture, not a secure production default |
+
+All use G.711 PCMA/PCMU and RFC 4733 DTMF, with PBX-anchored media (`direct_media=no`). Exact local destinations only: no wildcard/PSTN routes, outbound trunks, anonymous endpoint, remote administration or recording.
+
+- `600`: echo.
+- `601`: read exactly three DTMF digits; `123` produces 1 kHz, other input 400 Hz.
+- `602`: generate a 1 kHz tone for 20 seconds.
+
+These routes and the SRTP module pass PBX readiness checks. **Their audio/DTMF/SRTP behavior has not yet been exercised by a call test.** TLS 1.2 is the explicit current lab server method; this is not a claim of TLS 1.3 coverage.
+
+## Opt-in host loopback profile
+
+```sh
+sh docker/asterisk/lab.sh config-check
+sh docker/asterisk/lab.sh host-up
+# Use only a fictional lab client, never the installed personal profile.
+sh docker/asterisk/lab.sh host-down
+```
+
+The host profile publishes **only** 127.0.0.1:15060 UDP/TCP (SIP), 127.0.0.1:15061 TCP (TLS), and 127.0.0.1:10000–10019 UDP (RTP). Its non-internal Docker bridge allows container egress; there are still no trunks. The peer and probe are profiled out. The CA includes `pbx`, `localhost` and 127.0.0.1; never disable CA/hostname verification. The selected configuration advertises loopback signaling/media and forces anchoring.
+
+`config-check` validates actual normalized Compose output, not just YAML text. **Host registration, SDP rewriting, actual host media, and ACL behavior are not yet acceptance-tested.** No VM acceptance profile exists yet. Do not expose this host profile to VMs, a LAN, wildcard interfaces or production networks. Task 1.5 remains open.
+
+## Teardown and secret deletion
+
+Always stop the active profile first. `down`/`host-down` remove disposable runtime resources, but intentionally leave ignored credentials and logs for local diagnosis. After teardown, remove **only** `artifacts/asterisk-lab/` using your file manager or an explicitly checked repository-relative path; then `init` can create a fresh lab. Do not delete or alter personal SIP settings, the installed AppImage, or `base/`.
+
+Generated certificates become unusable after three days. Tests fail closed on stale credentials/certificates, unsafe permissions, nonempty generation paths, missing mount directories, or mismatched Compose contracts. Regenerate only after stopping the lab and removing its old disposable directory.
+
+## Remaining gates
+
+The Rust adapter, long-running call peer, incoming/outgoing calls, two-way PCMA/PCMU, DTMF, hold, REFER/NOTIFY, TLS+SRTP/SDES negotiation/downgrade rejection, host SDP/media, isolated VM ACLs and exact-artifact headset tests remain required. Registration and Claude review do not establish any of these results. Do not publish the inherited image without a separate complete license/source/asset audit.

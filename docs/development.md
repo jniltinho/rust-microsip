@@ -48,4 +48,4 @@ Rust tests verify real process contracts, exit codes, conflicting arguments, non
 
 ## Next steps
 
-Complete task 1.3's inventory/ADR and the disposable Asterisk PBX (1.4/1.5), before adopting the SIP/media stack. Task 1.8 requires the spike ELF to contain the real complete stack; the headless scaffold ELF is no substitute. Claude code review neither approves G0 nor replaces telephony or VM acceptance tests.
+The [Asterisk infrastructure](../docker/asterisk/README.md) now satisfies task 1.4's readiness/isolation scope. Complete task 1.3's inventory/ADR and task 1.5's host/VM acceptance before approving G0; neither registration fixtures nor configuration checks prove media. Task 1.8 requires the spike ELF to contain the real complete stack; the headless scaffold ELF is no substitute. Claude code review neither approves G0 nor replaces telephony or VM acceptance tests.

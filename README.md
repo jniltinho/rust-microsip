@@ -41,7 +41,7 @@ openspec validate create-native-rust-linux-release --strict --no-interactive
 
 [Implementation approval](docs/implementation-approval.md) was given on 2026-10-12. In Codex, use `$openspec-apply-change`; in Claude, use the installed OpenSpec workflow or request change application. Check tasks only after obtaining evidence. G0 remains pending until the complete vertical proof passes.
 
-The scaffold builder exists. The disposable PBX lab is being implemented using a [pinned andrius/asterisk image](docs/adr/0002-disposable-asterisk-lab.md). Application telephony, media, UI, persistence, and CLI/MCP controls remain planned contracts, not implemented features.
+The scaffold builder exists. The [disposable PBX lab](docker/asterisk/README.md) uses a [pinned andrius/asterisk image](docs/adr/0002-disposable-asterisk-lab.md); UDP/TCP/TLS registration and negative authentication/CA tests have passed ([receipt](docs/receipts/asterisk-lab-2026-10-12.md)). Those fixtures do not prove calls or Rust-adapter readiness. Application telephony, media, UI, persistence, and CLI/MCP controls remain planned contracts, not implemented features.
 
 ## Local references and skills
 
