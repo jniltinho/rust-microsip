@@ -20,7 +20,10 @@ The [isolated SRTP pre-adoption diagnostic](receipts/g0-srtp-candidate-2026-10-1
 is separate from the application workspace and its lockfile. Its inventory and
 four local positive tests do **not** approve SRTP: the duplicate-packet rejection
 test fails for unadapted rustrtc 0.4.7. The probe is outside normal Cargo targets
-and the Docker context; no secure call/profile has been implemented yet.
+and the Docker context; no secure call/profile has been implemented yet. An
+[isolated per-SSRC packet adapter](receipts/g0-srtp-adapter-2026-10-13.md) now has
+29 passing tests and separate SRTP/SRTCP replay windows. It is not the complete
+secure-call owner or evidence of TLS/SDES/PBX interoperability.
 
 ## Pinned inputs and isolation
 

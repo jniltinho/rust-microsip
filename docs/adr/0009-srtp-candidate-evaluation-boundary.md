@@ -81,6 +81,14 @@ No guarantee of
 complete key erasure or compiler-enforced constant-time behavior was established.
 These are not permissions to activate high-level peer/DTLS machinery.
 
+## Packet-primitive follow-up
+
+[ADR 0010](0010-isolated-srtp-packet-adapter.md) now records an own isolated
+per-SSRC SRTP/SRTCP primitive with green replay/resource/ownership tests. The
+unadapted provider diagnostic above remains red. No application dependency was
+adopted, and secure signaling, call source/key lifecycles and PBX acceptance are
+still required before approving the complete adapter.
+
 ## Next acceptance work
 
 The planned narrow data-plane adapter needs fixed resource/SSRC limits, a bounded
