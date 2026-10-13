@@ -68,3 +68,21 @@ class HoldComposeTests(unittest.TestCase):
         config["services"]["test-runner"]["image"] = "rust-microsip-g0-hold:0.1.0-lab.1"
         with self.assertRaises(ValueError):
             verify_compose.verify(config, "hold")
+
+
+class TransferComposeTests(unittest.TestCase):
+    def test_transfer_profile_accepts_only_its_own_runner(self):
+        config = fixture()
+        config["services"]["test-runner"].update({"image": "rust-microsip-g0-transfer:0.1.0-lab.1", "build": {"target": "g0-transfer-runner"}})
+        verify_compose.verify(config, "transfer")
+        for profile in ("calls", "controls", "hold"):
+            with self.assertRaises(ValueError):
+                verify_compose.verify(config, profile)
+
+    def test_transfer_profile_rejects_other_runner_or_wrong_build_target(self):
+        with self.assertRaises(ValueError):
+            verify_compose.verify(fixture(), "transfer")
+        config = fixture()
+        config["services"]["test-runner"]["image"] = "rust-microsip-g0-transfer:0.1.0-lab.1"
+        with self.assertRaises(ValueError):
+            verify_compose.verify(config, "transfer")

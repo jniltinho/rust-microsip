@@ -1,0 +1,51 @@
+# G0 Rust synthetic REFER/NOTIFY receipt — 2026-10-12
+
+**Verified experimental sub-milestone only; production SIP-08, task 1.7, G0 and release remain open.** Baseline: `327326bb9119bf28363b1a716a05de174d2ee23a`. See [ADR 0008](../adr/0008-synthetic-refer-notify-transfer.md) and [sanitized numeric evidence](g0-rust-transfer-2026-10-12.json). Executed on 2026-10-12 local time (2026-10-13 UTC). Historical receipts remain unchanged.
+
+## Exact identities
+
+| Input/artifact | SHA-256 |
+| --- | --- |
+| Cargo.lock (unchanged) | `0935dabb58e0d6246fca3c9fe71f5d9b473ce82e7fea7ede24004e2bf5b3e0a7` |
+| Source manifest (34 individually copied application inputs) | `5b47d9a3b7e1371446c73538fd2449aad5e0823650d2c79d847c1bd72c0fefcb` |
+| Transfer adapter | `3c93307f3172ded13a84a92ca9cabc2eb75452ed740ed123863f1bdf6086122f` |
+| Transfer example | `f747c0e41e630ce3dc7eefd18caef912bcf905fc51f0ae16ff5c7b0002fad489` |
+| Selected Cargo inventory (unchanged) | `815e71745bd2170de871dc0a2304a0350fd2a5dd8c4f078579674bc1ba22ff4a` |
+| Transfer runner local image ID | `6ed5d36c1ad1e6dd807d11699bfc69c31ed628977780d61969c7aacd51fa832e` |
+| Transfer ELF (4,229,968 bytes) | `6686ec43effc8264b408122c19838a4cd985406845dfc615e2c3ea232c8ec906` |
+| PBX wrapper local image ID | `28fb6dc0530bd9c7b286834dbb7f72cdb555472649b1efde0712399747290131` |
+| Separate-process observer | `36d336c40132050c2467225ee84f70290d2fd7f6131888fbcc31b1abd6de8f38` |
+
+The JSON hashes own application/lab inputs, matrix/proof files and active/final PBX counts. Transfer measurements equal the validated matrix object. Actual running runner/PBX image IDs and in-container ELF hashes matched pre-run snapshots for all four runners. The wrapper retains [ADR 0002's andrius/asterisk foundation](../adr/0002-disposable-asterisk-lab.md); dialplan/media configuration is unchanged. These are local integrity/execution bindings, not signatures, independently reproduced images or embedded source-manifest attestation. The manifest is not a production desktop/IPC/audio full-stack ELF. The observer was written by the implementing agent, remains ignored, and is not run by the public lab commands. No AppImage/tag/release was produced; the shipping CLI remains static scaffold only.
+
+## Executed checks
+
+1. **TDD and review correction:** initial parser APIs failed compilation before implementation. Seven transfer tests then covered bounded sipfrag/Event parsing, acceptance/provisional/active-final non-completion, early terminal NOTIFY, retransmission, malformed/foreign correlation, finite notification cap and pre-cancel/mandatory-SRTP refusal. [Claude round 1](../reviews/claude-rust-transfer-round-1.md) found the destination-tone ratio could accept 880 Hz leakage. A real red codec/meter test reproduced that false-positive gate (exit 101); the finite ≥4000 peak-amplitude predicate now rejects 880 Hz and accepts 1 kHz for both codecs. Another test rejects weak/non-finite measurements. Final offline verification passes **10 CLI + 12 media + 28 telephony unit + 6 registration integration tests and 1 doctest**, fmt/clippy and rustdoc warnings-as-errors. No coverage percentage or exhaustive concurrency claim is inferred.
+2. **Build, notices and context:** 17 packaging tests, selected normal/build/dev dependency/provider/source checks, offline lock regeneration and original-registry notices pass in the reviewed transfer build. Inventory stays byte-identical at **73 packages / 143 preserved notices**; no new Cargo/native/codec/crypto dependency or upstream implementation was adopted. Twenty PBX/Compose tests and normalized internal/host configuration checks pass. The final synthetic clean-context build/export passes the allowlist, the permissive-filter negative control identifies synthetic `.env` and `base/private.txt` with `CONTEXT_REJECTED`, and exported checksums validate. No actual local reference tree is read.
+3. **Final corrected transfer matrix:** all **24** UDP/TCP/TLS × PCMA/PCMU × both origination/transfer directions × two destinations exited 0. Every REFER returned 202; two accepted notifications included one provisional status and a terminal sipfrag status. Route 602 returned final 200 in twelve cases; missing route 699 returned final 404 in twelve. A matching final NOTIFY 200 reply is required at SDK pre-send. Unit tests establish that 202, provisional status or active-final sipfrag alone never completes the operation; early final NOTIFY is supported. These are not independently captured SIP packets or proof of remote reply receipt.
+4. **Actual media and preserved calls:** each case measured two seconds of independent 440/880 Hz two-way audio before transfer. The twelve failures retained exact original dialog identities and confirmed state, then measured two more seconds of two-way audio before BYE/unregister. Those voice windows emitted 100–101 and accepted 99–101 frames per endpoint, RMS 5635.70–5675.43, ratio 1626.08–1768.26. The twelve successful transfers measured two seconds at the transferee: 100 sent / 100 accepted frames, RMS 5098.34–5104.48, 1 kHz peak 7209.83–7218.49 and ratio 55.30–1839.85. Gates are ≥80 frames, RMS 1000–10000, ratio ≥20, plus finite peak ≥4000 for the destination. Arrays are originating/transferring endpoint first, including reverse cases. Both original dialogs terminated and both authenticated unregisters succeeded in every case.
+5. **Separate-process corroboration:** for each runner the observer saw expected active channels/call at least once (two/one for transfer, pair and hold; one/one for IVR), exact running image/ELF identity and both containers non-root/read-only/capability-dropped/no-new-privileges, with no ports and one private read-only `/lab` mount each. Count parsing has positive/nonzero/malformed/duplicate controls. Transfer matrix controls reject missing/duplicate coverage, wrong status/CSeq/count/completion/reply, missing restoration/tone, weak frames/RMS/ratio, non-finite data, weak destination amplitude and former-partner leakage metrics. All six fixture Contact rewrites were disabled. Each successful runner left no contacts and zero active channels/calls; teardown left zero project containers/networks. Observer subprocesses and runners have deadlines. This corroborates lifecycle/isolation/identity and supplied metrics, not independent SIP/SDP/RTP decoding, every call's intermediate counts, hardware audio or source-to-image attestation.
+6. **Current-source regressions:** after the tone correction, rebuilt and re-executed twelve five-second pair calls, twelve positive/negative RFC 4733 IVR cases and twelve hold/resume/488-rejected-offer calls. Pair frames were 250 sent / 249–250 accepted, with zero observed sequence-gap/late counters and valid tone gates. Hold voice windows were 100 sent / 99–100 accepted; held suppression, restored audio and correlated increasing ACKs passed. IVR retains six recognized `123` branches and six `124` non-acceptance branches; 400 Hz can also mean timeout. All exact running-image/ELF bindings, matrix/proof hashes and identities are in the JSON. These are separate experiments, not combined production SIP-06/SIP-08 acceptance.
+7. **Privacy and structural inspection:** only ignored fictional credentials/CA fixtures were used; no personal profiles, installed AppImage, production calls or audio devices were accessed. No credentials/keys, raw SIP/SDP/auth/audio, call identifiers or personal absolute paths are published. Codebase-memory MCP readiness/search/both-direction traces/exact source snippets and per-file coverage were checked for the transfer/shared endpoint/hold source, transfer example and Compose checker/tests; generation `2026-10-13T02:48:17Z` reports metadata match/no recorded issue. Async/macro traces are incomplete (the probe-to-run call is absent); direct source/tests/runtime establish behavior, not exhaustive graph claims. All three OpenSpec changes validate strictly; tasks remain **4/54** with full criteria.
+
+Initial parser/correlation passes stopped on unused-code/clippy failures and are not final green verification. Initial matrices/identities/context exports predate the review-strengthened destination gate and are not the final evidence above. [Claude follow-up](../reviews/claude-rust-transfer-round-2.md) and documentation review are static-only, separate from executed runtime checks.
+
+## Reproduction and limits
+
+From the repository root, with current still-valid fictional fixtures and the PBX wrapper built:
+
+```sh
+sh docker/asterisk/lab.sh transfer-build
+sh docker/asterisk/lab.sh transfer-test
+sh docker/asterisk/lab.sh calls-build
+sh docker/asterisk/lab.sh calls-test
+sh docker/asterisk/lab.sh controls-build
+sh docker/asterisk/lab.sh controls-test
+sh docker/asterisk/lab.sh hold-build
+sh docker/asterisk/lab.sh hold-test
+sh packaging/check-context.sh
+```
+
+Use the [lab guide](../../docker/asterisk/README.md) for fresh fixture initialization; never overwrite profiles. Rebuild after source changes and select one overlay at a time. `transfer-test` has a 720-second outer timeout and teardown trap; each whole pair operation has 30 seconds. Raw operational/review/build evidence stays ignored in `artifacts/`, including `g0-transfer-*-red.log`, `g0-transfer-tone-green.log`, `g0-transfer-reviewed-*`, `observe-transfer-milestone.py` and `g0-transfer-final-{transfer,calls,controls,hold}-*`. Public JSON is curated numeric/Boolean evidence, not a configuration/log export.
+
+TLS uses validated signaling with **1301/1302 explicitly plaintext RTP**; mandatory-SRTP fixtures are refused. No general REFER/SUBSCRIBE refresh, arbitrary URI, remote media retargeting, cross-window receive continuity, jitter/RTCP/resampling, device/human/host/VM/NAT/IPv6 or exact release-artifact acceptance is established. Fixed RTP initialization, endpoint-wide state watches, upstream/parser/channel bounds, SDK/InviteOption/serde credential-copy lifetimes and incomplete remote error/cancellation cleanup remain production gates. Malformed/unrelated NOTIFY is rejected and cannot complete an operation, but may result in total timeout rather than an immediate typed signaling error. Mandatory SRTP/SDES/downgrade negatives, production actors, desktop/IPC ELF, storage, CLI/MCP and human/release gates remain required; no criterion was narrowed or marked complete by this milestone.

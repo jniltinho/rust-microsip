@@ -146,3 +146,14 @@ COPY --from=g0-hold-build /opt/rust-licenses /usr/share/rust-microsip-g0/toolcha
 COPY --from=g0-hold-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/g0-hold"]
+
+# REFER/NOTIFY and preserved-call failure proof, not a client release.
+FROM verify AS g0-transfer-build
+RUN --network=none cargo build -p rust-microsip-telephony --example g0_transfer --release --frozen --target x86_64-unknown-linux-gnu
+FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS g0-transfer-runner
+COPY --from=g0-transfer-build /work/target/x86_64-unknown-linux-gnu/release/examples/g0_transfer /usr/local/bin/g0-transfer
+COPY --from=g0-transfer-build /tmp/g0-cargo-notices /usr/share/rust-microsip-g0/cargo-licenses
+COPY --from=g0-transfer-build /opt/rust-licenses /usr/share/rust-microsip-g0/toolchain-licenses
+COPY --from=g0-transfer-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/g0-transfer"]

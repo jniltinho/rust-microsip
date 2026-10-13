@@ -1,0 +1,11 @@
+# Claude review — synthetic REFER/NOTIFY transfer, round 3
+
+Date: 2026-10-12. Baseline: `327326b`. Independent read-only Claude CLI in a neutral temporary directory, with tools/MCP/hooks/session persistence disabled. Documentation-only review supplied the final ADR, receipt Markdown/JSON, earlier findings, guide/task delta, public timeout/trap source and final pair/IVR/hold matrices. Input SHA-256: `538c97fc44e1d3831233599f9e854e1d81e8ae2f1a217775fdeddf1ab2616966`. CLI exit 0, subtype `success`, `is_error=false`.
+
+Verdict: **APPROVE — supplied documentation/evidence consistency only.** No blocking accuracy, privacy or evidence-scope contradiction was found. The reviewer matched all 24 transfer cases, destination/failure splits, packet/RMS/ratio/peak ranges, window presence, regression ranges/outcomes, identities/ELF size, false release gates, public wrapper deadline/traps and the still-unchecked task 1.7. It did not execute calls, verify remote hashes/images or independently confirm implementing-agent observations.
+
+The implementing agent corrected an incidental review-comment count: the JSON contains **47** own input hashes (**34 application + 13 additional lab/context inputs**), not the reviewer's stated 48/14. The public receipt did not claim that incorrect count. All 47 hashes and the 34-input manifest were independently checked by the implementing agent against current/staged files; static review is not a substitute for those checks.
+
+Two non-blocking notes were resolved/qualified without code or runtime changes. Pair media reports 249–250 accepted frames with zero sequence-gap/late counters; this does not exclude a trailing/undetected drop, and the receipt wording now says sequence-gap explicitly. Final PBX count hashes differ because transfer reports 36 cumulative processed calls versus 12 for each regression runner; all four files independently report zero active channels/calls. The observer validates active counts, not equality of whole-file hashes or cumulative workload across modes.
+
+This review does not approve production, complete SIP-08, G0 or release. The [executed receipt](../receipts/g0-rust-transfer-2026-10-12.md) records the separate implementing-agent runtime, privacy and identity checks; the complete release goal remains pending.

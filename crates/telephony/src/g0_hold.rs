@@ -222,7 +222,7 @@ pub struct Window {
     /// Estimated peak amplitude of the synthetic remote-frequency component.
     pub remote_tone_amplitude: f64,
 }
-struct Stream {
+pub(super) struct Stream {
     socket: Arc<UdpSocket>,
     target: AudioTarget,
     flow: watch::Receiver<Flow>,
@@ -235,7 +235,7 @@ struct Stream {
     remote_hz: f64,
 }
 impl Stream {
-    fn new(
+    pub(super) fn new(
         endpoint: &LabEndpoint,
         target: AudioTarget,
         hz: f64,
@@ -257,7 +257,10 @@ impl Stream {
             remote_hz,
         }
     }
-    async fn window(
+    pub(super) fn expect_remote_tone(&mut self, hz: f64) {
+        self.remote_hz = hz;
+    }
+    pub(super) async fn window(
         &mut self,
         duration: Duration,
         local_send: bool,

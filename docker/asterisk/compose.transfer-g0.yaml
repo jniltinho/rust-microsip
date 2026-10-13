@@ -1,0 +1,16 @@
+# Opt-in REFER/NOTIFY fixture; no default-profile or personal-account access.
+# The Python registration peer is disabled to avoid duplicate fictional contacts.
+services:
+  pbx:
+    environment:
+      LAB_VERIFY_CONTACT: "1"
+  peer:
+    profiles: [registration-fixture-only]
+  test-runner:
+    image: rust-microsip-g0-transfer:0.1.0-lab.1
+    build:
+      context: ../..
+      target: g0-transfer-runner
+    command: !reset []
+    depends_on: !override
+      pbx: {condition: service_healthy}

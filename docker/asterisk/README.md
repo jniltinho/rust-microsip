@@ -87,6 +87,19 @@ sh docker/asterisk/lab.sh hold-test
 
 Each call has a 30-second deadline; `hold-test` has a 360-second outer deadline and cleanup trap. Ignored logs are `artifacts/rust-hold-smoke.log`. Rebuild after source changes. TLS uses explicit plaintext-RTP 1301/1302; mandatory-SRTP fixtures are refused. Only aggregate metrics are emitted. No devices, human audio, REFER/SRTP or release acceptance is claimed. See [ADR 0007](../../docs/adr/0007-synthetic-hold-and-resume.md) and the [executed hold receipt](../../docs/receipts/g0-rust-hold-2026-10-12.md). Task 1.7, full SIP-06 and G0 stay open.
 
+## Opt-in synthetic REFER/NOTIFY transfer proof
+
+With current still-valid fictional fixtures and the PBX wrapper built:
+
+```sh
+sh docker/asterisk/lab.sh transfer-build
+sh docker/asterisk/lab.sh transfer-test
+```
+
+`compose.transfer-g0.yaml` selects two synthetic Rust endpoints in one runner process and the separate PBX, with distinct sockets, private read-only mounts, no ports and the existing hardening. Twenty-four UDP/TCP/TLS × PCMA/PCMU × both-direction × valid/invalid-destination calls require final dialog-bound NOTIFY, not REFER 202 alone. Route 602 must produce measured 1 kHz media with a peak-amplitude floor excluding former-partner leakage. Absent route 699 must leave the exact original dialogs confirmed and two-way synthetic audio working before hangup/unregistration. The emitted final NOTIFY 200 is observed at the SDK pre-send boundary, not independently captured at the PBX.
+
+Each call has a 30-second total deadline; `transfer-test` has a 720-second outer deadline and cleanup trap. Ignored operational logs are `artifacts/rust-transfer-smoke.log`. Rebuild after source changes; run only one overlay at a time. TLS 1301/1302 protects signaling with explicitly plaintext RTP; mandatory-SRTP fixtures are refused. No arbitrary transfer URI, audio device, human voice, production transfer actor, SRTP or release acceptance is provided. See [ADR 0008](../../docs/adr/0008-synthetic-refer-notify-transfer.md) and the [executed transfer receipt](../../docs/receipts/g0-rust-transfer-2026-10-12.md). Task 1.7, complete SIP-08 and G0 remain open.
+
 ## Fictional dialplan and security fixtures
 
 | Extensions | Signaling | Media policy |
@@ -125,4 +138,4 @@ Generated certificates become unusable after three days. Tests fail closed on st
 
 ## Remaining gates
 
-Production adapter hardening, a long-running call peer, incoming/outgoing calls, human/device PCMA/PCMU (short synthetic calls are only partial evidence), production DTMF/hold-resume, REFER/NOTIFY, TLS+SRTP/SDES negotiation/downgrade rejection, host SDP/media, isolated VM ACLs and exact-artifact headset tests remain required. Registration and Claude review do not establish any of these results. Do not publish the inherited image without a separate complete license/source/asset audit.
+Production adapter hardening, a long-running call peer, incoming/outgoing calls, human/device PCMA/PCMU (short synthetic calls are only partial evidence), production DTMF/hold-resume/REFER-NOTIFY, TLS+SRTP/SDES negotiation/downgrade rejection, host SDP/media, isolated VM ACLs and exact-artifact headset tests remain required. Registration and Claude review do not establish any of these results. Do not publish the inherited image without a separate complete license/source/asset audit.

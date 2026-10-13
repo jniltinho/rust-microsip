@@ -17,6 +17,7 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     crates/telephony/examples/g0_registration.rs crates/telephony/examples/g0_calls.rs \
     crates/telephony/src/g0_calls.rs crates/telephony/src/g0_controls.rs crates/telephony/examples/g0_controls.rs \
     crates/telephony/src/g0_hold.rs crates/telephony/examples/g0_hold.rs \
+    crates/telephony/src/g0_transfer.rs crates/telephony/examples/g0_transfer.rs \
     crates/media/src/dtmf.rs crates/media/Cargo.toml crates/media/src/lib.rs crates/media/tests/media.rs \
     packaging/verify.sh packaging/export-scaffold.sh \
     packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py \

@@ -7,6 +7,8 @@
 pub mod controls;
 #[path = "g0_hold.rs"]
 pub mod hold;
+#[path = "g0_transfer.rs"]
+pub mod transfer;
 
 use super::{OwnedRegistration, ProbeTasks, RegistrationConfig, Transport};
 use rsipstack::{
@@ -226,10 +228,11 @@ impl CallWire {
         }
     }
 }
-struct CallInspector(Arc<CallWire>, Arc<hold::Wire>);
+struct CallInspector(Arc<CallWire>, Arc<hold::Wire>, Arc<transfer::Subscription>);
 impl MessageInspector for CallInspector {
     fn before_send(&self, msg: SipMessage, _: Option<&SipAddr>) -> SipMessage {
         self.1.sent(&msg);
+        self.2.sent(&msg);
         if matches!(&msg, SipMessage::Request(r) if r.method == Method::Ack) {
             self.0.mark(8);
         }
@@ -266,6 +269,13 @@ struct LabEndpoint {
     wire: Arc<CallWire>,
     hold_wire: Arc<hold::Wire>,
     flow: watch::Receiver<hold::Flow>,
+    transfer: Arc<transfer::Subscription>,
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ProbeMode {
+    Plain,
+    Hold,
+    Transfer,
 }
 impl LabEndpoint {
     async fn connect(
@@ -280,6 +290,24 @@ impl LabEndpoint {
         codec: Codec,
         stop: CancellationToken,
         updates: bool,
+    ) -> Result<Self, CallProbeError> {
+        Self::connect_mode(
+            config,
+            codec,
+            stop,
+            if updates {
+                ProbeMode::Hold
+            } else {
+                ProbeMode::Plain
+            },
+        )
+        .await
+    }
+    async fn connect_mode(
+        config: RegistrationConfig,
+        codec: Codec,
+        stop: CancellationToken,
+        mode: ProbeMode,
     ) -> Result<Self, CallProbeError> {
         let mut owner = ProbeTasks {
             stop: stop.child_token(),
@@ -343,19 +371,28 @@ impl LabEndpoint {
             .map_err(|_| CallProbeError::Signaling)?;
         let wire = Arc::new(CallWire::default());
         let hold_wire = Arc::new(hold::Wire::default());
+        let transfer = Arc::new(transfer::Subscription::default());
+        let mut allows = vec![
+            Method::Register,
+            Method::Invite,
+            Method::Ack,
+            Method::Bye,
+            Method::Cancel,
+            Method::Options,
+        ];
+        if mode == ProbeMode::Transfer {
+            allows.extend([Method::Refer, Method::Notify]);
+        }
         let endpoint = EndpointBuilder::new()
             .with_cancel_token(owner.stop.clone())
             .with_transport_layer(transport)
             .with_user_agent("rust-microsip G0 synthetic call")
-            .with_inspector(Box::new(CallInspector(wire.clone(), hold_wire.clone())))
-            .with_allows(vec![
-                Method::Register,
-                Method::Invite,
-                Method::Ack,
-                Method::Bye,
-                Method::Cancel,
-                Method::Options,
-            ])
+            .with_inspector(Box::new(CallInspector(
+                wire.clone(),
+                hold_wire.clone(),
+                transfer.clone(),
+            )))
+            .with_allows(allows)
             .build();
         let layer = Arc::new(DialogLayer::new(endpoint.inner.clone()));
         let rtp = Arc::new(
@@ -378,6 +415,7 @@ impl LabEndpoint {
         let (phase_tx, phase) = watch::channel(Phase::default());
         let failed = phase_tx.clone();
         let stopped = owner.stop.clone();
+        let transfer_events = transfer.clone();
         owner.tasks.spawn(async move {
             let mut count = 0u8;
             let mut answer_version = 1u64;
@@ -391,7 +429,9 @@ impl LabEndpoint {
                     stopped.cancel();
                     break;
                 }
-                if updates && let DialogState::Updated(_, request, handle) = &event {
+                if mode != ProbeMode::Plain
+                    && let DialogState::Updated(_, request, handle) = &event
+                {
                     answer_version += 1;
                     let result = match hold::update_answer(
                         &request.body,
@@ -416,6 +456,20 @@ impl LabEndpoint {
                         Err(_) => handle.reply(StatusCode::NotAcceptableHere).await,
                     };
                     if result.is_err() {
+                        phase_tx.send_modify(|p| p.failed = true);
+                        stopped.cancel();
+                        break;
+                    }
+                }
+                if mode == ProbeMode::Transfer
+                    && let DialogState::Notify(id, request, handle) = &event
+                {
+                    let status = if transfer_events.consume(id, request).is_ok() {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::CallTransactionDoesNotExist
+                    };
+                    if handle.reply(status).await.is_err() {
                         phase_tx.send_modify(|p| p.failed = true);
                         stopped.cancel();
                         break;
@@ -496,6 +550,7 @@ impl LabEndpoint {
             wire,
             hold_wire,
             flow,
+            transfer,
         })
     }
     async fn wait_phase(&mut self, terminated: bool) -> Result<(), CallProbeError> {
