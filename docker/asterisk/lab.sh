@@ -11,10 +11,12 @@ host_compose() { docker compose -f docker/asterisk/compose.yaml -f docker/asteri
 rust_compose() { docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.rust-g0.yaml "$@"; }
 calls_compose() { docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.calls-g0.yaml "$@"; }
 controls_compose() { docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.controls-g0.yaml "$@"; }
+hold_compose() { docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.hold-g0.yaml "$@"; }
 case "${1:-}" in
     build) docker buildx build --platform linux/amd64 --target runtime --load -t "$image" docker/asterisk ;;
     calls-build) docker buildx build --platform linux/amd64 --target g0-calls-runner --load -t rust-microsip-g0-calls:0.1.0-lab.1 . ;;
     controls-build) docker buildx build --platform linux/amd64 --target g0-controls-runner --load -t rust-microsip-g0-controls:0.1.0-lab.1 . ;;
+    hold-build) docker buildx build --platform linux/amd64 --target g0-hold-runner --load -t rust-microsip-g0-hold:0.1.0-lab.1 . ;;
     init)
         test ! -L artifacts && test ! -L artifacts/asterisk-lab
         mkdir -p -m 700 artifacts/asterisk-lab
@@ -74,6 +76,18 @@ case "${1:-}" in
         trap 'exit 143' TERM
         controls_compose config --format json | python3 docker/asterisk/verify_compose.py controls
         timeout --signal=TERM --kill-after=20s 200s docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.controls-g0.yaml up --no-build --abort-on-container-exit --exit-code-from test-runner ;;
+    hold-test)
+        cleanup() {
+            if [ ! -L artifacts/rust-hold-smoke.log ]; then
+                hold_compose logs --no-color > artifacts/rust-hold-smoke.log 2>&1 || :
+            fi
+            hold_compose down --volumes --remove-orphans
+        }
+        trap cleanup EXIT
+        trap 'exit 130' INT
+        trap 'exit 143' TERM
+        hold_compose config --format json | python3 docker/asterisk/verify_compose.py hold
+        timeout --signal=TERM --kill-after=20s 360s docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.hold-g0.yaml up --no-build --abort-on-container-exit --exit-code-from test-runner ;;
     up) compose up --no-build -d --wait pbx peer ;;
     down) compose down --volumes --remove-orphans ;;
     host-up) host_compose up --no-build -d --wait pbx ;;
@@ -81,5 +95,5 @@ case "${1:-}" in
     config-check)
         compose config --format json | python3 docker/asterisk/verify_compose.py internal
         host_compose config --format json | python3 docker/asterisk/verify_compose.py host ;;
-    *) printf '%s\n' 'Usage: lab.sh build|calls-build|controls-build|init|unit-test|config-check|test|rust-test|calls-test|controls-test|up|down|host-up|host-down' >&2; exit 2 ;;
+    *) printf '%s\n' 'Usage: lab.sh build|calls-build|controls-build|hold-build|init|unit-test|config-check|test|rust-test|calls-test|controls-test|hold-test|up|down|host-up|host-down' >&2; exit 2 ;;
 esac

@@ -74,6 +74,19 @@ sh docker/asterisk/lab.sh down
 
 Do not run the default and host profiles concurrently: they share one Compose project. The default has no host networking, published ports, privileges, devices, Docker socket, desktop session, HOME, or production configuration mounts. Filesystem is read-only except private tmpfs. Resource limits and explicit module loading bound the fixture; they are not a defense against every vulnerability in an upstream image.
 
+## Opt-in synthetic hold/resume proof
+
+With current still-valid fictional fixtures and the PBX wrapper built:
+
+```sh
+sh docker/asterisk/lab.sh hold-build
+sh docker/asterisk/lab.sh hold-test
+```
+
+`compose.hold-g0.yaml` selects only two Rust endpoints in one runner process and the PBX, with separate sockets, private read-only mounts, no published ports and the existing hardening. Do not combine overlays. Twelve UDP/TCP/TLS × PCMA/PCMU × both-direction calls check sendonly/recvonly hold, local zero-transmit suppression, resumed synthetic two-way audio and preserved media after a 488 incompatible-codec re-INVITE. ACK evidence is correlated emitted SDK messages, not independent packet capture. Asterisk's anchored opposite leg can remain sendrecv; this is not a remote-hold or music-on-hold acceptance test.
+
+Each call has a 30-second deadline; `hold-test` has a 360-second outer deadline and cleanup trap. Ignored logs are `artifacts/rust-hold-smoke.log`. Rebuild after source changes. TLS uses explicit plaintext-RTP 1301/1302; mandatory-SRTP fixtures are refused. Only aggregate metrics are emitted. No devices, human audio, REFER/SRTP or release acceptance is claimed. See [ADR 0007](../../docs/adr/0007-synthetic-hold-and-resume.md) and the [executed hold receipt](../../docs/receipts/g0-rust-hold-2026-10-12.md). Task 1.7, full SIP-06 and G0 stay open.
+
 ## Fictional dialplan and security fixtures
 
 | Extensions | Signaling | Media policy |

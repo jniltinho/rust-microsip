@@ -11,17 +11,17 @@ def require(condition):
 
 
 def verify(config, profile):
-    if profile not in ("internal", "host", "calls", "controls"):
+    if profile not in ("internal", "host", "calls", "controls", "hold"):
         raise ValueError("unknown profile")
     secret_root = Path("artifacts/asterisk-lab").resolve()
     services = config["services"]
     if profile == "host":
         require(set(services) == {"pbx"})
-    if profile in ("internal", "calls", "controls"):
+    if profile in ("internal", "calls", "controls", "hold"):
         require(set(services) == ({"pbx", "peer", "test-runner"} if profile == "internal" else {"pbx", "test-runner"}))
         require(config["networks"]["isolated"]["internal"])
-    if profile in ("calls", "controls"):
-        runner = "g0-calls" if profile == "calls" else "g0-controls"
+    if profile in ("calls", "controls", "hold"):
+        runner = {"calls":"g0-calls", "controls":"g0-controls", "hold":"g0-hold"}[profile]
         require(services["pbx"]["environment"]["LAB_VERIFY_CONTACT"] == "1")
         require(services["test-runner"]["image"] == f"rust-microsip-{runner}:0.1.0-lab.1")
         require(services["test-runner"]["build"]["target"] == f"{runner}-runner")
@@ -40,7 +40,7 @@ def verify(config, profile):
         require(Path(mount["source"]) == expected)
         require(mount["target"] == "/lab" and mount["read_only"])
         require(not mount["bind"]["create_host_path"])
-        if profile in ("internal", "calls", "controls"):
+        if profile in ("internal", "calls", "controls", "hold"):
             require(not service.get("ports") and set(service["networks"]) == {"isolated"})
     if profile == "host":
         pbx = services["pbx"]

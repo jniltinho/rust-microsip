@@ -5,6 +5,8 @@
 //! accounts; mandatory-SRTP accounts are refused rather than downgraded.
 #[path = "g0_controls.rs"]
 pub mod controls;
+#[path = "g0_hold.rs"]
+pub mod hold;
 
 use super::{OwnedRegistration, ProbeTasks, RegistrationConfig, Transport};
 use rsipstack::{
@@ -224,9 +226,10 @@ impl CallWire {
         }
     }
 }
-struct CallInspector(Arc<CallWire>);
+struct CallInspector(Arc<CallWire>, Arc<hold::Wire>);
 impl MessageInspector for CallInspector {
     fn before_send(&self, msg: SipMessage, _: Option<&SipAddr>) -> SipMessage {
+        self.1.sent(&msg);
         if matches!(&msg, SipMessage::Request(r) if r.method == Method::Ack) {
             self.0.mark(8);
         }
@@ -261,12 +264,22 @@ struct LabEndpoint {
     phase: watch::Receiver<Phase>,
     states: rsipstack::dialog::dialog::DialogStateSender,
     wire: Arc<CallWire>,
+    hold_wire: Arc<hold::Wire>,
+    flow: watch::Receiver<hold::Flow>,
 }
 impl LabEndpoint {
     async fn connect(
         config: RegistrationConfig,
         codec: Codec,
         stop: CancellationToken,
+    ) -> Result<Self, CallProbeError> {
+        Self::connect_with_updates(config, codec, stop, false).await
+    }
+    async fn connect_with_updates(
+        config: RegistrationConfig,
+        codec: Codec,
+        stop: CancellationToken,
+        updates: bool,
     ) -> Result<Self, CallProbeError> {
         let mut owner = ProbeTasks {
             stop: stop.child_token(),
@@ -329,11 +342,12 @@ impl LabEndpoint {
             .parse()
             .map_err(|_| CallProbeError::Signaling)?;
         let wire = Arc::new(CallWire::default());
+        let hold_wire = Arc::new(hold::Wire::default());
         let endpoint = EndpointBuilder::new()
             .with_cancel_token(owner.stop.clone())
             .with_transport_layer(transport)
             .with_user_agent("rust-microsip G0 synthetic call")
-            .with_inspector(Box::new(CallInspector(wire.clone())))
+            .with_inspector(Box::new(CallInspector(wire.clone(), hold_wire.clone())))
             .with_allows(vec![
                 Method::Register,
                 Method::Invite,
@@ -349,7 +363,10 @@ impl LabEndpoint {
                 .await
                 .map_err(|_| CallProbeError::Media)?,
         );
-        let answer = offer(rtp.local_addr().map_err(|_| CallProbeError::Media)?, codec);
+        let local_rtp = rtp.local_addr().map_err(|_| CallProbeError::Media)?;
+        let answer = offer(local_rtp, codec);
+        let (flow_tx, flow) = watch::channel(hold::Flow::SendRecv);
+        let update_pbx = config.address.ip();
         let inner = endpoint.inner.clone();
         let stopped = owner.stop.clone();
         owner.tasks.spawn(async move {
@@ -362,13 +379,54 @@ impl LabEndpoint {
         let failed = phase_tx.clone();
         let stopped = owner.stop.clone();
         owner.tasks.spawn(async move {
-            let mut count=0u8;
-            loop {tokio::select! {biased;_ = stopped.cancelled()=>break, event=events.recv()=>{
-                let Some(event)=event else{break};count=count.saturating_add(1);
-                phase_tx.send_modify(|p| {if count>64 {p.failed=true;}
-                    match event {DialogState::Confirmed(..)=>p.confirmed=true,DialogState::Terminated(..)=>p.terminated=true,_=>()}});
-                if count>64 {stopped.cancel();break;}
-            }}}
+            let mut count = 0u8;
+            let mut answer_version = 1u64;
+            loop {
+                let event =
+                    tokio::select! {biased;_=stopped.cancelled()=>break,event=events.recv()=>event};
+                let Some(event) = event else { break };
+                count = count.saturating_add(1);
+                if count > 64 {
+                    phase_tx.send_modify(|p| p.failed = true);
+                    stopped.cancel();
+                    break;
+                }
+                if updates && let DialogState::Updated(_, request, handle) = &event {
+                    answer_version += 1;
+                    let result = match hold::update_answer(
+                        &request.body,
+                        codec,
+                        update_pbx,
+                        local_rtp,
+                        answer_version,
+                    ) {
+                        Ok((body, mode)) => {
+                            let result = handle
+                                .respond(
+                                    StatusCode::OK,
+                                    Some(vec![Header::ContentType("application/sdp".into())]),
+                                    Some(body),
+                                )
+                                .await;
+                            if result.is_ok() {
+                                flow_tx.send_replace(mode);
+                            }
+                            result
+                        }
+                        Err(_) => handle.reply(StatusCode::NotAcceptableHere).await,
+                    };
+                    if result.is_err() {
+                        phase_tx.send_modify(|p| p.failed = true);
+                        stopped.cancel();
+                        break;
+                    }
+                }
+                phase_tx.send_modify(|p| match event {
+                    DialogState::Confirmed(..) => p.confirmed = true,
+                    DialogState::Terminated(..) => p.terminated = true,
+                    _ => (),
+                });
+            }
         });
         let mut transactions = endpoint
             .incoming_transactions()
@@ -436,6 +494,8 @@ impl LabEndpoint {
             phase,
             states,
             wire,
+            hold_wire,
+            flow,
         })
     }
     async fn wait_phase(&mut self, terminated: bool) -> Result<(), CallProbeError> {
