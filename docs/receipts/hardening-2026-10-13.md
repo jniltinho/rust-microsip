@@ -35,6 +35,17 @@ Run `38423434363` on `6324e2f` succeeded: publication scan with negative control
 
 An apparent dropped call during this work was a harness race (the host counted PBX channels while the app was already being terminated); a 40 s echo call held one channel throughout.
 
+## Mute keeps reception (lab)
+
+`engine_lab` now also measures the muted side while muted. Full run, both profiles passed (log SHA-256 `142b16a39d0fbc36ee79eee1b56d7081463a89ec1fa5436b1337592da916279b`, example ELF `0e914aaceece6a8b359c976cb5ece551032bbcf175330c8280e89f8a9b5372d1`):
+
+| Profile | Peer while muted (RMS) | Muted side hears the peer |
+| --- | --- | --- |
+| UDP/RTP | 8 | 81 frames, RMS 5675, tone ratio 1662 |
+| TLS/SRTP | 8 | 80 frames, RMS 5675, tone ratio 1670 |
+
+The local audio test on real devices (the other half of AUD-04) is still open.
+
 ## Independent review
 
 Four Claude CLI static rounds ([record](../reviews/claude-hardening-2026-10-13.md)); round 4 approved. Round 2 contained findings about code that does not exist and was checked against the tree.

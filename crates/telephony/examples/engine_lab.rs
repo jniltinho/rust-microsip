@@ -273,9 +273,12 @@ fn scenario(
     a.send(Command::SetMute(a.id()?, true))?;
     settle(&mut [&mut a, &mut b], 0.3);
     b.measure(&[440.0, 880.0]);
-    settle(&mut [&mut a, &mut b], 1.0);
-    // Muted audio keeps flowing as silence; the peer must hear no energy.
+    a.measure(&[880.0, 440.0]);
+    settle(&mut [&mut a, &mut b], 1.6);
+    // Muted audio keeps flowing as silence; the peer must hear no energy,
+    // while the muted side keeps hearing the peer (AUD-04).
     let muted_rms = b.result().1;
+    let heard_while_muted = voice(&a, "a while muted")?;
     a.send(Command::SetMute(a.id()?, false))?;
     if muted_rms > 50.0 {
         return Err(format!("muted rms {muted_rms:.1}"));
@@ -498,7 +501,7 @@ fn scenario(
     }
     Ok(
         serde_json::json!({"scenario":label,"secure":secure,"before":before,"held_frames":held_frames,"resumed":resumed,
-        "muted_rms_at_peer":muted_rms,"failed_transfer_status":failed_status,"after_failed_transfer":after_failed_transfer,
+        "muted_rms_at_peer":muted_rms,"muted_side_hears":heard_while_muted,"failed_transfer_status":failed_status,"after_failed_transfer":after_failed_transfer,
         "transferred":transferred,"destination_tone":destination,"busy":busy_case,"reverse_direction":reverse,"cancel_answer_race":race_outcomes,"ivr_123_branch":ivr,"reject":"busy","cancel":"canceled","dnd":"busy","stopped":true}),
     )
 }

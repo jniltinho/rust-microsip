@@ -37,7 +37,6 @@ This directory holds the project's design records, evidence and guides. Start wi
 | Area | Remaining work | OpenSpec tasks |
 | --- | --- | --- |
 | G0 gate | Same-stack spike with D-Bus/notifications and local IPC; clean GNOME/Wayland and KDE/X11 VMs; native dependency audit; recorded G0 decision | 1.5, 1.8, 1.9 |
-| Architecture | Platform contracts and fakes for the Linux adapters | 2.1 |
 | Media | Device hotplug with real headsets, local test on real devices, NAT/STUN topology | 5.2, 5.3, 5.5 |
 | Desktop UI | Visual matrix against MicroSIP, remaining screens, screen-reader labels | 7.1–7.3, 7.5 |
 | Linux integration | Notification and tray checks on real desktops | 8.1 |
