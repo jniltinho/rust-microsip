@@ -1,6 +1,6 @@
 # Disposable Asterisk lab
 
-**Registration infrastructure, not a working softphone or completed G0.** Based on the user's requested [andrius/asterisk](https://github.com/andrius/asterisk) project, pinned to Asterisk 22.11.0 and an exact linux/amd64 image manifest. See [provenance and license boundaries](../../docs/adr/0002-disposable-asterisk-lab.md) and the [executed receipt](../../docs/receipts/asterisk-lab-2026-10-12.md).
+**Disposable signaling/synthetic-media infrastructure, not a working softphone or completed G0.** Based on the user's requested [andrius/asterisk](https://github.com/andrius/asterisk) project, pinned to Asterisk 22.11.0 and an exact linux/amd64 image manifest. See [provenance and license boundaries](../../docs/adr/0002-disposable-asterisk-lab.md) and the [executed receipt](../../docs/receipts/asterisk-lab-2026-10-12.md).
 
 ## Prerequisites
 
@@ -39,6 +39,19 @@ The default-off `compose.rust-g0.yaml` replaces the test runner and disables PBX
 
 The [Rust receipt](../../docs/receipts/g0-rust-registration-2026-10-12.md) and [ADR 0004](../../docs/adr/0004-experimental-sip-adapter.md) describe the narrow approval and upstream channel/secret-lifetime risks. Notice/source inventory is preserved in the runner image. **Neither probe answers calls or proves PCMA/PCMU, SRTP, media, renewal scheduling, hostile-network resilience or a usable release.** Task 1.6 remains open.
 
+## Opt-in Rust synthetic calls
+
+```sh
+sh docker/asterisk/lab.sh calls-build
+sh docker/asterisk/lab.sh calls-test
+```
+
+`compose.calls-g0.yaml` is default-off. It disables the Python peer and runs two independently bound Rust endpoints in one runner process. The normalized configuration must contain only the PBX and exact Rust runner, on the internal network without ports, with non-root/read-only/capability-drop restrictions and separate private read-only mounts. PBX Contact rewriting is disabled for incoming reachability proof. Do not enable both Rust overlays together.
+
+The runner executes UDP/TCP/TLS × PCMA/PCMU × both origination directions: 12 calls, five seconds each. It verifies INVITE/200/ACK, distinct 440/880 Hz sources received at the other endpoint, negotiated RTP source/codec/SSRC/sequence/timestamp checks, BYE/200, termination and unregistration. It emits only aggregate measurements. TLS uses **1301/1302 plaintext RTP**, never mandatory-SRTP 1201/1202; no downgrade or SRTP success is claimed. A normalized-Compose identity test rejects a wrong image, command, proof mode or port publication.
+
+`calls-test` has a 200-second outer deadline and cleanup trap; raw operational logs stay ignored in `artifacts/rust-calls-smoke.log`. Rebuild after source changes. Reuse only still-valid fictional fixtures, or stop the lab and remove its explicitly named ignored directory before `init`; do not overwrite personal settings. See [ADR 0005](../../docs/adr/0005-own-g711-and-synthetic-rtp.md) and the [executed media receipt](../../docs/receipts/g0-rust-media-2026-10-12.md). No microphone/headset, recording, SRTP, DTMF, hold, transfer, loss/jitter, host/VM media or release artifact is tested by this command. G0 remains open.
+
 To leave the isolated PBX/peer up temporarily:
 
 ```sh
@@ -55,7 +68,7 @@ Do not run the default and host profiles concurrently: they share one Compose pr
 | 1001 / 1002 | UDP | Explicit insecure lab RTP |
 | 1101 / 1102 | TCP | Explicit insecure lab RTP |
 | 1201 / 1202 | Validated TLS | Mandatory SDES SRTP, no optimistic downgrade |
-| 1301 / 1302 | TLS | RTP-only negative fixture, not a secure production default |
+| 1301 / 1302 | TLS | Explicit RTP-only fixture (positive plain-RTP calls; negative secure-media policy), not a secure production default |
 
 All use G.711 PCMA/PCMU and RFC 4733 DTMF, with PBX-anchored media (`direct_media=no`). Exact local destinations only: no wildcard/PSTN routes, outbound trunks, anonymous endpoint, remote administration or recording.
 
@@ -63,7 +76,7 @@ All use G.711 PCMA/PCMU and RFC 4733 DTMF, with PBX-anchored media (`direct_medi
 - `601`: read exactly three DTMF digits; `123` produces 1 kHz, other input 400 Hz.
 - `602`: generate a 1 kHz tone for 20 seconds.
 
-These routes and the SRTP module pass PBX readiness checks. **Their audio/DTMF/SRTP behavior has not yet been exercised by a call test.** TLS 1.2 is the explicit current lab server method; this is not a claim of TLS 1.3 coverage.
+These routes and the SRTP module pass PBX readiness checks. **Routes 600/601/602 and mandatory SRTP have not yet been exercised by a Rust call test.** TLS 1.2 is the explicit current lab server method; this is not a claim of TLS 1.3 coverage.
 
 ## Opt-in host loopback profile
 
@@ -86,4 +99,4 @@ Generated certificates become unusable after three days. Tests fail closed on st
 
 ## Remaining gates
 
-Production adapter hardening, a long-running call peer, incoming/outgoing calls, two-way PCMA/PCMU, DTMF, hold, REFER/NOTIFY, TLS+SRTP/SDES negotiation/downgrade rejection, host SDP/media, isolated VM ACLs and exact-artifact headset tests remain required. Registration and Claude review do not establish any of these results. Do not publish the inherited image without a separate complete license/source/asset audit.
+Production adapter hardening, a long-running call peer, incoming/outgoing calls, human/device PCMA/PCMU (short synthetic calls are only partial evidence), DTMF, hold, REFER/NOTIFY, TLS+SRTP/SDES negotiation/downgrade rejection, host SDP/media, isolated VM ACLs and exact-artifact headset tests remain required. Registration and Claude review do not establish any of these results. Do not publish the inherited image without a separate complete license/source/asset audit.

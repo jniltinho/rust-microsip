@@ -45,3 +45,12 @@ crates/telephony/tests/**
 !crates/telephony/examples/
 crates/telephony/examples/**
 !crates/telephony/examples/*.rs
+!crates/media/
+crates/media/**
+!crates/media/Cargo.toml
+!crates/media/src/
+crates/media/src/**
+!crates/media/src/*.rs
+!crates/media/tests/
+crates/media/tests/**
+!crates/media/tests/*.rs

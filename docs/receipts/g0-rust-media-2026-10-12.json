@@ -1,0 +1,363 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "curated-synthetic-call-evidence-not-release",
+  "baseline_commit": "bfe953961423b262937c0c46f6ad99a84993cedc",
+  "source_manifest_sha256": "6f24b7e9b7029c76a06d77c62d69c7f825ac22058779c606e7338804e0180930",
+  "selected_cargo_inventory_sha256": "815e71745bd2170de871dc0a2304a0350fd2a5dd8c4f078579674bc1ba22ff4a",
+  "own_source_files_sha256": {
+    "Cargo.lock": "0935dabb58e0d6246fca3c9fe71f5d9b473ce82e7fea7ede24004e2bf5b3e0a7",
+    "crates/media/src/lib.rs": "822285e5bac1d1e815d5a14ee4b6d51ce052ef060d56e4f278330a26bb870391",
+    "crates/media/tests/media.rs": "5e21c8165c4346fff0bd31bb7292dcf0c1f4774e51fcc81d6c8f9dc1081c4769",
+    "crates/telephony/src/g0_calls.rs": "dd9c6629117777e7e9746a2fd2b63b2d3fc0e60c8c62b33b71f49643974c4a09",
+    "crates/telephony/examples/g0_calls.rs": "ca22786c6c6f2dd5d07bd55cc27947cfa90b4fd197674aa11f275b1315c685e0",
+    "Dockerfile": "0c806afd96966c1b8810fa79eaf667bf6bcb8aa58b53a8031326d50b771e70ad",
+    "packaging/g711-reference-vectors.py": "d0f98dbe714e52796c4ecd33448a279d4d690b1b999dae788b0e955833316c2c",
+    "docker/asterisk/Dockerfile": "b7b929d507750edb64e10c1d17474ca3883edafdc406b23d4fad4584ecec866b",
+    "docker/asterisk/lab.py": "b48941b9cff43794d11310eeab4721210492b00a4b616eae2083d3ba39434ca8",
+    "docker/asterisk/sip_probe.py": "ff60317b4015be807c644d1d0b2e405636c0c8641bc47847ae9aa8ca83c249f6",
+    "docker/asterisk/verify_compose.py": "01b40cba1920b8723ec653568efae554947498c919c1b0e1f9aa0258eab091f3",
+    "docker/asterisk/compose.calls-g0.yaml": "909b03470a965fc75750ef1763ae107c56f1a4130af9f0ee2c0893d8887e412b",
+    "docker/asterisk/lab.sh": "709c45946ef05c2b6123f94efad2595a740819fcda1e0cc8b0abbdad1b87d824",
+    "docker/asterisk/compose.yaml": "ba4522214d2549c16ea07ae552d53df4fca5c25cd9ecd69dace302512e878a68",
+    "docker/asterisk/tests/test_calls_compose.py": "60b1ce2fa3b5b0cfc682b9ee8f7abf7351f7a4aceb845f00e6042967d0772110"
+  },
+  "call_runner_local_image_sha256": "7595335193d6ba88d7cfc2f22e28b48d82ef99aabb50c4acfecdf2a54d203e3c",
+  "call_runner_elf_sha256": "f42d64b8790706fcea95917c35d0c419205ad81bbe401f40419eea6bfe42ad3d",
+  "pbx_wrapper_local_image_sha256": "ff5e8bcf5835a957c7ad66f8c9cc6fad5ef65cdfe02a6abcad2d3c4f0fb0ff29",
+  "functional_codec_oracle": {
+    "schema_version": 1,
+    "oracle": "CPython 3.12.3 audioop",
+    "input_order": "signed i16 ascending; octets ascending; decoded PCM little-endian",
+    "vectors": {
+      "PCMA": {
+        "all_65536_encodings_sha256": "38488f6fd710f4686360edc4d38639f96c491595ef93f8eb8d62d5e07ca6ce7b",
+        "all_256_decodings_sha256": "e04788d110e58ff8c70c93b8480190d973e3b67876b6119abbaec766cc75c174"
+      },
+      "PCMU": {
+        "all_65536_encodings_sha256": "81d633c9e6972a18c74a58720b96cb8ca0bdd096d4060b646dd708c3b846019a",
+        "all_256_decodings_sha256": "3dab54339e520bb2c924826e3b72a917a2b612e9fd12fc867500f1d983a75827"
+      }
+    }
+  },
+  "call_measurements": {
+    "calls": [
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.0006766931406,
+          "rms": 5675.246123297209,
+          "sent_packets": 250
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1768.1221805967723,
+          "rms": 5665.928089907248,
+          "sent_packets": 250
+        },
+        "transport": "udp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.0006766931406,
+          "rms": 5675.246123297209,
+          "sent_packets": 250
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1768.1221805967723,
+          "rms": 5665.928089907248,
+          "sent_packets": 250
+        },
+        "transport": "udp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.4049494731714,
+          "rms": 5635.863248873237,
+          "sent_packets": 250
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1626.6539710515356,
+          "rms": 5650.812373455697,
+          "sent_packets": 250
+        },
+        "transport": "udp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.4049494731714,
+          "rms": 5635.863248873237,
+          "sent_packets": 250
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1626.6539710515356,
+          "rms": 5650.812373455697,
+          "sent_packets": 250
+        },
+        "transport": "udp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.0006766931406,
+          "rms": 5675.246123297209,
+          "sent_packets": 250
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1768.1221805967723,
+          "rms": 5665.928089907248,
+          "sent_packets": 250
+        },
+        "transport": "tcp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.0006766931406,
+          "rms": 5675.246123297209,
+          "sent_packets": 250
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1768.1221805967723,
+          "rms": 5665.928089907248,
+          "sent_packets": 250
+        },
+        "transport": "tcp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.4049494731714,
+          "rms": 5635.863248873237,
+          "sent_packets": 250
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1626.6539710515356,
+          "rms": 5650.812373455697,
+          "sent_packets": 250
+        },
+        "transport": "tcp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.4049494731714,
+          "rms": 5635.863248873237,
+          "sent_packets": 250
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1626.6539710515356,
+          "rms": 5650.812373455697,
+          "sent_packets": 250
+        },
+        "transport": "tcp",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.0006766931406,
+          "rms": 5675.246123297209,
+          "sent_packets": 250
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1768.1221805967723,
+          "rms": 5665.928089907248,
+          "sent_packets": 250
+        },
+        "transport": "tls",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.0006766931406,
+          "rms": 5675.246123297209,
+          "sent_packets": 250
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1768.1221805967723,
+          "rms": 5665.928089907248,
+          "sent_packets": 250
+        },
+        "transport": "tls",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.4049494731714,
+          "rms": 5635.863248873237,
+          "sent_packets": 250
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1626.6539710515356,
+          "rms": 5650.812373455697,
+          "sent_packets": 250
+        },
+        "transport": "tls",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1670.4049494731714,
+          "rms": 5635.863248873237,
+          "sent_packets": 250
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 250,
+          "remote_to_own_power_ratio": 1626.6539710515356,
+          "rms": 5650.812373455697,
+          "sent_packets": 250
+        },
+        "transport": "tls",
+        "unregistered": true
+      }
+    ],
+    "distinct_signaling_and_media_sockets": true,
+    "endpoint_processes": 1,
+    "fixture": "two-rust-endpoints-plain-rtp",
+    "g0_passed": false,
+    "human_voice_tested": false,
+    "plaintext_rtp_explicit": true,
+    "release_artifact_tested": false,
+    "schema_version": 1,
+    "seconds_per_call": 5,
+    "srtp_tested": false,
+    "synthetic_sources_hz": [
+      440,
+      880
+    ]
+  },
+  "external_pbx_runtime_observations": {
+    "schema_version": 1,
+    "active_pbx_call_observed": true,
+    "both_runtime_containers_hardened": true,
+    "all_six_contact_rewrite_disabled": true,
+    "no_contacts_after_success": true,
+    "zero_active_channels_and_calls_after_success": true,
+    "zero_project_containers_after_teardown": true,
+    "zero_project_networks_after_teardown": true
+  },
+  "ignored_observer_evidence_sha256": {
+    "artifacts/verify-media-evidence.py": "c206223b41674ab976467d0010d0a5182c75c817a80736a1d8eeb716361f32db",
+    "artifacts/g0-calls-active-observed.txt": "72edb4af7e44e09321b746317d643883ecf7474f315cc437ae29eef33c9a15f6",
+    "artifacts/g0-calls-final-counts.txt": "3b2f3f7effb8451c4732c87401c191d1a139aeb5562c0243f6322e0f9787df5b"
+  }
+}

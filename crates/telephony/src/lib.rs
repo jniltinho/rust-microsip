@@ -3,6 +3,8 @@
 //! [`probe_registration`] performs a bounded register/refresh/unregister cycle
 //! against an explicitly selected registrar. It does not read HOME/configuration,
 //! enable a microphone, make calls, or approve G0. Upstream types remain private.
+pub mod g0_calls;
+
 use rsipstack::{
     EndpointBuilder,
     dialog::{authenticate::Credential, registration::Registration},

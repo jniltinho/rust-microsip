@@ -424,11 +424,19 @@ name = "rust-microsip"
 version = "0.1.0-dev.0"
 
 [[package]]
+name = "rust-microsip-media"
+version = "0.1.0-dev.0"
+dependencies = [
+ "sha2",
+]
+
+[[package]]
 name = "rust-microsip-telephony"
 version = "0.1.0-dev.0"
 dependencies = [
  "libc",
  "rsipstack",
+ "rust-microsip-media",
  "rustls",
  "secrecy",
  "serde_json",

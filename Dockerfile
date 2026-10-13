@@ -80,7 +80,7 @@ root = Path("/context")
 allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
-    "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "docker/rust-components.sha256",
+    "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256",
     "packaging/verify.sh", "packaging/export-scaffold.sh",
     "packaging/check-g0-dependencies.py", "packaging/tests/test_g0_dependencies.py",
     "packaging/collect-cargo-notices.py", "packaging/tests/test_cargo_notices.py",
@@ -92,6 +92,7 @@ for path in files:
     is_source = path.suffix == ".rs" and str(path.parent.relative_to(root)) in {
         "apps/rust-microsip/src", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
+        "crates/media/src", "crates/media/tests",
     }
     if relative not in allowed and not is_source:
         unexpected.append(relative)
@@ -112,3 +113,14 @@ COPY --from=g0-registration-build /opt/rust-licenses /usr/share/rust-microsip-g0
 COPY --from=g0-registration-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/g0-registration"]
+
+# Synthetic call proof only; no desktop/audio device access or release claim.
+FROM verify AS g0-calls-build
+RUN --network=none cargo build -p rust-microsip-telephony --example g0_calls --release --frozen --target x86_64-unknown-linux-gnu
+FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS g0-calls-runner
+COPY --from=g0-calls-build /work/target/x86_64-unknown-linux-gnu/release/examples/g0_calls /usr/local/bin/g0-calls
+COPY --from=g0-calls-build /tmp/g0-cargo-notices /usr/share/rust-microsip-g0/cargo-licenses
+COPY --from=g0-calls-build /opt/rust-licenses /usr/share/rust-microsip-g0/toolchain-licenses
+COPY --from=g0-calls-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/g0-calls"]

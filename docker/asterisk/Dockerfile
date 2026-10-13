@@ -8,7 +8,7 @@ FROM scratch AS runtime
 COPY --from=upstream / /
 ENV PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
     PYTHONDONTWRITEBYTECODE=1
-COPY lab.py sip_probe.py /opt/lab/
+COPY lab.py sip_probe.py verify_compose.py /opt/lab/
 COPY tests/ /opt/lab/tests/
 RUN asterisk -V | grep -Fx 'Asterisk 22.11.0' \
     && python3 -c 'import sys; from pathlib import Path; sys.path.insert(0, "/opt/lab"); import lab; assert all((Path("/usr/lib/asterisk/modules") / (name + ".so")).is_file() for name in lab.MODULES)' \

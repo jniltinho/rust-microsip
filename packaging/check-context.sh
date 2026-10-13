@@ -14,7 +14,8 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     apps/rust-microsip/Cargo.toml apps/rust-microsip/src/main.rs apps/rust-microsip/src/lib.rs \
     apps/rust-microsip/tests/cli.rs docker/rust-components.sha256 \
     crates/telephony/Cargo.toml crates/telephony/src/lib.rs crates/telephony/tests/registration.rs \
-    crates/telephony/examples/g0_registration.rs \
+    crates/telephony/examples/g0_registration.rs crates/telephony/examples/g0_calls.rs \
+    crates/telephony/src/g0_calls.rs crates/media/Cargo.toml crates/media/src/lib.rs crates/media/tests/media.rs \
     packaging/verify.sh packaging/export-scaffold.sh \
     packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py \
     packaging/collect-cargo-notices.py packaging/tests/test_cargo_notices.py; do

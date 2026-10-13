@@ -3,6 +3,7 @@
 !.dockerignore
 !lab.py
 !sip_probe.py
+!verify_compose.py
 !tests/
 tests/**
 !tests/test_*.py
