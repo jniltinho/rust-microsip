@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "captured_at_utc": "2026-10-13T11:35:44.888640+00:00",
+  "kind": "actual native egui/eframe standalone non-dialing G0 preview client-area screenshots (MicroSIP-layout revision 2)",
+  "active_change": "create-native-rust-linux-release",
+  "active_task": "1.8 preparation only; not completed",
+  "main_verified_tasks": "4/54",
+  "linked_cli_mcp_verified_tasks": "0/14",
+  "source": {
+    "path": "tests/probes/ui_spike.rs",
+    "sha256": "dc3c45b60ecdf041b7b1c19e559c8ca5bac5d6ee4cc982cd6095dddd9a8b47ff",
+    "manifest_sha256": "d3ff9e737d0ce22c5f5bf55b1c184ca7804fb25d5d149f79737803fd7246789a",
+    "isolated_lock_sha256": "b6a68d189f8a2c459873fd7b8e1192e02371e102197d36277c658ccfd66988b4",
+    "preview_elf_sha256": "fc29569f4ad609257194c479b4537db96000d86dd584c65c84fe1b81bc174a40",
+    "binary_published": false,
+    "revision_note": "Revision 2 changes only the native layout/presentation code (MicroSIP-like tab strip, keypad, edit row, disabled Call/End, disabled volume rows, compact DND/MUTE/HOLD/XFER, bottom status bar; 300x460 window). Same manifest, same isolated lockfile, no new crate or version."
+  },
+  "precompile_review": {
+    "verdict": "PREVIEW_COMPILE_READY for isolated non-Tokio preview only",
+    "report_sha256": "d6dde746c6341fb383a1659199c6fc16d9a83ff4c3415d21af75b9afa3546386",
+    "selected_registry_archives": 225,
+    "retained_complete_notices": 433,
+    "production_policy_unchanged": true
+  },
+  "build": {
+    "toolchain": "Rust 1.99.0",
+    "offline_frozen": true,
+    "host_cargo": false,
+    "native_feature_tests_passed": 16,
+    "native_feature_tests_failed": 0,
+    "own_warnings_denied": true,
+    "preview_image_id": "sha256:f915887b80ce9cd4396438f5e609712a87ba14aec14d2f3bb5797a6f6e7649d2",
+    "toolchain_base_image_id": "sha256:6d9354607e1546df5b168aebfad43a8b581ec2a071d4d70ca1a1073ca8d287c0",
+    "ubuntu_package_snapshot": "20261001T000000Z",
+    "builder_package_inventory_sha256": "38d9c04fbc7350cfafbdc88db4feb2c926ff0665b6ae68e26c744b70aca56233",
+    "dt_needed_preview_only": [
+      "libgcc_s.so.1",
+      "libm.so.6",
+      "libc.so.6",
+      "ld-linux-x86-64.so.2"
+    ],
+    "complete_dlopen_audit": false,
+    "dependency_graph_changed": false,
+    "local_scripts": [
+      "artifacts/claude-ui-preview-build-capture.sh",
+      "artifacts/claude-ui-preview-run.sh"
+    ],
+    "local_log": "artifacts/claude-ui-preview-build-capture-r3.log"
+  },
+  "capture": {
+    "xvfb_screen": "800x768x24",
+    "dpi": "96 DPI explicitly configured on Xvfb; client viewport captured at one pixel per logical point",
+    "window_manager": "none; client area only",
+    "renderer_request": {
+      "WGPU_BACKEND": "gl",
+      "LIBGL_ALWAYS_SOFTWARE": "1",
+      "GALLIUM_DRIVER": "llvmpipe"
+    },
+    "host_gpu_devices": false,
+    "network": "none",
+    "root_filesystem": "read-only",
+    "capabilities": "all dropped",
+    "no_new_privileges": true,
+    "uid": "non-root current operator UID; no host identity/data mounted",
+    "private_home_runtime_display": true,
+    "host_home_display_audio_dbus_device_mounts": false,
+    "environment": "No inherited bus/AT_SPI/loader-injection/compiler-wrapper/RUSTFLAGS values",
+    "tooling": "xwd native window pixels, ImageMagick lossless PNG encoding; no resizing/crop/compositing/retouching",
+    "readiness": "private X display/window detection plus two-second first-frame settling period; all final images visually inspected",
+    "initial_harness_attempt": "Readiness helper xdpyinfo was absent; corrected to existing xdotool. No image from that failed harness attempt was published.",
+    "script_sha256": "7d188ee8f4d45ba48cd546128799746abfa8c1b47d7b22c539c5132de21d67ae"
+  },
+  "known_visual_limits": [
+    "Revision 2 fits the initial Dialpad without scrolling at 300x460; density is unapproved by a human and below the earlier 44-point target size.",
+    "Text labels (Back/C/Spk/Mic/Menu) replace MicroSIP icons/glyphs because the reviewed Noto Sans subset lacks arrow/triangle symbols and no icon asset is reviewed.",
+    "No native Windows decorations or equalized MicroSIP font/window metrics.",
+    "Focus/keyboard/scale/contrast matrix and actual target desktops not accepted; settings panel not captured."
+  ],
+  "open_gates": [
+    "AccessKit async-io plus future production Tokio integration review",
+    "Same production UI/audio/notifications/IPC v1/SO_PEERCRED G0 stack",
+    "Complete-stack native loader/runtime allowlist audit",
+    "Clean GNOME/Wayland and KDE/X11 acceptance",
+    "Microphone/hotplug and real artifact calls/two-way audio",
+    "Human-approved full visual matrix, accessibility/contrast/scaling",
+    "Production source/notice export and all release/security gates"
+  ],
+  "screenshots": [
+    {
+      "file": "g0-ui-dialpad-light.png",
+      "tab": "dialpad",
+      "theme": "light",
+      "width_pixels": 300,
+      "height_pixels": 460,
+      "sha256": "95119a2dc2f4d3038ac81e6328068f6f269b14f973ccae6aef9f09f460c37785",
+      "fixture": "empty number/accounts/contacts/history; backend unavailable; no call",
+      "visual_inspection": "actual native window, expected tab/theme and honest unavailable status visible"
+    },
+    {
+      "file": "g0-ui-calls-light.png",
+      "tab": "calls",
+      "theme": "light",
+      "width_pixels": 300,
+      "height_pixels": 460,
+      "sha256": "24fbbebac0f5bed27610aefa9f4faffa6298c064585daae8a991ba822d1ba3ec",
+      "fixture": "empty number/accounts/contacts/history; backend unavailable; no call",
+      "visual_inspection": "actual native window, expected tab/theme and honest unavailable status visible"
+    },
+    {
+      "file": "g0-ui-contacts-light.png",
+      "tab": "contacts",
+      "theme": "light",
+      "width_pixels": 300,
+      "height_pixels": 460,
+      "sha256": "1c00a4c841c7fec5a5a1dc70eb6bef18932895b65a0827cff354cc087ebc1f87",
+      "fixture": "empty number/accounts/contacts/history; backend unavailable; no call",
+      "visual_inspection": "actual native window, expected tab/theme and honest unavailable status visible"
+    },
+    {
+      "file": "g0-ui-dialpad-dark.png",
+      "tab": "dialpad",
+      "theme": "dark",
+      "width_pixels": 300,
+      "height_pixels": 460,
+      "sha256": "072dddc7e22d39c73625e6f3e9b7e18fe6c157c29ae63262c775262fa7bd6346",
+      "fixture": "empty number/accounts/contacts/history; backend unavailable; no call",
+      "visual_inspection": "actual native window, expected tab/theme and honest unavailable status visible"
+    },
+    {
+      "file": "g0-ui-calls-dark.png",
+      "tab": "calls",
+      "theme": "dark",
+      "width_pixels": 300,
+      "height_pixels": 460,
+      "sha256": "dc4a5051345d544a191d0350d4ce3f078dbbcbe24408da876930d6670dc9a16c",
+      "fixture": "empty number/accounts/contacts/history; backend unavailable; no call",
+      "visual_inspection": "actual native window, expected tab/theme and honest unavailable status visible"
+    },
+    {
+      "file": "g0-ui-contacts-dark.png",
+      "tab": "contacts",
+      "theme": "dark",
+      "width_pixels": 300,
+      "height_pixels": 460,
+      "sha256": "780802aa5a7dc5456eecdb72cc717cf6420f015d8f8e3540eec5c92570dab559",
+      "fixture": "empty number/accounts/contacts/history; backend unavailable; no call",
+      "visual_inspection": "actual native window, expected tab/theme and honest unavailable status visible"
+    }
+  ],
+  "reference": {
+    "image": "microsip-reference.png",
+    "provenance": "microsip-reference.md",
+    "comparison": "Different widget/font/window/scaling environment; not pixel-equivalence or acceptance."
+  }
+}

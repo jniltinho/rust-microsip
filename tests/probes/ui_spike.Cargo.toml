@@ -1,0 +1,28 @@
+# Isolated candidate only: copy beside ui_spike.rs as Cargo.toml.
+# Do not add to the production workspace before graph/license/native review.
+[package]
+name = "rust-microsip-g0-ui-spike"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+license = "GPL-3.0-or-later"
+publish = false
+autotests = false
+
+[workspace]
+resolver = "2"
+
+[[bin]]
+name = "g0-ui-spike"
+path = "ui_spike.rs"
+
+[features]
+default = []
+native-ui = ["dep:eframe", "dep:wgpu"]
+
+[dependencies]
+eframe = { version = "=0.36.2", default-features = false, features = ["wgpu_no_default_features", "wayland", "x11", "accesskit"], optional = true }
+wgpu = { version = "=30.0.0", default-features = false, features = ["std", "parking_lot", "vulkan", "gles", "wgsl"], optional = true }
+
+[lints.rust]
+unsafe_code = "forbid"
