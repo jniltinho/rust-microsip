@@ -1,0 +1,813 @@
+{
+  "schema_version": 1,
+  "scope": "bounded archive/cache identity comparison and new-package native/marker scan; not a cryptographic, legal, vulnerability, or whole-source audit",
+  "selected_registry_packages": 100,
+  "verified_archive_source_files": 4548,
+  "packages": [
+    {
+      "name": "aead",
+      "version": "0.5.2",
+      "file_count": 10
+    },
+    {
+      "name": "aes",
+      "version": "0.8.4",
+      "file_count": 32
+    },
+    {
+      "name": "aes",
+      "version": "0.9.3",
+      "file_count": 41
+    },
+    {
+      "name": "aes-gcm",
+      "version": "0.10.3",
+      "file_count": 14
+    },
+    {
+      "name": "async-trait",
+      "version": "0.1.92",
+      "file_count": 53
+    },
+    {
+      "name": "base64",
+      "version": "0.22.1",
+      "file_count": 38
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.12.1",
+      "file_count": 12
+    },
+    {
+      "name": "bytes",
+      "version": "1.12.1",
+      "file_count": 40
+    },
+    {
+      "name": "cc",
+      "version": "1.8.0",
+      "file_count": 37
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "file_count": 14
+    },
+    {
+      "name": "chacha20",
+      "version": "0.10.2",
+      "file_count": 25
+    },
+    {
+      "name": "cipher",
+      "version": "0.4.4",
+      "file_count": 16
+    },
+    {
+      "name": "cipher",
+      "version": "0.5.2",
+      "file_count": 26
+    },
+    {
+      "name": "cmov",
+      "version": "0.5.4",
+      "file_count": 19
+    },
+    {
+      "name": "const-oid",
+      "version": "0.10.2",
+      "file_count": 22
+    },
+    {
+      "name": "cpubits",
+      "version": "0.1.1",
+      "file_count": 9
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "file_count": 16
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.3.1",
+      "file_count": 16
+    },
+    {
+      "name": "crc32fast",
+      "version": "1.5.2",
+      "file_count": 19
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "file_count": 9
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.2.2",
+      "file_count": 11
+    },
+    {
+      "name": "ctr",
+      "version": "0.10.1",
+      "file_count": 23
+    },
+    {
+      "name": "ctr",
+      "version": "0.9.2",
+      "file_count": 23
+    },
+    {
+      "name": "ctutils",
+      "version": "0.4.3",
+      "file_count": 21
+    },
+    {
+      "name": "digest",
+      "version": "0.11.3",
+      "file_count": 26
+    },
+    {
+      "name": "errno",
+      "version": "0.3.14",
+      "file_count": 18
+    },
+    {
+      "name": "find-msvc-tools",
+      "version": "0.1.14",
+      "file_count": 19
+    },
+    {
+      "name": "futures",
+      "version": "0.3.34",
+      "file_count": 68
+    },
+    {
+      "name": "futures-channel",
+      "version": "0.3.34",
+      "file_count": 19
+    },
+    {
+      "name": "futures-core",
+      "version": "0.3.34",
+      "file_count": 14
+    },
+    {
+      "name": "futures-io",
+      "version": "0.3.34",
+      "file_count": 8
+    },
+    {
+      "name": "futures-macro",
+      "version": "0.3.34",
+      "file_count": 11
+    },
+    {
+      "name": "futures-sink",
+      "version": "0.3.34",
+      "file_count": 8
+    },
+    {
+      "name": "futures-task",
+      "version": "0.3.34",
+      "file_count": 14
+    },
+    {
+      "name": "futures-util",
+      "version": "0.3.34",
+      "file_count": 193
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7",
+      "file_count": 16
+    },
+    {
+      "name": "getrandom",
+      "version": "0.2.17",
+      "file_count": 38
+    },
+    {
+      "name": "getrandom",
+      "version": "0.4.3",
+      "file_count": 48
+    },
+    {
+      "name": "ghash",
+      "version": "0.5.1",
+      "file_count": 10
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.15.5",
+      "file_count": 46
+    },
+    {
+      "name": "hmac",
+      "version": "0.13.0",
+      "file_count": 25
+    },
+    {
+      "name": "hybrid-array",
+      "version": "0.4.15",
+      "file_count": 24
+    },
+    {
+      "name": "if-addrs",
+      "version": "0.14.0",
+      "file_count": 17
+    },
+    {
+      "name": "inout",
+      "version": "0.1.4",
+      "file_count": 12
+    },
+    {
+      "name": "inout",
+      "version": "0.2.2",
+      "file_count": 14
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "file_count": 14
+    },
+    {
+      "name": "libc",
+      "version": "0.2.190",
+      "file_count": 451
+    },
+    {
+      "name": "lock_api",
+      "version": "0.4.14",
+      "file_count": 10
+    },
+    {
+      "name": "log",
+      "version": "0.4.34",
+      "file_count": 23
+    },
+    {
+      "name": "md-5",
+      "version": "0.11.0",
+      "file_count": 18
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "file_count": 59
+    },
+    {
+      "name": "mio",
+      "version": "1.2.4",
+      "file_count": 71
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "file_count": 29
+    },
+    {
+      "name": "opaque-debug",
+      "version": "0.3.1",
+      "file_count": 9
+    },
+    {
+      "name": "parking_lot",
+      "version": "0.12.5",
+      "file_count": 28
+    },
+    {
+      "name": "parking_lot_core",
+      "version": "0.9.12",
+      "file_count": 24
+    },
+    {
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "file_count": 81
+    },
+    {
+      "name": "polyval",
+      "version": "0.6.2",
+      "file_count": 17
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "file_count": 33
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "file_count": 35
+    },
+    {
+      "name": "rand",
+      "version": "0.10.3",
+      "file_count": 38
+    },
+    {
+      "name": "rand_core",
+      "version": "0.10.1",
+      "file_count": 19
+    },
+    {
+      "name": "ring",
+      "version": "0.17.14",
+      "file_count": 391
+    },
+    {
+      "name": "rsipstack",
+      "version": "0.7.3",
+      "file_count": 122
+    },
+    {
+      "name": "rustls",
+      "version": "0.23.45",
+      "file_count": 119
+    },
+    {
+      "name": "rustls-pki-types",
+      "version": "1.15.1",
+      "file_count": 32
+    },
+    {
+      "name": "rustls-webpki",
+      "version": "0.103.15",
+      "file_count": 28
+    },
+    {
+      "name": "rustrtc",
+      "version": "0.4.7",
+      "file_count": 67
+    },
+    {
+      "name": "scopeguard",
+      "version": "1.2.0",
+      "file_count": 11
+    },
+    {
+      "name": "secrecy",
+      "version": "0.10.3",
+      "file_count": 8
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "file_count": 33
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.229",
+      "file_count": 27
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "file_count": 36
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.154",
+      "file_count": 90
+    },
+    {
+      "name": "sha1",
+      "version": "0.11.0",
+      "file_count": 20
+    },
+    {
+      "name": "sha2",
+      "version": "0.11.1",
+      "file_count": 47
+    },
+    {
+      "name": "shlex",
+      "version": "2.0.1",
+      "file_count": 13
+    },
+    {
+      "name": "signal-hook-registry",
+      "version": "1.4.8",
+      "file_count": 11
+    },
+    {
+      "name": "slab",
+      "version": "0.4.12",
+      "file_count": 13
+    },
+    {
+      "name": "smallvec",
+      "version": "1.16.3",
+      "file_count": 11
+    },
+    {
+      "name": "socket2",
+      "version": "0.6.5",
+      "file_count": 13
+    },
+    {
+      "name": "subtle",
+      "version": "2.6.1",
+      "file_count": 10
+    },
+    {
+      "name": "syn",
+      "version": "2.0.119",
+      "file_count": 105
+    },
+    {
+      "name": "syn",
+      "version": "3.0.9",
+      "file_count": 104
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.21",
+      "file_count": 105
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "2.0.21",
+      "file_count": 17
+    },
+    {
+      "name": "tokio",
+      "version": "1.53.2",
+      "file_count": 563
+    },
+    {
+      "name": "tokio-macros",
+      "version": "2.7.2",
+      "file_count": 10
+    },
+    {
+      "name": "tokio-rustls",
+      "version": "0.26.6",
+      "file_count": 16
+    },
+    {
+      "name": "tokio-util",
+      "version": "0.7.20",
+      "file_count": 97
+    },
+    {
+      "name": "tracing",
+      "version": "0.1.44",
+      "file_count": 93
+    },
+    {
+      "name": "tracing-attributes",
+      "version": "0.1.31",
+      "file_count": 30
+    },
+    {
+      "name": "tracing-core",
+      "version": "0.1.36",
+      "file_count": 28
+    },
+    {
+      "name": "typenum",
+      "version": "1.20.1",
+      "file_count": 26
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.27",
+      "file_count": 26
+    },
+    {
+      "name": "universal-hash",
+      "version": "0.5.1",
+      "file_count": 8
+    },
+    {
+      "name": "untrusted",
+      "version": "0.9.0",
+      "file_count": 19
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "file_count": 13
+    },
+    {
+      "name": "zeroize",
+      "version": "1.9.1",
+      "file_count": 16
+    },
+    {
+      "name": "zmij",
+      "version": "1.0.23",
+      "file_count": 17
+    }
+  ],
+  "new_packages": [
+    {
+      "name": "aead",
+      "version": "0.5.2",
+      "links": null,
+      "build": null,
+      "file_count": 10,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "aes",
+      "version": "0.8.4",
+      "links": null,
+      "build": null,
+      "file_count": 32,
+      "native_files": [],
+      "unsafe_token_count": 110,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "aes",
+      "version": "0.9.3",
+      "links": null,
+      "build": false,
+      "file_count": 41,
+      "native_files": [],
+      "unsafe_token_count": 60,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "aes-gcm",
+      "version": "0.10.3",
+      "links": null,
+      "build": null,
+      "file_count": 14,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "cipher",
+      "version": "0.4.4",
+      "links": null,
+      "build": null,
+      "file_count": 16,
+      "native_files": [],
+      "unsafe_token_count": 2,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "cipher",
+      "version": "0.5.2",
+      "links": null,
+      "build": false,
+      "file_count": 26,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "cmov",
+      "version": "0.5.4",
+      "links": null,
+      "build": false,
+      "file_count": 19,
+      "native_files": [],
+      "unsafe_token_count": 28,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "cpubits",
+      "version": "0.1.1",
+      "links": null,
+      "build": false,
+      "file_count": 9,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "links": null,
+      "build": false,
+      "file_count": 16,
+      "native_files": [],
+      "unsafe_token_count": 9,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "crc32fast",
+      "version": "1.5.2",
+      "links": null,
+      "build": "build.rs",
+      "file_count": 19,
+      "native_files": [],
+      "unsafe_token_count": 15,
+      "legal_marker_hits": [],
+      "build_scripts": [
+        "build.rs"
+      ]
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "links": null,
+      "build": false,
+      "file_count": 9,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "ctr",
+      "version": "0.10.1",
+      "links": null,
+      "build": false,
+      "file_count": 23,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "ctr",
+      "version": "0.9.2",
+      "links": null,
+      "build": null,
+      "file_count": 23,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "ctutils",
+      "version": "0.4.3",
+      "links": null,
+      "build": false,
+      "file_count": 21,
+      "native_files": [],
+      "unsafe_token_count": 1,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7",
+      "links": null,
+      "build": null,
+      "file_count": 16,
+      "native_files": [],
+      "unsafe_token_count": 78,
+      "legal_marker_hits": [],
+      "build_scripts": [
+        "build.rs"
+      ]
+    },
+    {
+      "name": "ghash",
+      "version": "0.5.1",
+      "links": null,
+      "build": null,
+      "file_count": 10,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "hmac",
+      "version": "0.13.0",
+      "links": null,
+      "build": false,
+      "file_count": 25,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "inout",
+      "version": "0.1.4",
+      "links": null,
+      "build": false,
+      "file_count": 12,
+      "native_files": [],
+      "unsafe_token_count": 22,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "inout",
+      "version": "0.2.2",
+      "links": null,
+      "build": false,
+      "file_count": 14,
+      "native_files": [],
+      "unsafe_token_count": 30,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "opaque-debug",
+      "version": "0.3.1",
+      "links": null,
+      "build": null,
+      "file_count": 9,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "polyval",
+      "version": "0.6.2",
+      "links": null,
+      "build": null,
+      "file_count": 17,
+      "native_files": [],
+      "unsafe_token_count": 23,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "rustrtc",
+      "version": "0.4.7",
+      "links": null,
+      "build": false,
+      "file_count": 67,
+      "native_files": [],
+      "unsafe_token_count": 38,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "links": null,
+      "build": "build.rs",
+      "file_count": 33,
+      "native_files": [],
+      "unsafe_token_count": 2,
+      "legal_marker_hits": [],
+      "build_scripts": [
+        "build.rs"
+      ]
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "links": null,
+      "build": false,
+      "file_count": 36,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "sha1",
+      "version": "0.11.0",
+      "links": null,
+      "build": false,
+      "file_count": 20,
+      "native_files": [],
+      "unsafe_token_count": 7,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "universal-hash",
+      "version": "0.5.1",
+      "links": null,
+      "build": null,
+      "file_count": 8,
+      "native_files": [],
+      "unsafe_token_count": 1,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "links": null,
+      "build": false,
+      "file_count": 13,
+      "native_files": [],
+      "unsafe_token_count": 0,
+      "legal_marker_hits": [],
+      "build_scripts": []
+    }
+  ]
+}

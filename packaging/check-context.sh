@@ -29,8 +29,9 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     mkdir -p "$scratch/$(dirname "$path")"
     cp "$path" "$scratch/$path"
 done
-mkdir -p "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts"
-for path in base/private.txt .env .env.local profile.sqlite3 sample.AppImage .git/private.txt dist/private.txt artifacts/private.txt apps/rust-microsip/src/private.env crates/telephony/src/private.env crates/telephony/examples/private.env; do
+mkdir -p "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts" "$scratch/tests/probes"
+cp tests/probes/srtp_candidate.rs "$scratch/tests/probes/srtp_candidate.rs"
+for path in base/private.txt .env .env.local profile.sqlite3 sample.AppImage .git/private.txt dist/private.txt artifacts/private.txt apps/rust-microsip/src/private.env crates/telephony/src/private.env crates/telephony/examples/private.env tests/probes/private.env; do
     printf '%s\n' 'synthetic-private-context-marker' > "$scratch/$path"
 done
 docker buildx build --platform linux/amd64 --target context-audit "$scratch"
@@ -47,14 +48,14 @@ if ! grep -Eq '^#[0-9]+ [0-9.]+ CONTEXT_REJECTED:' "$temporary/negative.log"; th
     exit 1
 fi
 grep -E '^#[0-9]+ [0-9.]+ CONTEXT_REJECTED:' "$temporary/negative.log"
-for sentinel in base/private.txt .env; do
+for sentinel in base/private.txt .env tests/probes/private.env tests/probes/srtp_candidate.rs; do
     if ! grep -E '^#[0-9]+ [0-9.]+ CONTEXT_REJECTED:' "$temporary/negative.log" | grep -Fq "'$sentinel'"; then
         echo "ERROR: sentinel not identified by the audit: $sentinel" >&2
         exit 1
     fi
 done
 mv "$temporary/dockerignore.safe" "$scratch/.dockerignore"
-rm -rf "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts"
+rm -rf "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts" "$scratch/tests"
 rm -f "$scratch/.env" "$scratch/.env.local" "$scratch/profile.sqlite3" "$scratch/sample.AppImage" "$scratch/apps/rust-microsip/src/private.env"
 rm -f "$scratch/crates/telephony/src/private.env" "$scratch/crates/telephony/examples/private.env"
 # Build without base/, including offline verification; no host Cargo required.

@@ -52,6 +52,16 @@ For SRTP, rustrtc 0.4.7's inspected no-default-feature manifest uses **RustCrypt
 
 The ring 0.17.14 archive's named license notices and nested once_cell terms were inspected; a bounded source scan found no `Original SSLeay License`, `advertising materials` or `OpenSSL License` marker. This is evidence for this candidate version, not proof of absence of every possible conflicting term. Source/notice review is still mandatory at final incorporation.
 
+## SRTP pre-adoption follow-up
+
+The [isolated SRTP candidate inventory and diagnostic](../receipts/g0-srtp-candidate-2026-10-13.md)
+now records the exact no-default-feature candidate graph and retained notices.
+The collector additionally pins `rustrtc 0.4.7` and `version_check 0.9.5` archive
+identities; the latter's legacy license spelling is restricted to its inspected
+version and both complete notices. This is evaluation evidence, not application
+adoption: the actual duplicate-authenticated-packet test fails. See
+[ADR 0009](0009-srtp-candidate-evaluation-boundary.md) before using the candidate.
+
 ## Fonts, icons, recordings and tones
 
 No upstream application font/icon/recording is currently embedded. Do not redistribute Microsoft Sans Serif, MicroSIP/GOnnect brands, screenshots, Windows binaries, or local reference assets. The same UI flow is not permission to copy artwork. The project name/trademark/disclaimer is a separate open naming review before public release or visibility changes; copyright compatibility is not trademark clearance.

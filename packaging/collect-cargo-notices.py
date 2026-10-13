@@ -19,6 +19,8 @@ PROTECTED = {
     ("rsipstack", "0.7.3"): "fd6577026d74d23d0eb114d158ea1a036275129e9b2a791be1679baad6821948",
     ("rustls", "0.23.45"): "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
     ("ring", "0.17.14"): "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7",
+    ("rustrtc", "0.4.7"): "7fc50a0fd78b4b7a61fab57d1e4ee915eb9a8d710c22333f231cf8fc79f3befe",
+    ("version_check", "0.9.5"): "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
 }
 NOTICE_PREFIXES = ("license", "licence", "copying", "copyright", "notice", "unlicense")
 LICENSES = {
@@ -26,6 +28,18 @@ LICENSES = {
     "Unlicense OR MIT", "Apache-2.0 AND ISC", "Apache-2.0 OR ISC OR MIT",
     "ISC", "BSD-3-Clause", "(MIT OR Apache-2.0) AND Unicode-3.0",
 }
+
+
+def verify_license(name, version, expression, notice_paths):
+    """Keep legacy spelling restricted to the source-pinned reviewed crate."""
+    if expression in LICENSES:
+        return
+    # The verified 0.9.5 archive supplies both complete texts. Do not interpret
+    # arbitrary slash expressions or extend this exception to another version.
+    if ((name, version, expression) == ("version_check", "0.9.5", "MIT/Apache-2.0")
+            and {"LICENSE-MIT", "LICENSE-APACHE"} <= set(notice_paths)):
+        return
+    raise ValueError("unreviewed license expression or missing legacy notices")
 
 
 def verified_notices(archive, checksum, prefix):
@@ -80,12 +94,11 @@ def collect(metadata, lock, cache, output):
             raise ValueError("unreviewed dependency source")
         if name in {key[0] for key in PROTECTED} and PROTECTED.get((name, version)) != pin["checksum"]:
             raise ValueError("protected dependency identity mismatch")
-        if package["license"] not in LICENSES:
-            raise ValueError("unreviewed license expression")
         archives = list(cache.glob("*/" + name + "-" + version + ".crate"))
         if len(archives) != 1 or archives[0].is_symlink() or archives[0].stat().st_size > 16 * 1024 * 1024:
             raise ValueError("missing or ambiguous registry archive")
         notices = verified_notices(archives[0].read_bytes(), pin["checksum"], name + "-" + version)
+        verify_license(name, version, package["license"], notices)
         hashes = {}
         for relative, content in sorted(notices.items()):
             path = output / (name + "-" + version) / relative

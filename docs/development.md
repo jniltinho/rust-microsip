@@ -16,6 +16,12 @@ At this stage `--doctor` describes compiled capabilities only, without reading H
 
 The local exporter writes files owned by its invoking user. It neither installs the executable nor changes the existing AppImage. `dist/` and logs in `artifacts/` are ignored by Git. Do not create tags/releases from this scaffold.
 
+The [isolated SRTP pre-adoption diagnostic](receipts/g0-srtp-candidate-2026-10-13.md)
+is separate from the application workspace and its lockfile. Its inventory and
+four local positive tests do **not** approve SRTP: the duplicate-packet rejection
+test fails for unadapted rustrtc 0.4.7. The probe is outside normal Cargo targets
+and the Docker context; no secure call/profile has been implemented yet.
+
 ## Pinned inputs and isolation
 
 - Ubuntu 24.04 `linux/amd64`, digest in the Dockerfile.
