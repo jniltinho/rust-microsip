@@ -1,7 +1,10 @@
 //! Initial TLS/SDES synthetic-call experiment, not a production call actor.
 //! Built only after explicit copying into the inventoried candidate workspace.
-//! Re-INVITE/REFER, changing sources, SRTCP and audio devices are not enabled.
+//! Re-INVITE/REFER, rekey and audio devices are not enabled. SRTCP is verified
+//! with bounded retained authenticated sources; this is not a production actor.
 
+#[path = "rtcp.rs"]
+mod rtcp;
 #[path = "sdes.rs"]
 mod sdes;
 
@@ -25,7 +28,7 @@ use rsipstack::{
 };
 use rust_microsip_media::{
     Codec, RtpHeader, RtpPacket,
-    srtp_adapter::{SecureError, SecureReceiver, SecureSender},
+    srtp_adapter::{ReceiverBank, SecureError, SecureReceiver, SecureSender},
 };
 use secrecy::ExposeSecret;
 use std::{
@@ -99,6 +102,7 @@ struct EndpointOwner {
     contact: Uri,
     username: String,
     rtp: Arc<UdpSocket>,
+    rtcp: Arc<UdpSocket>,
     local_key: Option<sdes::LocalKey>,
     admission: Arc<Admission>,
     saw_invite: Arc<AtomicBool>,
@@ -168,11 +172,7 @@ impl EndpointOwner {
             ])
             .build();
         let layer = Arc::new(DialogLayer::new(endpoint.inner.clone()));
-        let rtp = Arc::new(
-            UdpSocket::bind(SocketAddr::new(local.ip(), 0))
-                .await
-                .map_err(media)?,
-        );
+        let (rtp, rtcp) = bind_media(local.ip()).await?;
         let local_rtp = rtp.local_addr().map_err(media)?;
         let local_key = sdes::LocalKey::generate().map_err(description)?;
         // SDK signaling bodies necessarily copy the key: zeroization is not guaranteed there.
@@ -281,6 +281,7 @@ impl EndpointOwner {
             contact,
             username: config.username,
             rtp,
+            rtcp,
             local_key: Some(local_key),
             admission,
             saw_invite,
@@ -337,18 +338,97 @@ impl EndpointOwner {
     }
 }
 
+async fn bind_media(
+    ip: std::net::IpAddr,
+) -> Result<(Arc<UdpSocket>, Arc<UdpSocket>), CallProbeError> {
+    for _ in 0..64 {
+        let rtp = UdpSocket::bind(SocketAddr::new(ip, 0))
+            .await
+            .map_err(media)?;
+        let address = rtp.local_addr().map_err(media)?;
+        if !address.port().is_multiple_of(2) || address.port() == u16::MAX {
+            continue;
+        }
+        match UdpSocket::bind(SocketAddr::new(ip, address.port() + 1)).await {
+            Ok(rtcp) => return Ok((Arc::new(rtp), Arc::new(rtcp))),
+            Err(error) if error.kind() == std::io::ErrorKind::AddrInUse => continue,
+            Err(_) => return Err(CallProbeError::Media),
+        }
+    }
+    Err(CallProbeError::Media)
+}
+
+/// Aggregate SRTCP verification without report bytes, CNAMEs, keys or source IDs.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ControlMeasurement {
+    /// Encrypted local sender reports sent to the negotiated RTCP socket.
+    pub sent_reports: u32,
+    /// Authenticated compound reports received from that socket.
+    pub received_reports: u32,
+    /// Peer reception blocks that echo a locally sent SR timestamp.
+    pub peer_echoed_sender_reports: u32,
+    /// Highest extended sequence reported for our RTP source (rollover included).
+    pub peer_highest_sequence: u32,
+    /// Retained authenticated RTP/control sources in this remote key epoch.
+    pub authenticated_sources: usize,
+    /// SRTCP tag/index/E-bit/clear/replay negative checks all executed.
+    pub packet_negatives_verified: bool,
+}
+
+/// Initial secure-call result; RTP and independently observed SRTCP evidence.
+pub struct SecureCallReport {
+    /// Completed SIP and bidirectional RTP measurements.
+    pub call: CallProbeReport,
+    /// RTCP measurements at the first fictional endpoint.
+    pub first_control: ControlMeasurement,
+    /// RTCP measurements at the second fictional endpoint.
+    pub second_control: ControlMeasurement,
+}
+#[derive(Default)]
+struct MediaTrackers(Vec<(u32, PacketTracker)>);
+impl MediaTrackers {
+    // Invoked only for authenticated, policy-validated RTP. Never forget a source.
+    fn observe(&mut self, header: RtpHeader) -> Result<Option<u32>, CallProbeError> {
+        if let Some((_, tracker)) = self.0.iter_mut().find(|(ssrc, _)| *ssrc == header.ssrc) {
+            return tracker.observe(header);
+        }
+        if self.0.len() == rust_microsip_media::srtp_adapter::MAX_REMOTE_SOURCES {
+            return Err(CallProbeError::Media);
+        }
+        let mut tracker = PacketTracker::default();
+        let result = tracker.observe(header)?;
+        self.0.push((header.ssrc, tracker));
+        Ok(result)
+    }
+}
+struct MediaSockets {
+    rtp: Arc<UdpSocket>,
+    rtcp: Arc<UdpSocket>,
+}
+fn ntp_now() -> Result<u64, CallProbeError> {
+    let time = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(media)?;
+    let seconds = time
+        .as_secs()
+        .checked_add(2_208_988_800)
+        .ok_or(CallProbeError::Media)? as u32;
+    let fraction = (u64::from(time.subsec_nanos()) << 32) / 1_000_000_000;
+    Ok((u64::from(seconds) << 32) | fraction)
+}
+
 async fn measure(
-    socket: Arc<UdpSocket>,
+    sockets: MediaSockets,
     target: sdes::Target,
     codec: Codec,
     local_key: sdes::LocalKey,
     own_hz: f64,
     remote_hz: f64,
     ssrc: u32,
-) -> Result<MediaMeasurement, CallProbeError> {
+) -> Result<(MediaMeasurement, ControlMeasurement), CallProbeError> {
     let mut sender =
         SecureSender::new(ssrc, local_key.into_master().map_err(media)?).map_err(media)?;
-    let mut receiver = SecureReceiver::new(target.key).map_err(media)?;
+    let mut receiver = ReceiverBank::new(target.key, std::time::Instant::now());
     let mut stats = MediaMeasurement {
         sent_packets: 0,
         received_packets: 0,
@@ -357,50 +437,97 @@ async fn measure(
         lost_packets: 0,
         late_packets: 0,
     };
+    let mut control = ControlMeasurement::default();
     let mut tick = tokio::time::interval(Duration::from_millis(20));
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let end = tokio::time::Instant::now() + Duration::from_secs(5);
+    let mut reports = tokio::time::interval(Duration::from_secs(1));
+    reports.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    let end = tokio::time::Instant::now() + Duration::from_secs(12);
     let mut send = [0; 172];
     let mut receive = [0; 1515];
+    let mut receive_control = [0; 1515];
     let mut sample_index = 0u32;
     let mut sequence = 65500u16;
     let mut timestamp = u32::MAX - 3200;
-    let mut tracker = PacketTracker::default();
+    let mut tracker = MediaTrackers::default();
     let mut meter = ToneMeter::new(own_hz, remote_hz);
     let mut checked_negatives = false;
+    let mut sent_sr = [0u32; 16];
+    let mut sr_count = 0usize;
     loop {
         tokio::select! {biased;_=tokio::time::sleep_until(end)=>break,_=tick.tick()=>{
             let mut payload=[0;160];for octet in &mut payload {let phase=std::f64::consts::TAU*own_hz*f64::from(sample_index%8000)/8000.0;*octet=codec.encode_sample((8000.0*phase.sin()) as i16);sample_index=sample_index.wrapping_add(1);}
             let length=RtpHeader {marker:stats.sent_packets==0,payload_type:codec.payload_type(),sequence,timestamp,ssrc}.write(&payload,&mut send).map_err(media)?;
             let encrypted=sender.protect_rtp(&send[..length]).map_err(media)?;
             if encrypted.len()!=length+10 || encrypted[12..length]==send[12..length] {return Err(CallProbeError::Media);}
-            if socket.send_to(&encrypted,target.address).await.map_err(media)?!=encrypted.len() {return Err(CallProbeError::Media);}
+            if sockets.rtp.send_to(&encrypted,target.address).await.map_err(media)?!=encrypted.len() {return Err(CallProbeError::Media);}
             stats.sent_packets+=1;sequence=sequence.wrapping_add(1);timestamp=timestamp.wrapping_add(160);
-        }, result=socket.recv_from(&mut receive)=>{
-            let (length,source)=result.map_err(media)?;
-            if source!=target.address || length!=182 {return Err(CallProbeError::Media);}
+        },_=reports.tick()=>{
+            let ntp=ntp_now()?;let clear=rtcp::sender_report(ssrc,ntp,timestamp,stats.sent_packets,stats.sent_packets*160);
+            let encrypted=sender.protect_rtcp(&clear).map_err(media)?;
+            if encrypted.len()!=clear.len()+14 || encrypted[8..clear.len()]==clear[8..] {return Err(CallProbeError::Media);}
+            if sockets.rtcp.send_to(&encrypted,target.control).await.map_err(media)?!=encrypted.len() {return Err(CallProbeError::Media);}
+            sent_sr[sr_count%16]=(ntp>>16) as u32;sr_count+=1;control.sent_reports+=1;
+        },result=sockets.rtp.recv_from(&mut receive)=>{
+            let (length,source)=result.map_err(media)?;if source!=target.address {continue;}
+            if length!=182 {return Err(CallProbeError::Media);}
+            let now=std::time::Instant::now();
             if !checked_negatives {
+                let known=receiver.authenticated_sources();
                 let mut wrong=SecureReceiver::new(sdes::LocalKey::generate().map_err(media)?.into_master().map_err(media)?).map_err(media)?;
                 if wrong.unprotect_rtp(&receive[..length])!=Err(SecureError::Authentication) || wrong.authenticated_ssrc().is_some() {return Err(CallProbeError::Media);}
                 let mut forged=receive[..length].to_vec();forged[length-1]^=1;
-                if receiver.unprotect_rtp(&forged)!=Err(SecureError::Authentication) || receiver.authenticated_ssrc().is_some() {return Err(CallProbeError::Media);}
+                if receiver.unprotect_rtp(&forged,now)!=Err(SecureError::Authentication) || receiver.authenticated_sources()!=known {return Err(CallProbeError::Media);}
                 forged.copy_from_slice(&receive[..length]);forged[2]^=0x40;
-                if receiver.unprotect_rtp(&forged)!=Err(SecureError::Authentication) || receiver.authenticated_ssrc().is_some() {return Err(CallProbeError::Media);}
-                // A valid-shaped clear packet must not enter a mandatory-SRTP receiver.
-                if receiver.unprotect_rtp(&send).is_ok() || receiver.authenticated_ssrc().is_some() {return Err(CallProbeError::Media);}
+                if receiver.unprotect_rtp(&forged,now)!=Err(SecureError::Authentication) || receiver.authenticated_sources()!=known {return Err(CallProbeError::Media);}
+                if receiver.unprotect_rtp(&send,now).is_ok() || receiver.authenticated_sources()!=known {return Err(CallProbeError::Media);}
             }
-            let clear=receiver.unprotect_rtp(&receive[..length]).map_err(media)?;
-            if !checked_negatives {if receiver.unprotect_rtp(&receive[..length])!=Err(SecureError::Replay) {return Err(CallProbeError::Media);}checked_negatives=true;}
+            let clear=match receiver.unprotect_rtp(&receive[..length],now) {Ok(clear)=>clear,Err(SecureError::RateLimited|SecureError::Authentication|SecureError::Replay|SecureError::TooOld|SecureError::InvalidPacket)=>continue,Err(_)=>return Err(CallProbeError::Media)};
+            if !checked_negatives {if receiver.unprotect_rtp(&receive[..length],now)!=Err(SecureError::Replay) {return Err(CallProbeError::Media);}checked_negatives=true;}
             let packet=RtpPacket::parse(&clear).map_err(media)?;
             if packet.header.payload_type!=codec.payload_type() || packet.payload.len()!=160 || clear[12..]==receive[12..172] {return Err(CallProbeError::Media);}
             let Some(lost)=tracker.observe(packet.header)? else {stats.late_packets+=1;continue;};stats.lost_packets+=lost;stats.received_packets+=1;meter.observe(codec,packet.payload);
+        },result=sockets.rtcp.recv_from(&mut receive_control)=>{
+            let (length,source)=result.map_err(media)?;if source!=target.control {continue;}
+            if !(22..=1514).contains(&length) {return Err(CallProbeError::Media);}
+            let wire=&receive_control[..length];let now=std::time::Instant::now();
+            if !control.packet_negatives_verified {
+                let known=receiver.authenticated_sources();let mut forged=wire.to_vec();forged[length-1]^=1;
+                if receiver.unprotect_rtcp(&forged,now)!=Err(SecureError::Authentication) {return Err(CallProbeError::Media);}
+                forged.copy_from_slice(wire);forged[length-11]^=1;
+                if receiver.unprotect_rtcp(&forged,now)!=Err(SecureError::Authentication) {return Err(CallProbeError::Media);}
+                forged.copy_from_slice(wire);forged[length-14]&=0x7f;
+                if receiver.unprotect_rtcp(&forged,now)!=Err(SecureError::InvalidPacket) {return Err(CallProbeError::Media);}
+                if receiver.authenticated_sources()!=known {return Err(CallProbeError::Media);}
+            }
+            let clear=match receiver.unprotect_rtcp(wire,now) {Ok(clear)=>clear,Err(SecureError::RateLimited|SecureError::Authentication|SecureError::Replay|SecureError::TooOld|SecureError::InvalidPacket)=>continue,Err(_)=>return Err(CallProbeError::Media)};
+            if !control.packet_negatives_verified {
+                if receiver.unprotect_rtcp(wire,now)!=Err(SecureError::Replay) || receiver.unprotect_rtcp(&clear,now).is_ok() {return Err(CallProbeError::Media);}
+                control.packet_negatives_verified=true;
+            }
+            let parsed=rtcp::parse(&clear).map_err(media)?;
+            control.received_reports+=1;
+            for block in parsed.receptions {
+                if block.source==ssrc && block.last_sender_report!=0 && sent_sr[..sr_count.min(16)].contains(&block.last_sender_report) {
+                    control.peer_echoed_sender_reports+=1;control.peer_highest_sequence=control.peer_highest_sequence.max(block.highest_sequence);
+                }
+            }
         }}
     }
-    if stats.sent_packets < 240 || stats.received_packets < 200 || !checked_negatives {
+    control.authenticated_sources = receiver.authenticated_sources();
+    if stats.sent_packets < 590
+        || stats.received_packets < 580
+        || !checked_negatives
+        || control.sent_reports < 10
+        || control.received_reports == 0
+        || control.peer_echoed_sender_reports == 0
+        || control.peer_highest_sequence <= 65535
+        || !control.packet_negatives_verified
+    {
         return Err(CallProbeError::Media);
     }
     (stats.rms, stats.remote_to_own_power_ratio) = meter.finish()?;
-    Ok(stats)
+    Ok((stats, control))
 }
 
 fn fixtures(first: &RegistrationConfig, second: &RegistrationConfig) -> Result<(), CallProbeError> {
@@ -416,10 +543,10 @@ fn fixtures(first: &RegistrationConfig, second: &RegistrationConfig) -> Result<(
     Ok(())
 }
 
-/// Exercise one five-second initial TLS/SDES G.711 call between fictional peers.
+/// Exercise one twelve-second TLS/SDES G.711 RTP/SRTCP call between fictional peers.
 /// No plaintext fallback, profile discovery, devices, recording or rekey is used.
 /// The first authentic PBX packet also drives local tamper/clear/replay negatives.
-/// This is initial RTP interoperability only, not SRTCP/hold/transfer acceptance.
+/// This verifies initial RTP and SRTCP interoperability, not secure hold/transfer/rekey.
 ///
 /// # Errors
 /// Returns a sanitized error unless signaling, encrypted media and teardown pass.
@@ -429,7 +556,7 @@ pub async fn probe_secure_call_pair(
     codec: Codec,
     reverse: bool,
     cancel: CancellationToken,
-) -> Result<CallProbeReport, CallProbeError> {
+) -> Result<SecureCallReport, CallProbeError> {
     fixtures(&first, &second)?;
     if cancel.is_cancelled() {
         return Err(CallProbeError::Cancelled);
@@ -450,11 +577,11 @@ pub async fn probe_secure_call_pair(
         let caller_key=caller.local_key.take().ok_or(CallProbeError::Media)?;
         let callee_key=callee.local_key.take().ok_or(CallProbeError::Media)?;
         let (own_hz,remote_hz)=if reverse {(880.0,440.0)} else {(440.0,880.0)};
-        let (one,two)=tokio::join!(measure(caller.rtp.clone(),remote,codec,caller_key,own_hz,remote_hz,0x12345678),measure(callee.rtp.clone(),inbound.target,codec,callee_key,remote_hz,own_hz,0x87654321));
+        let (one,two)=tokio::join!(measure(MediaSockets {rtp:caller.rtp.clone(),rtcp:caller.rtcp.clone()},remote,codec,caller_key,own_hz,remote_hz,0x12345678),measure(MediaSockets {rtp:callee.rtp.clone(),rtcp:callee.rtcp.clone()},inbound.target,codec,callee_key,remote_hz,own_hz,0x87654321));
         let one=one?;let two=two?;dialog.bye().await.map_err(signaling)?;caller.wire.wait(4).await;callee.wire.wait(2).await;
         caller.wait_phase(true).await?;callee.wait_phase(true).await?;caller.unregister().await?;callee.unregister().await?;
-        let (first,second)=if reverse {(two,one)} else {(one,two)};
-        Ok(CallProbeReport {transport:"tls",codec:codec.name(),reverse,first,second,ack_and_termination_verified:true,bye_200_verified:true,unregistered:true})
+        let ((first,first_control),(second,second_control))=if reverse {(two,one)} else {(one,two)};
+        Ok(SecureCallReport {call:CallProbeReport {transport:"tls",codec:codec.name(),reverse,first,second,ack_and_termination_verified:true,bye_200_verified:true,unregistered:true},first_control,second_control})
     })=>result.map_err(|_|CallProbeError::Timeout)?,}
 }
 
@@ -582,6 +709,39 @@ mod tests {
             ca_pem: vec![1],
             server_name: "pbx".into(),
         }
+    }
+    #[test]
+    fn media_tracker_routes_source_changes_without_forgetting_late_state()
+    -> Result<(), CallProbeError> {
+        let mut trackers = MediaTrackers::default();
+        let first = RtpHeader {
+            marker: false,
+            payload_type: 8,
+            sequence: 1,
+            timestamp: 160,
+            ssrc: 7,
+        };
+        assert_eq!(trackers.observe(first)?, Some(0));
+        assert_eq!(trackers.observe(RtpHeader { ssrc: 8, ..first })?, Some(0));
+        assert_eq!(trackers.observe(first)?, None);
+        assert_eq!(
+            trackers.observe(RtpHeader {
+                sequence: 2,
+                timestamp: 320,
+                ..first
+            })?,
+            Some(0)
+        );
+        Ok(())
+    }
+    #[tokio::test]
+    async fn media_sockets_are_even_rtp_and_contiguous_rtcp() -> Result<(), CallProbeError> {
+        let (rtp, rtcp) = bind_media(std::net::IpAddr::from([127, 0, 0, 1])).await?;
+        let rtp = rtp.local_addr().map_err(media)?;
+        let rtcp = rtcp.local_addr().map_err(media)?;
+        assert!(rtp.port().is_multiple_of(2));
+        assert_eq!(rtcp.port(), rtp.port() + 1);
+        Ok(())
     }
     #[test]
     fn tls_negative_oracle_rejects_unrelated_failures() {

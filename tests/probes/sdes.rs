@@ -41,6 +41,7 @@ impl LocalKey {
 
 pub(super) struct Target {
     pub(super) address: SocketAddr,
+    pub(super) control: SocketAddr,
     pub(super) tag: u32,
     pub(super) key: MasterKey,
 }
@@ -132,7 +133,7 @@ pub(super) fn parse(
                 return Err(bad);
             }
             let parsed: u16 = fields[1].parse().map_err(|_| bad)?;
-            if !(10000..=10019).contains(&parsed) {
+            if !(10000..=10018).contains(&parsed) || !parsed.is_multiple_of(2) {
                 return Err(bad);
             }
             let mut seen = [false; 128];
@@ -200,6 +201,7 @@ pub(super) fn parse(
         return Err(bad);
     }
     Ok(Target {
+        control: SocketAddr::new(address.ok_or(bad)?, port.ok_or(bad)? + 1),
         address: SocketAddr::new(address.ok_or(bad)?, port.ok_or(bad)?),
         tag: tag.ok_or(bad)?,
         key: key.ok_or(bad)?,

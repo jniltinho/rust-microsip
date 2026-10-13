@@ -12,7 +12,7 @@ accounts, production credentials, audio devices or local reference directories.
 
 Run from the repository root. Preparation refuses an existing output directory,
 symlinks, changed application/probe pins or unexpected input paths. It copies
-34 explicit application inputs and four probe inputs, not the repository tree.
+34 explicit application inputs and five probe inputs, not the repository tree.
 The experiment's lock is separate from the application lock.
 
 ```sh
@@ -51,7 +51,7 @@ python3 tests/probes/observe_secure_call.py
 
 The observer snapshots actual images and ELF, runs only the disposable PBX and
 an explicitly mounted probe binary, verifies internal networking/hardening,
-validates the four-case matrix plus three real 488 and two typed certificate
+validates the four-case RTP/SRTCP matrix plus three real 488 and two typed certificate
 negatives, and checks cleanup. Logs, keys, fixtures, executable and caches stay
 under ignored `artifacts/`. The runner uses the existing toolchain image rather
 than a production runtime image. The Rust notice inventory is not an inventory
@@ -59,7 +59,7 @@ of every OS/toolchain package in that container.
 
 For a fresh explicit-copy regression, pass a neutral directory name to both
 preparation and dependency verification, and change `candidate` accordingly.
-The runtime observer intentionally uses `secure-call-work`; it is not a general
-remote-account CLI. Do not point Docker at a repository-wide build context or
-mount a home directory. A successful run does not complete G0, SRTCP, secure call
+Pass the same name to the runtime observer; it is not a general remote-account
+CLI. Do not point Docker at a repository-wide build context or
+mount a home directory. A successful run does not complete G0, rekey, secure call
 controls, audio-device/human tests, production hardening or release acceptance.

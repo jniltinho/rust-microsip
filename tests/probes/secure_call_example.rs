@@ -53,6 +53,11 @@ fn measurement(m: MediaMeasurement) -> serde_json::Value {
     serde_json::json!({"sent_packets":m.sent_packets,"received_packets":m.received_packets,
         "rms":m.rms,"remote_to_own_power_ratio":m.remote_to_own_power_ratio,"lost_packets":m.lost_packets,"late_packets":m.late_packets})
 }
+fn control_measurement(
+    m: rust_microsip_telephony::g0_calls::secure::ControlMeasurement,
+) -> serde_json::Value {
+    serde_json::json!({"sent_reports":m.sent_reports,"received_reports":m.received_reports,"peer_echoed_sender_reports":m.peer_echoed_sender_reports,"peer_highest_sequence":m.peer_highest_sequence,"authenticated_sources":m.authenticated_sources,"packet_negatives_verified":m.packet_negatives_verified})
+}
 async fn run() -> Result<(), CallProbeError> {
     let raw = zeroize::Zeroizing::new(private_file(Path::new("/lab/credentials.json"), 8192)?);
     let accounts: BTreeMap<String, SecretString> =
@@ -103,8 +108,10 @@ async fn run() -> Result<(), CallProbeError> {
                     CancellationToken::new(),
                 )
                 .await?;
+                let controls = serde_json::json!({"first":control_measurement(result.first_control),"second":control_measurement(result.second_control)});
+                let result = result.call;
                 let row = serde_json::json!({"transport":result.transport,"codec":result.codec,"reverse":result.reverse,
-                "first":measurement(result.first),"second":measurement(result.second),"ack_and_termination_verified":result.ack_and_termination_verified,
+                "first":measurement(result.first),"second":measurement(result.second),"control":controls,"ack_and_termination_verified":result.ack_and_termination_verified,
                 "bye_200_verified":result.bye_200_verified,"unregistered":result.unregistered});
                 // Numeric, non-sensitive progress only; never log SIP, SDP or samples.
                 println!("{}", serde_json::json!({"call_completed":row}));
@@ -196,9 +203,9 @@ async fn run() -> Result<(), CallProbeError> {
     }
     println!(
         "{}",
-        serde_json::json!({"schema_version":1,"fixture":"two-rust-endpoints-initial-sdes-srtp",
-        "calls":rows,"seconds_per_call":5,"endpoint_processes":1,"distinct_signaling_and_media_sockets":true,
-        "synthetic_sources_hz":[440,880],"plaintext_rtp_explicit":false,"initial_srtp_tested":true,"per_endpoint_actual_packet_negatives":["wrong_key","tag_tamper","sequence_tamper","clear_rtp","replay"],"srtcp_tested":false,"rekey_tested":false,"secure_hold_transfer_tested":false,
+        serde_json::json!({"schema_version":1,"fixture":"two-rust-endpoints-initial-sdes-srtp-srtcp",
+        "calls":rows,"seconds_per_call":12,"endpoint_processes":1,"distinct_signaling_and_media_sockets":true,
+        "synthetic_sources_hz":[440,880],"plaintext_rtp_explicit":false,"initial_srtp_tested":true,"per_endpoint_actual_packet_negatives":["wrong_key","tag_tamper","sequence_tamper","clear_rtp","replay"],"srtcp_tested":true,"rekey_tested":false,"secure_hold_transfer_tested":false,
         "human_voice_tested":false,"release_artifact_tested":false,"g0_passed":false})
     );
     Ok(())

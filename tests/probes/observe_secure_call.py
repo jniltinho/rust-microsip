@@ -1,9 +1,16 @@
-"""Separate-process observation of the finite, initial TLS/SDES experiment."""
+"""Separate-process observation of the finite, initial TLS/SDES RTP/SRTCP experiment."""
 if not __debug__:
     raise SystemExit('Optimized Python is not permitted for evidence verification')
 
-import hashlib,json,math,os,pathlib,re,subprocess,time
-root=pathlib.Path(__file__).resolve().parents[2];os.chdir(root);prefix=root/'artifacts/secure-call-runtime';env=dict(os.environ,LAB_UID=str(os.getuid()),LAB_GID=str(os.getgid()))
+import hashlib,json,math,os,pathlib,re,subprocess,sys,time
+root=pathlib.Path(__file__).resolve().parents[2];os.chdir(root)
+name=sys.argv[1] if len(sys.argv)==2 else 'secure-call-work'
+if len(sys.argv)>2 or not re.fullmatch(r'[a-z0-9-]{1,64}',name):
+ raise SystemExit('Expected one neutral artifact directory name')
+if (root/'artifacts').is_symlink(): raise SystemExit('Symlinked artifact root')
+work=root/'artifacts'/name
+prefix=root/'artifacts'/f'{name}-runtime'
+env=dict(os.environ,LAB_UID=str(os.getuid()),LAB_GID=str(os.getgid()))
 base=['docker','compose','-f','docker/asterisk/compose.yaml','-f','docker/asterisk/compose.calls-g0.yaml']
 def run(args): return subprocess.check_output(args,env=env,text=True,stderr=subprocess.STDOUT,timeout=30)
 def save(suffix,obj): pathlib.Path(str(prefix)+suffix).write_text(json.dumps(obj,indent=2)+'\n')
@@ -18,7 +25,14 @@ for bad in ['none','0 active channels\n0 active channels\n0 active calls\n','0 a
  try: counts(bad)
  except RuntimeError: pass
  else: raise AssertionError('malformed counts accepted')
-elf=root/'artifacts/secure-call-work/target/x86_64-unknown-linux-gnu/release/examples/secure_call'
+prepared=json.loads((work/'prepared-source-inputs.json').read_text())
+assert prepared==json.loads((root/'tests/probes/secure_call_inputs.json').read_text())['candidate_inputs_sha256'] and len(prepared)==39
+for relative,digest in prepared.items():
+ path=work/relative
+ assert path.is_file() and not any(p.is_symlink() for p in (path,*path.parents))
+ assert hashlib.sha256(path.read_bytes()).hexdigest()==digest
+elf=work/'target/x86_64-unknown-linux-gnu/release/examples/secure_call'
+assert elf.is_file() and not any(p.is_symlink() for p in (elf,*elf.parents))
 elf_hash=hashlib.sha256(elf.read_bytes()).hexdigest();image=run(['docker','image','inspect','rust-microsip-toolchain:1.99.0','--format','{{.Id}}']).strip()
 pbx_image=run(['docker','image','inspect','rust-microsip-asterisk:22.11.0-lab.1','--format','{{.Id}}']).strip()
 assert not run(['docker','ps','-aq','--filter','label=com.docker.compose.project=rust-microsip-lab']).strip(), 'Disposable project is already in use'
@@ -66,19 +80,22 @@ try:
  lines=[json.loads(s) for s in pathlib.Path(str(prefix)+'.log').read_text().splitlines()]
  matrix=lines[-1];rows=matrix['calls']
  assert len(rows)==4 and {(r['codec'],r['reverse']) for r in rows}=={(c,d) for c in ('PCMA','PCMU') for d in (False,True)}
- assert matrix['initial_srtp_tested'] and not matrix['g0_passed'] and not matrix['srtcp_tested']
+ assert matrix['initial_srtp_tested'] and not matrix['g0_passed'] and matrix['srtcp_tested'] and matrix['seconds_per_call']==12
  for row in rows:
   assert row['transport']=='tls' and all(row[k] for k in ('ack_and_termination_verified','bye_200_verified','unregistered'))
   for m in (row['first'],row['second']):
-   assert m['sent_packets']>=240 and m['received_packets']>=200
+   assert m['sent_packets']>=590 and m['received_packets']>=580
    assert math.isfinite(m['rms']) and 1000<=m['rms']<=10000 and math.isfinite(m['remote_to_own_power_ratio']) and m['remote_to_own_power_ratio']>=20
+  for control in (row['control']['first'],row['control']['second']):
+   assert control['sent_reports']>=10 and control['received_reports']>0 and control['peer_echoed_sender_reports']>0
+   assert control['peer_highest_sequence']>65535 and 1<=control['authenticated_sources']<=4 and control['packet_negatives_verified']
  negatives=[s for s in lines if 'negative_offer' in s]
  assert len(negatives)==3 and {s['negative_offer'] for s in negatives}=={'plaintext','missing_crypto','unsupported_suite'}
  assert all(s['response']==488 and s['unregistered'] and not s['callee_invite_observed'] for s in negatives)
  tls=[s for s in lines if 'negative_tls' in s]
  assert len(tls)==2 and {s['negative_tls'] for s in tls}=={'untrusted_ca','wrong_hostname'} and all(s['rejected_before_call'] and s['typed_certificate_error_verified'] and not s['sip_endpoint_constructed'] for s in tls)
  assert counts(pbxcli('core show channels count'))==(0,0) and 'No objects found.' in pbxcli('pjsip show contacts')
- proof={'schema_version':1,'runner_image':image,'pbx_image':pbx_image,'elf_sha256':elf_hash,'runtime_mounts_and_hardening_verified':hardened,'pbx_two_active_channels_one_call_observed':observed,'mandatory_sdes_nonoptimistic_endpoints_verified':True,'internal_network_no_published_ports':True,'four_encrypted_media_calls_validated':True,'three_real_488_negative_offers_validated':True,'two_real_tls_identity_negatives_validated':True,'zero_calls_channels_contacts_before_down':True,'count_parser_positive_nonzero_malformed_controls':True}
+ proof={'schema_version':1,'runner_image':image,'pbx_image':pbx_image,'elf_sha256':elf_hash,'runtime_mounts_and_hardening_verified':hardened,'pbx_two_active_channels_one_call_observed':observed,'mandatory_sdes_nonoptimistic_endpoints_verified':True,'internal_network_no_published_ports':True,'four_encrypted_media_calls_validated':True,'eight_endpoint_srtcp_report_exchanges_validated':True,'peer_lsr_and_rollover_reported_by_probe':True,'srtcp_tag_index_ebit_clear_replay_negatives_validated':True,'three_real_488_negative_offers_validated':True,'two_real_tls_identity_negatives_validated':True,'zero_calls_channels_contacts_before_down':True,'count_parser_positive_nonzero_malformed_controls':True}
  assert hardened and observed
  save('-matrix.json',matrix);save('-negatives.json',negatives+tls)
 finally:

@@ -23,7 +23,7 @@ if len(sys.argv) > 2 or not re.fullmatch(r'[a-z0-9-]{1,64}', name):
 work = root/'artifacts'/name
 cache = root/'artifacts/dependency-research/cargo-home/registry'
 prepared=json.loads((work/'prepared-source-inputs.json').read_text())
-assert len(prepared)==38
+assert len(prepared)==39
 assert prepared==json.loads((root/'tests/probes/secure_call_inputs.json').read_text())['candidate_inputs_sha256']
 # Cargo cannot discover extra build scripts, examples or configuration.
 allowed=set(prepared)|{'prepared-source-inputs.json','secure-metadata.json','secure-tree.txt'}

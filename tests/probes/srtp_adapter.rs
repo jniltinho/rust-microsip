@@ -5,7 +5,10 @@
 
 #![deny(missing_docs)]
 
-use std::fmt;
+use std::{
+    fmt,
+    time::{Duration, Instant},
+};
 
 use rustrtc::errors::SrtpError;
 use rustrtc::rtp::RtpPacket as ProviderRtp;
@@ -32,6 +35,12 @@ pub enum SecureError {
     /// This packet is older than the bounded replay window.
     #[error("secure-media packet is too old")]
     TooOld,
+    /// A bounded receive-side key epoch cannot admit another source.
+    #[error("secure-media source capacity reached")]
+    SourceCapacity,
+    /// Pre-authentication work exceeded the fixed monotonic-window budget.
+    #[error("secure-media authentication rate limited")]
+    RateLimited,
     /// Another SSRC cannot join this single-source receiver.
     #[error("unexpected secure-media source")]
     WrongSource,
@@ -1129,5 +1138,361 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+/// Maximum retained authenticated remote SSRCs in one receive-side key epoch.
+/// Contexts are never evicted: forgetting one would erase replay history.
+pub const MAX_REMOTE_SOURCES: usize = 4;
+const AUTH_PER_SECOND: u16 = 256;
+const NEW_SOURCE_AUTH_PER_SECOND: u16 = 16;
+
+struct AuthBudget {
+    start: Instant,
+    remaining: u16,
+    new_sources: u16,
+}
+impl AuthBudget {
+    fn admit(&mut self, unknown: bool, now: Instant) -> Result<(), SecureError> {
+        let elapsed = now
+            .checked_duration_since(self.start)
+            .ok_or(SecureError::RateLimited)?;
+        if elapsed >= Duration::from_secs(1) {
+            self.start = now;
+            self.remaining = AUTH_PER_SECOND;
+            self.new_sources = NEW_SOURCE_AUTH_PER_SECOND;
+        }
+        if self.remaining == 0 || (unknown && self.new_sources == 0) {
+            return Err(SecureError::RateLimited);
+        }
+        self.remaining -= 1;
+        if unknown {
+            self.new_sources -= 1;
+        }
+        Ok(())
+    }
+}
+struct RemoteSource {
+    ssrc: u32,
+    receiver: SecureReceiver,
+}
+
+/// A receive-side SDES key epoch with a strict authenticated-source bound.
+///
+/// Retains at most four per-SSRC contexts and both replay histories until close.
+/// RTCP may arrive first or use a reporter SSRC distinct from the media source.
+/// No eviction, same-key reset or rekey API is exposed. At capacity, a new source
+/// returns a typed error while known-source state remains intact. The call owner
+/// must handle that condition explicitly, never reconstruct this object to retry.
+/// Caller-supplied time must come from its monotonic clock, not the network.
+/// Fixed one-second windows admit at most 256 packets/16 unknown-source attempts;
+/// failed authentication consumes budget, but never learns a source. This bounds
+/// provider work, not UDP reception, prefilter CPU or real-time scheduling.
+/// Validate the negotiated transport address before invoking this worker API.
+/// Own master bytes are zeroized on close/drop; provider copies are not guaranteed.
+///
+/// ```compile_fail
+/// use rust_microsip_media::srtp_adapter::ReceiverBank;
+/// fn requires_clone<T:Clone>() {}
+/// requires_clone::<ReceiverBank>();
+/// ```
+pub struct ReceiverBank {
+    material: Option<MasterKey>,
+    sources: Vec<RemoteSource>,
+    budget: AuthBudget,
+}
+impl fmt::Debug for ReceiverBank {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("ReceiverBank([REDACTED])")
+    }
+}
+impl ReceiverBank {
+    /// Consume one remote epoch key, without creating provisional provider contexts.
+    pub fn new(key: MasterKey, now: Instant) -> Self {
+        Self {
+            material: Some(key),
+            sources: Vec::with_capacity(MAX_REMOTE_SOURCES),
+            budget: AuthBudget {
+                start: now,
+                remaining: AUTH_PER_SECOND,
+                new_sources: NEW_SOURCE_AUTH_PER_SECOND,
+            },
+        }
+    }
+    /// Count only sources with authenticated, structurally valid packets.
+    pub fn authenticated_sources(&self) -> usize {
+        self.sources.len()
+    }
+    /// Permanently discard all contexts and own master material for this epoch.
+    pub fn close(&mut self) {
+        self.sources.clear();
+        self.material = None;
+    }
+    fn receive(
+        &mut self,
+        wire: &[u8],
+        now: Instant,
+        kind: PacketKind,
+    ) -> Result<Vec<u8>, SecureError> {
+        if self.material.is_none() {
+            return Err(SecureError::Closed);
+        }
+        let (minimum, maximum, source_offset) = match kind {
+            PacketKind::Rtp => (12 + TAG, MAX_PLAINTEXT + TAG, 8),
+            PacketKind::Rtcp => (8 + CONTROL_TRAILER, MAX_PLAINTEXT + CONTROL_TRAILER, 4),
+        };
+        if wire.len() < minimum || wire.len() > maximum || wire[0] >> 6 != 2 {
+            return Err(SecureError::InvalidPacket);
+        }
+        let ssrc = source_at(wire, source_offset);
+        let known = self.sources.iter().position(|source| source.ssrc == ssrc);
+        if known.is_none() && self.sources.len() == MAX_REMOTE_SOURCES {
+            return Err(SecureError::SourceCapacity);
+        }
+        self.budget.admit(known.is_none(), now)?;
+        let result = if let Some(index) = known {
+            kind.unprotect(&mut self.sources[index].receiver, wire)
+        } else {
+            let key = self.material.as_ref().ok_or(SecureError::Closed)?;
+            match SecureReceiver::new(MasterKey::from_bytes(key.0.as_ref())?) {
+                Ok(mut receiver) => match kind.unprotect(&mut receiver, wire) {
+                    Ok(clear) if receiver.authenticated_ssrc() == Some(ssrc) => {
+                        self.sources.push(RemoteSource { ssrc, receiver });
+                        Ok(clear)
+                    }
+                    Ok(_) => Err(SecureError::Provider),
+                    Err(error) => Err(error),
+                },
+                Err(error) => Err(error),
+            }
+        };
+        if matches!(
+            result,
+            Err(SecureError::Provider | SecureError::Closed | SecureError::KeyExpired)
+        ) {
+            self.close();
+        }
+        result
+    }
+    /// Authenticate/decrypt RTP, preserving replay state independently per SSRC.
+    ///
+    /// # Errors
+    /// Returns packet/auth/replay errors, rate/capacity errors or terminal closure.
+    pub fn unprotect_rtp(&mut self, wire: &[u8], now: Instant) -> Result<Vec<u8>, SecureError> {
+        self.receive(wire, now, PacketKind::Rtp)
+    }
+    /// Authenticate/decrypt SRTCP, permitting RTCP-first and distinct reporters.
+    ///
+    /// # Errors
+    /// Returns packet/auth/replay errors, rate/capacity errors or terminal closure.
+    pub fn unprotect_rtcp(&mut self, wire: &[u8], now: Instant) -> Result<Vec<u8>, SecureError> {
+        self.receive(wire, now, PacketKind::Rtcp)
+    }
+}
+#[derive(Clone, Copy)]
+enum PacketKind {
+    Rtp,
+    Rtcp,
+}
+impl PacketKind {
+    fn unprotect(self, receiver: &mut SecureReceiver, wire: &[u8]) -> Result<Vec<u8>, SecureError> {
+        match self {
+            Self::Rtp => receiver.unprotect_rtp(wire),
+            Self::Rtcp => receiver.unprotect_rtcp(wire),
+        }
+    }
+}
+
+#[cfg(test)]
+mod bank_tests {
+    use super::*;
+    fn sender(ssrc: u32) -> Result<SecureSender, SecureError> {
+        SecureSender::new(ssrc, MasterKey::from_bytes(&[0x31; 30])?)
+    }
+    fn rtp(ssrc: u32, sequence: u16) -> Result<Vec<u8>, SecureError> {
+        let mut bytes = [0; 32];
+        let n = crate::RtpHeader {
+            marker: false,
+            payload_type: 8,
+            sequence,
+            timestamp: u32::from(sequence) * 160,
+            ssrc,
+        }
+        .write(&[0x55; 20], &mut bytes)
+        .map_err(|_| SecureError::InvalidPacket)?;
+        Ok(bytes[..n].to_vec())
+    }
+    fn control(ssrc: u32) -> Vec<u8> {
+        let mut bytes = vec![0x80, 201, 0, 1];
+        bytes.extend(ssrc.to_be_bytes());
+        bytes
+    }
+    fn bank(now: Instant) -> Result<ReceiverBank, SecureError> {
+        Ok(ReceiverBank::new(MasterKey::from_bytes(&[0x31; 30])?, now))
+    }
+    #[test]
+    fn multiple_authenticated_sources_keep_their_replay_history() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let a = sender(7)?.protect_rtp(&rtp(7, 1)?)?;
+        let b = sender(8)?.protect_rtp(&rtp(8, 1)?)?;
+        assert!(bank.unprotect_rtp(&a, now).is_ok());
+        assert!(
+            bank.unprotect_rtp(&b, now).is_ok(),
+            "a different authentic source must not lose its stream"
+        );
+        assert_eq!(bank.unprotect_rtp(&a, now), Err(SecureError::Replay));
+        assert_eq!(bank.authenticated_sources(), 2);
+        Ok(())
+    }
+    #[test]
+    fn rtcp_first_and_distinct_reporter_are_retained() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let rtcp = sender(11)?.protect_rtcp(&control(11))?;
+        let rtp = sender(12)?.protect_rtp(&rtp(12, 1)?)?;
+        assert!(bank.unprotect_rtcp(&rtcp, now).is_ok());
+        assert!(bank.unprotect_rtp(&rtp, now).is_ok());
+        assert_eq!(bank.unprotect_rtcp(&rtcp, now), Err(SecureError::Replay));
+        assert_eq!(bank.authenticated_sources(), 2);
+        Ok(())
+    }
+    #[test]
+    fn one_source_keeps_separate_media_control_windows() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let mut sender = sender(7)?;
+        let rtcp = sender.protect_rtcp(&control(7))?;
+        let rtp = sender.protect_rtp(&rtp(7, 1)?)?;
+        assert!(bank.unprotect_rtcp(&rtcp, now).is_ok());
+        assert!(bank.unprotect_rtp(&rtp, now).is_ok());
+        assert_eq!(bank.authenticated_sources(), 1);
+        assert_eq!(bank.unprotect_rtp(&rtp, now), Err(SecureError::Replay));
+        assert_eq!(bank.unprotect_rtcp(&rtcp, now), Err(SecureError::Replay));
+        Ok(())
+    }
+    #[test]
+    fn capacity_does_not_evict_old_replay_state() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let mut first = sender(1)?;
+        let original = first.protect_rtp(&rtp(1, 1)?)?;
+        bank.unprotect_rtp(&original, now)?;
+        for ssrc in 2..=4 {
+            let wire = sender(ssrc)?.protect_rtp(&rtp(ssrc, 1)?)?;
+            bank.unprotect_rtp(&wire, now)?;
+        }
+        let fifth = sender(5)?.protect_rtp(&rtp(5, 1)?)?;
+        assert_eq!(
+            bank.unprotect_rtp(&fifth, now),
+            Err(SecureError::SourceCapacity)
+        );
+        assert_eq!(bank.unprotect_rtp(&original, now), Err(SecureError::Replay));
+        assert!(
+            bank.unprotect_rtp(&first.protect_rtp(&rtp(1, 2)?)?, now)
+                .is_ok()
+        );
+        assert_eq!(bank.authenticated_sources(), 4);
+        Ok(())
+    }
+    #[test]
+    fn forged_source_flood_is_rate_limited_without_retention() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let original = sender(7)?.protect_rtp(&rtp(7, 1)?)?;
+        let mut authentication = 0;
+        let mut limited = 0;
+        for ssrc in 100..1100u32 {
+            let mut forged = original.clone();
+            forged[8..12].copy_from_slice(&ssrc.to_be_bytes());
+            match bank.unprotect_rtp(&forged, now) {
+                Err(SecureError::Authentication) => authentication += 1,
+                Err(SecureError::RateLimited) => limited += 1,
+                _ => return Err(SecureError::Provider),
+            }
+        }
+        assert_eq!((authentication, limited), (16, 984));
+        assert_eq!(bank.authenticated_sources(), 0);
+        assert!(
+            bank.unprotect_rtp(&original, now + Duration::from_secs(1))
+                .is_ok()
+        );
+        Ok(())
+    }
+    #[test]
+    fn known_source_flood_preserves_state_across_refill() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let mut tx = sender(7)?;
+        let first = tx.protect_rtp(&rtp(7, 1)?)?;
+        bank.unprotect_rtp(&first, now)?;
+        for _ in 1..AUTH_PER_SECOND {
+            assert_eq!(bank.unprotect_rtp(&first, now), Err(SecureError::Replay));
+        }
+        let next = tx.protect_rtp(&rtp(7, 2)?)?;
+        assert_eq!(
+            bank.unprotect_rtp(&next, now),
+            Err(SecureError::RateLimited)
+        );
+        assert!(
+            bank.unprotect_rtp(&next, now + Duration::from_secs(1))
+                .is_ok()
+        );
+        assert_eq!(
+            bank.unprotect_rtp(&first, now + Duration::from_secs(1)),
+            Err(SecureError::Replay)
+        );
+        Ok(())
+    }
+    #[test]
+    fn backwards_time_never_refills_or_accepts_a_packet() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let wire = sender(7)?.protect_rtp(&rtp(7, 1)?)?;
+        let backwards = now
+            .checked_sub(Duration::from_millis(1))
+            .ok_or(SecureError::Provider)?;
+        assert_eq!(
+            bank.unprotect_rtp(&wire, backwards),
+            Err(SecureError::RateLimited)
+        );
+        assert_eq!(bank.authenticated_sources(), 0);
+        assert!(bank.unprotect_rtp(&wire, now).is_ok());
+        Ok(())
+    }
+    #[test]
+    fn close_is_terminal_and_discards_owned_epoch_material() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        let wire = sender(7)?.protect_rtp(&rtp(7, 1)?)?;
+        bank.unprotect_rtp(&wire, now)?;
+        bank.close();
+        assert!(bank.material.is_none());
+        assert_eq!(bank.authenticated_sources(), 0);
+        assert_eq!(bank.unprotect_rtp(&wire, now), Err(SecureError::Closed));
+        Ok(())
+    }
+    #[test]
+    fn bank_debug_is_redacted() -> Result<(), SecureError> {
+        assert_eq!(
+            format!("{:?}", bank(Instant::now())?),
+            "ReceiverBank([REDACTED])"
+        );
+        Ok(())
+    }
+    #[test]
+    fn oversize_and_short_headers_never_authenticate() -> Result<(), SecureError> {
+        let now = Instant::now();
+        let mut bank = bank(now)?;
+        assert_eq!(
+            bank.unprotect_rtp(&[0; 21], now),
+            Err(SecureError::InvalidPacket)
+        );
+        assert_eq!(
+            bank.unprotect_rtcp(&vec![0x80; 1515], now),
+            Err(SecureError::InvalidPacket)
+        );
+        assert_eq!(bank.authenticated_sources(), 0);
+        Ok(())
     }
 }
