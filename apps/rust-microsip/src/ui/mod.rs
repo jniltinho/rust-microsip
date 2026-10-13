@@ -558,13 +558,19 @@ fn tab_strip(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
 
 fn status_bar(ui: &mut egui::Ui, st: &UiState, palette: &tokens::Palette) {
     let color = match st.registration {
+        _ if st.engine_failed => palette.error,
         RegistrationState::Registered => palette.ok,
         RegistrationState::Failed(_) => palette.error,
         RegistrationState::Registering | RegistrationState::Disabled => ui.visuals().text_color(),
     };
+    let text = if st.engine_failed {
+        "Engine stopped; restart".to_owned()
+    } else {
+        registration_text(st.registration)
+    };
     ui.horizontal_wrapped(|ui| {
         ui.label(egui::RichText::new("\u{2022}").color(color));
-        ui.label(egui::RichText::new(registration_text(st.registration)).color(color));
+        ui.label(egui::RichText::new(text).color(color));
         if st.dnd {
             ui.label(egui::RichText::new("DND on").strong());
         }
@@ -1310,6 +1316,46 @@ mod tests {
     use rust_microsip_core::{CallId, CallSnapshot};
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    /// WCAG 2.x contrast ratio between two opaque colors.
+    fn contrast(a: egui::Color32, b: egui::Color32) -> f32 {
+        let luminance = |c: egui::Color32| {
+            let channel = |v: u8| {
+                let v = f32::from(v) / 255.0;
+                if v <= 0.040_45 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
+        };
+        let (x, y) = (luminance(a), luminance(b));
+        (x.max(y) + 0.05) / (x.min(y) + 0.05)
+    }
+
+    #[test]
+    fn text_and_status_colors_meet_wcag_aa_in_both_themes() {
+        for dark in [false, true] {
+            let visuals = if dark {
+                egui::Visuals::dark()
+            } else {
+                egui::Visuals::light()
+            };
+            let palette = tokens::palette(dark);
+            for background in [visuals.panel_fill, visuals.window_fill] {
+                for (name, color) in [
+                    ("text", visuals.text_color()),
+                    ("ok", palette.ok),
+                    ("warn", palette.warn),
+                    ("error", palette.error),
+                ] {
+                    let ratio = contrast(color, background);
+                    assert!(ratio >= 4.5, "{name} dark={dark}: {ratio:.2}:1");
+                }
+            }
+        }
+    }
 
     struct Fake {
         events: RefCell<Vec<Event>>,

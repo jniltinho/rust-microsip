@@ -1,0 +1,13 @@
+# cargo-deny policy (CI job "supply-chain"). Licences are enforced separately
+# by the exact-version review in packaging/reviewed-licenses.json.
+[graph]
+targets = ["x86_64-unknown-linux-gnu"]
+
+[advisories]
+# RustSec: any vulnerability, unmaintained or yanked crate fails the job.
+version = 2
+yanked = "deny"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

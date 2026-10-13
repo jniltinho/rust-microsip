@@ -199,3 +199,35 @@ fn dtmf_transmission_rejects_invalid_durations_and_never_wraps() -> Result<(), M
     );
     Ok(())
 }
+
+#[test]
+fn bounded_fuzzing_of_rtp_and_dtmf_parsers_never_panics() {
+    // Deterministic xorshift mutations of a valid packet plus random buffers.
+    let mut state = 0x2545_F491_4F6C_DD1D_u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        state
+    };
+    let seed = [
+        0x90, 0x00, 0x00, 0x01, 0, 0, 0, 160, 0, 0, 0, 7, 0xBE, 0xDE, 0, 1, 1, 2, 3, 4, 0xFF, 0xFF,
+    ];
+    for round in 0..50_000 {
+        let mut bytes: Vec<u8> = if round % 4 == 0 {
+            (0..next() % 1600).map(|_| next() as u8).collect()
+        } else {
+            seed.to_vec()
+        };
+        for _ in 0..1 + next() % 4 {
+            let at = (next() as usize) % (bytes.len() + 1);
+            match next() % 3 {
+                0 if at < bytes.len() => bytes[at] = next() as u8,
+                1 => bytes.insert(at, next() as u8),
+                _ => bytes.truncate(at),
+            }
+        }
+        let _ = RtpPacket::parse(&bytes);
+        let _ = rust_microsip_media::dtmf::TelephoneEvent::parse(&bytes);
+    }
+}

@@ -1,7 +1,7 @@
 # Release-candidate gates (task 9.3). Everything Rust runs inside the pinned
 # Docker builder; the runner needs no Rust toolchain and no secrets.
-# Not covered here (see docs/release/v0.1.0-draft.md): cargo-deny/cargo-audit,
-# coverage-guided fuzzing, OpenSpec validation, PBX/VM/human audio acceptance.
+# Not covered here (see docs/release/v0.1.0-draft.md): coverage-guided
+# fuzzing, OpenSpec validation, PBX/VM/human audio acceptance.
 name: CI
 
 on:
@@ -33,6 +33,20 @@ jobs:
       - name: Scanner negative controls
         run: sh packaging/release/ci-selftest.sh --no-docker
 
+  supply-chain:
+    name: RustSec advisories and sources (cargo-deny)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: EmbarkStudios/cargo-deny-action@3c6349835b2b7b196a839186cb8b78e02f7b5f25 # v2.1.1
+        with:
+          command: check
+          arguments: --locked
+          command-arguments: advisories sources
+
   build:
     name: Docker verify, artifacts and context audit
     runs-on: ubuntu-24.04
@@ -44,7 +58,9 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       # fmt, clippy -D warnings (missing_docs denied workspace-wide), unit and
-      # integration tests including the bounded URI fuzz test, doctests, rustdoc.
+      # integration tests including the layering rule and bounded deterministic
+      # fuzzing of the dial-string, link, CSV, .env, argument, SDP, RTP and DTMF
+      # parsers, doctests, rustdoc.
       - name: Verify target
         run: docker buildx build --progress plain --platform linux/amd64 --target verify .
       - name: Artifacts target

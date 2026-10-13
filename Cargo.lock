@@ -2998,6 +2998,7 @@ name = "rust-microsip-core"
 version = "0.1.0-dev.0"
 dependencies = [
  "secrecy",
+ "serde_json",
  "thiserror 2.0.21",
 ]
 

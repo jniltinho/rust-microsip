@@ -402,6 +402,9 @@ pub enum Notice {
     AudioUnavailable,
     /// The command queue was full; the command was dropped.
     Overloaded,
+    /// The engine stopped unexpectedly; calls and registration are gone
+    /// until the application restarts.
+    EngineFailed,
 }
 
 /// Engine output, delivered in order. Final call snapshots are never dropped.

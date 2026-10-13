@@ -85,6 +85,9 @@ crates/core/**
 !crates/core/src/
 crates/core/src/**
 !crates/core/src/*.rs
+!crates/core/tests/
+crates/core/tests/**
+!crates/core/tests/*.rs
 !crates/audio/
 crates/audio/**
 !crates/audio/Cargo.toml

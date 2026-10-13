@@ -125,7 +125,7 @@ for path in files:
         "apps/rust-microsip/src", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
         "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui",
-        "crates/telephony/src/engine", "crates/core/src", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src",
+        "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src",
     }
     # Reviewed, commit-pinned third-party license texts only.
     is_source = is_source or relative.startswith(("packaging/third-party-notices/", "packaging/appimage/runtime-licenses/"))

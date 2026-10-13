@@ -24,6 +24,8 @@ zeroize = "=1.9.1"
 [dev-dependencies]
 libc = "=0.2.190"
 serde_json = "=1.0.154"
+# Paused clock for timer tests (same crate, test-only feature).
+tokio = { version = "=1.53.2", default-features = false, features = ["test-util"] }
 
 [lints]
 workspace = true

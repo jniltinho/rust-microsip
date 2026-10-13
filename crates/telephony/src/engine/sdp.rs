@@ -467,6 +467,39 @@ mod tests {
     }
 
     #[test]
+    fn bounded_fuzzing_never_panics() {
+        // Deterministic xorshift mutations of real offers plus random lines.
+        let mut state = 0xD1B5_4A32_D192_ED03_u64;
+        let mut next = move || {
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            state
+        };
+        let seeds = [
+            offer(false, Flow::SendRecv).to_vec(),
+            offer(true, Flow::SendOnly).to_vec(),
+        ];
+        for round in 0..20_000 {
+            let mut bytes = seeds[round % 2].clone();
+            for _ in 0..1 + next() % 6 {
+                let at = (next() as usize) % (bytes.len() + 1);
+                match next() % 4 {
+                    0 if at < bytes.len() => bytes[at] = next() as u8,
+                    1 => bytes.insert(at, b" =:/\r\n0123456789"[(next() % 16) as usize]),
+                    2 if at < bytes.len() => {
+                        bytes.remove(at);
+                    }
+                    _ => bytes.truncate(at),
+                }
+            }
+            for policy in [MediaSecurity::PlainRtp, MediaSecurity::Srtp] {
+                let _ = parse(&bytes, policy);
+            }
+        }
+    }
+
+    #[test]
     fn rejects_malformed_and_oversized_input() {
         for bad in [
             &b""[..],

@@ -43,6 +43,25 @@ const BACKLOG_LIMIT: usize = 4096;
 const OFFER_CODECS: [Codec; 2] = [Codec::Pcmu, Codec::Pcma];
 const MAX_REGISTRATION_ATTEMPTS: u32 = 8;
 
+/// Delay before refreshing a binding granted for `granted` seconds: 80% of
+/// it (at least 60 s), or 2 s once after a slow answer, to replace a binding
+/// that may have expired while the network was down.
+fn refresh_delay(granted: u32, fast: bool) -> Duration {
+    if fast {
+        Duration::from_secs(2)
+    } else {
+        Duration::from_secs(u64::from(granted.max(60)) * 4 / 5)
+    }
+}
+
+/// Backoff after the `attempts`-th consecutive failure (10 s doubling, at
+/// most 300 s); `None` when the user must act: bad credentials or attempts
+/// exhausted.
+fn retry_delay(failure: RegistrationFailure, attempts: u32) -> Option<Duration> {
+    (failure != RegistrationFailure::Unauthorized && attempts < MAX_REGISTRATION_ATTEMPTS)
+        .then(|| Duration::from_secs(5u64 << attempts.min(6)).min(Duration::from_secs(300)))
+}
+
 /// Messages from engine-owned tasks back to the actor.
 enum Internal {
     Incoming(Box<Transaction>),
@@ -121,31 +140,35 @@ impl EngineHandle {
             .thread_name("rust-microsip-sip")
             .build()?;
         let ca = custom_ca.clone();
+        let supervisor = event_tx.clone();
+        let supervisor_wake = wake.clone();
         let thread = std::thread::Builder::new()
             .name("rust-microsip-engine".into())
             .spawn(move || {
-                runtime.block_on(async move {
-                    let (internal_tx, internal_rx) = mpsc::channel(256);
-                    let mut actor = Actor {
-                        sink: Sink {
-                            tx: event_tx,
-                            backlog: VecDeque::new(),
-                            wake,
-                        },
-                        media: Arc::new(Mutex::new(media)),
-                        custom_ca: ca,
-                        transfer_seq: 0,
-                        internal: internal_tx,
-                        account: None,
-                        registration: RegistrationState::Disabled,
-                        generation: 0,
-                        call: None,
-                        next_call: 1,
-                        dnd: false,
-                        pending_byes: Vec::new(),
-                        refresh_seq: 0,
-                    };
-                    actor.run(command_rx, internal_rx).await;
+                supervise(supervisor, supervisor_wake, || {
+                    runtime.block_on(async move {
+                        let (internal_tx, internal_rx) = mpsc::channel(256);
+                        let mut actor = Actor {
+                            sink: Sink {
+                                tx: event_tx,
+                                backlog: VecDeque::new(),
+                                wake,
+                            },
+                            media: Arc::new(Mutex::new(media)),
+                            custom_ca: ca,
+                            transfer_seq: 0,
+                            internal: internal_tx,
+                            account: None,
+                            registration: RegistrationState::Disabled,
+                            generation: 0,
+                            call: None,
+                            next_call: 1,
+                            dnd: false,
+                            pending_byes: Vec::new(),
+                            refresh_seq: 0,
+                        };
+                        actor.run(command_rx, internal_rx).await;
+                    })
                 });
                 runtime.shutdown_timeout(Duration::from_secs(2));
             })?;
@@ -172,7 +195,10 @@ impl EngineHandle {
     pub fn send(&self, command: Command) -> Result<(), Notice> {
         self.commands
             .try_send(command)
-            .map_err(|_| Notice::Overloaded)
+            .map_err(|error| match error {
+                mpsc::error::TrySendError::Full(_) => Notice::Overloaded,
+                mpsc::error::TrySendError::Closed(_) => Notice::EngineFailed,
+            })
     }
 
     /// Drain all currently available events without blocking.
@@ -202,6 +228,30 @@ impl EngineHandle {
         }
         false
     }
+}
+
+/// Run the engine; if the actor panics, report [`Notice::EngineFailed`] so
+/// the UI does not mistake a dead engine for a quiet one. Requires the
+/// default `panic = "unwind"`; panics inside spawned per-call tasks end only
+/// that task. Gives up after one second if the UI does not make room.
+fn supervise(events: mpsc::Sender<Event>, wake: Arc<dyn Fn() + Send + Sync>, run: impl FnOnce()) {
+    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(run)).is_ok() {
+        return;
+    }
+    let deadline = std::time::Instant::now() + Duration::from_secs(1);
+    let mut event = Event::Notice(Notice::EngineFailed);
+    loop {
+        match events.try_send(event) {
+            Ok(()) => break,
+            Err(mpsc::error::TrySendError::Full(back)) if std::time::Instant::now() < deadline => {
+                event = back;
+                wake();
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(_) => return,
+        }
+    }
+    wake();
 }
 
 /// Ordered event output with a bounded overflow backlog. Notices are shed
@@ -259,6 +309,22 @@ impl Sink {
             }
         }
         (self.wake)();
+    }
+    /// Deliver the whole backlog, waiting for queue space for up to
+    /// `budget`, so the final events reach a slow UI before the engine exits.
+    async fn drain(&mut self, budget: Duration) {
+        let _ = tokio::time::timeout(budget, async {
+            while !self.backlog.is_empty() {
+                let Ok(permit) = self.tx.reserve().await else {
+                    return;
+                };
+                if let Some(event) = self.backlog.pop_front() {
+                    permit.send(event);
+                }
+                (self.wake)();
+            }
+        })
+        .await;
     }
 }
 
@@ -430,7 +496,7 @@ impl Actor {
                     None | Some(Command::Shutdown) => {
                         self.shutdown().await;
                         self.sink.emit(Event::Stopped);
-                        self.sink.flush();
+                        self.sink.drain(Duration::from_secs(1)).await;
                         return;
                     }
                     Some(command) => self.command(command).await,
@@ -1086,26 +1152,14 @@ impl Actor {
                 // path must not turn into a REGISTER every few seconds.
                 let fast = slow && !account.fast_refreshed;
                 account.fast_refreshed = fast;
-                let refresh = if fast {
-                    // Re-register promptly to replace a binding that may have
-                    // expired while the network was down.
-                    Duration::from_secs(2)
-                } else {
-                    Duration::from_secs(u64::from(granted.max(60)) * 4 / 5)
-                };
                 self.set_registration(RegistrationState::Registered);
-                self.schedule(refresh, generation);
+                self.schedule(refresh_delay(granted, fast), generation);
             }
             Err(failure) => {
                 account.attempts += 1;
                 let attempts = account.attempts;
                 self.set_registration(RegistrationState::Failed(failure));
-                // Credentials errors and exhausted attempts wait for the user.
-                if failure != RegistrationFailure::Unauthorized
-                    && attempts < MAX_REGISTRATION_ATTEMPTS
-                {
-                    let delay =
-                        Duration::from_secs(5u64 << attempts.min(6)).min(Duration::from_secs(300));
+                if let Some(delay) = retry_delay(failure, attempts) {
                     self.schedule(delay, generation);
                 }
             }
@@ -1503,6 +1557,34 @@ async fn reply_stale(state: DialogState) {
 mod tests {
     use super::*;
 
+    #[test]
+    fn registration_timing_follows_the_policy() {
+        let secs = Duration::from_secs;
+        assert_eq!(refresh_delay(3600, false), secs(2880));
+        assert_eq!(
+            refresh_delay(30, false),
+            secs(48),
+            "short grants refresh at 48 s"
+        );
+        assert_eq!(refresh_delay(3600, true), secs(2));
+        let delays: Vec<_> = (1..=8)
+            .map(|n| retry_delay(RegistrationFailure::Timeout, n))
+            .collect();
+        assert_eq!(
+            delays,
+            [10, 20, 40, 80, 160, 300, 300]
+                .map(|s| Some(secs(s)))
+                .into_iter()
+                .chain([None])
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(retry_delay(RegistrationFailure::Unauthorized, 1), None);
+        assert_eq!(
+            retry_delay(RegistrationFailure::Rejected(503), 1),
+            Some(secs(10))
+        );
+    }
+
     async fn call(
         negotiated: bool,
         codec: Codec,
@@ -1583,6 +1665,115 @@ mod tests {
         assert_eq!(sipfrag(b"SIP/2.0 200 OK\r\n"), Some(200));
         assert_eq!(sipfrag(b"SIP/2.0 2000 OK\r\n"), None);
         assert_eq!(sipfrag(b"HTTP/1.1 200 OK\r\n"), None);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn refresh_timer_fires_on_the_fake_clock_and_rearming_supersedes() {
+        let (event_tx, _events) = mpsc::channel(8);
+        let (internal, mut timers) = mpsc::channel(8);
+        let mut actor = Actor {
+            sink: Sink {
+                tx: event_tx,
+                backlog: VecDeque::new(),
+                wake: Arc::new(|| {}),
+            },
+            media: Arc::new(Mutex::new(Box::new(rust_microsip_core::NullMedia))),
+            custom_ca: Arc::new(Mutex::new(TrustAnchors::System)),
+            transfer_seq: 0,
+            internal,
+            account: None,
+            registration: RegistrationState::Disabled,
+            generation: 0,
+            call: None,
+            next_call: 1,
+            dnd: false,
+            pending_byes: Vec::new(),
+            refresh_seq: 0,
+        };
+        let start = tokio::time::Instant::now();
+        actor.schedule(refresh_delay(30, false), 3);
+        let fired = timers.recv().await;
+        assert!(matches!(fired, Some(Internal::RefreshRegistration(3, 1))));
+        assert_eq!(
+            start.elapsed(),
+            Duration::from_secs(48),
+            "fires exactly at 48 s"
+        );
+        // Re-arming: the older timer still fires but carries a stale sequence
+        // the actor ignores; only the newest sequence is current.
+        let start = tokio::time::Instant::now();
+        actor.schedule(Duration::from_secs(10), 3);
+        actor.schedule(Duration::from_secs(5), 3);
+        assert!(matches!(
+            timers.recv().await,
+            Some(Internal::RefreshRegistration(3, 3))
+        ));
+        assert_eq!(start.elapsed(), Duration::from_secs(5));
+        assert!(matches!(
+            timers.recv().await,
+            Some(Internal::RefreshRegistration(3, 2))
+        ));
+        assert_eq!(start.elapsed(), Duration::from_secs(10));
+        assert_eq!(actor.refresh_seq, 3);
+    }
+
+    #[test]
+    fn supervisor_reports_a_panicking_engine() {
+        let (tx, mut rx) = mpsc::channel(1);
+        let woke = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let flag = woke.clone();
+        let wake: Arc<dyn Fn() + Send + Sync> =
+            Arc::new(move || flag.store(true, std::sync::atomic::Ordering::SeqCst));
+        supervise(tx.clone(), wake.clone(), || {});
+        assert!(rx.try_recv().is_err(), "a clean stop reports nothing");
+        supervise(tx, wake, || std::panic::panic_any("injected engine fault"));
+        assert_eq!(
+            rx.try_recv().ok(),
+            Some(Event::Notice(Notice::EngineFailed))
+        );
+        assert!(woke.load(std::sync::atomic::Ordering::SeqCst));
+    }
+
+    #[test]
+    fn command_flood_never_blocks_and_stopped_is_delivered()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let handle = EngineHandle::spawn(Box::new(rust_microsip_core::NullMedia), Arc::new(|| {}))?;
+        let target = DialTarget::parse("1002")?;
+        let started = std::time::Instant::now();
+        let (mut accepted, mut dropped) = (0, 0);
+        // Nobody drains events: every accepted Dial yields a notice the sink
+        // must shed instead of blocking the actor.
+        for _ in 0..20_000 {
+            match handle.send(Command::Dial(target.clone())) {
+                Ok(()) => accepted += 1,
+                Err(Notice::Overloaded) => dropped += 1,
+                Err(other) => return Err(format!("unexpected {other:?}").into()),
+            }
+        }
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "send must not block"
+        );
+        assert!(accepted > 0 && accepted + dropped == 20_000);
+        std::thread::sleep(Duration::from_millis(200));
+        let events = handle.try_events();
+        assert!(events.len() <= EVENT_CAPACITY);
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while handle.send(Command::Shutdown).is_err() && std::time::Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let mut tail = Vec::new();
+        while std::time::Instant::now() < deadline && !tail.contains(&Event::Stopped) {
+            tail.extend(handle.try_events());
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(
+            tail.last(),
+            Some(&Event::Stopped),
+            "the final event survives the flood"
+        );
+        assert!(handle.shutdown(Duration::from_secs(5)));
+        Ok(())
     }
 
     #[test]

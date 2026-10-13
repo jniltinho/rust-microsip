@@ -545,6 +545,8 @@ pub struct UiState {
     pub quitting: bool,
     /// The engine reported it stopped.
     pub stopped: bool,
+    /// The engine died; the status bar says so until restart.
+    pub engine_failed: bool,
     /// Latest microphone peak (0-32767) while the audio test runs.
     pub audio_test: Option<u16>,
     /// Run id of the latest audio test; older results are ignored.
@@ -597,6 +599,7 @@ impl UiState {
             account: settings.account,
             quitting: false,
             stopped: false,
+            engine_failed: false,
             password: None,
             notice: None,
             versions: HashMap::new(),
@@ -776,7 +779,7 @@ impl UiState {
         match backend.send(command) {
             Ok(()) => true,
             Err(notice) => {
-                self.set_notice(notice_text(notice), now);
+                self.apply_event(Event::Notice(notice), now);
                 false
             }
         }
@@ -1300,7 +1303,12 @@ impl UiState {
     pub fn apply_event(&mut self, event: Event, now: Instant) {
         match event {
             Event::Registration(state) => self.registration = state,
-            Event::Notice(notice) => self.set_notice(notice_text(notice), now),
+            // While quitting or after a normal stop the queue closes on purpose.
+            Event::Notice(Notice::EngineFailed) if self.stopped || self.quitting => {}
+            Event::Notice(notice) => {
+                self.engine_failed |= notice == Notice::EngineFailed;
+                self.set_notice(notice_text(notice), now);
+            }
             Event::Stopped => self.stopped = true,
             Event::Call(snapshot) => self.apply_call(snapshot, now),
         }
@@ -1486,6 +1494,7 @@ pub const fn notice_text(notice: Notice) -> &'static str {
         Notice::InvalidState => "Not possible in the current call state",
         Notice::AudioUnavailable => "No audio device; the call continues without local audio",
         Notice::Overloaded => "Busy; the action was dropped, try again",
+        Notice::EngineFailed => "The phone engine stopped; restart the application",
     }
 }
 
@@ -2137,6 +2146,31 @@ mod tests {
     }
 
     #[test]
+    fn engine_failure_is_sticky_in_the_status() {
+        let mut st = UiState::new(UiSettings::default());
+        st.apply_event(
+            Event::Registration(RegistrationState::Registered),
+            Instant::now(),
+        );
+        assert!(!st.engine_failed);
+        let b = Fake {
+            fail: Some(Notice::EngineFailed),
+            ..Fake::default()
+        };
+        run(&mut st, &b, &[Action::ToggleDnd]);
+        assert!(st.engine_failed && !st.dnd);
+        st.apply_event(Event::Notice(Notice::Busy), Instant::now());
+        assert!(st.engine_failed, "later notices do not clear the failure");
+        let mut quit = UiState::new(UiSettings::default());
+        quit.apply_event(Event::Stopped, Instant::now());
+        quit.apply_event(Event::Notice(Notice::EngineFailed), Instant::now());
+        assert!(
+            !quit.engine_failed,
+            "a closed queue after a normal stop is expected"
+        );
+    }
+
+    #[test]
     fn overloaded_backend_shows_notice_and_keeps_dnd() {
         let mut st = UiState::new(UiSettings::default());
         let b = Fake {
@@ -2595,6 +2629,25 @@ mod tests {
         );
         assert!(b.take().is_empty());
         std::fs::remove_dir_all(dir)
+    }
+
+    #[test]
+    fn switching_theme_during_a_call_leaves_the_call_alone() {
+        let mut st = UiState::new(UiSettings::default());
+        let b = Fake::default();
+        st.apply_event(
+            Event::Call(snap(7, Direction::Outgoing, CallPhase::Established, 1)),
+            Instant::now(),
+        );
+        for theme in [Theme::Dark, Theme::Light, Theme::System] {
+            run(&mut st, &b, &[Action::SetTheme(theme)]);
+            assert_eq!(st.theme, theme);
+        }
+        assert!(
+            b.take().is_empty(),
+            "a theme change sends no engine command"
+        );
+        assert_eq!(st.established_call(), Some(CallId(7)));
     }
 
     #[test]

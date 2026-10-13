@@ -1,6 +1,18 @@
 # Native UI screenshots and MicroSIP reference
 
-These are **actual application-window captures**, not generated images or HTML mockups. The Rust screenshots show a **non-dialing G0 prototype**: no account, microphone, real call, contacts, or history is connected. Disabled controls and the backend-unavailable status are intentional. Main progress remains **4/54** verified tasks; linked CLI/MCP **0/14**. This is visual feedback, not task 1.8 or release acceptance.
+## Production app captures (2026-10-13)
+
+Release ELF in a private Xvfb (no window manager, GLES/llvmpipe), fictional `1001` account on the disposable lab PBX; see the [hardening receipt](../receipts/hardening-2026-10-13.md).
+
+| Dark theme chosen in Settings during an echo call | 1024x768 screen, 150% scale | 1024x768 screen, 200% scale |
+| --- | --- | --- |
+| ![In-call window after switching to dark](app-in-call-dark.png) | ![Window at 150% scale](app-1024x768-scale-150.png) | ![Window at 200% scale, clamped to the screen and scrollable](app-1024x768-scale-200.png) |
+
+The scale captures ran without network (registration fails, no audio device), which is why the status bar and notice show errors.
+
+## G0 prototype captures
+
+These are **actual application-window captures**, not generated images or HTML mockups. The Rust screenshots show a **non-dialing G0 prototype**: no account, microphone, real call, contacts, or history is connected. Disabled controls and the backend-unavailable status are intentional. At capture time main progress was **4/54** verified tasks; current progress is in the [roadmap](../README.md). This is visual feedback, not task 1.8 or release acceptance.
 
 ## Compare the initial dialpad
 

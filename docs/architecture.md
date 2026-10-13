@@ -25,12 +25,15 @@ all of the above depend on
 | `rust-microsip-platform` | Single instance over a private Unix socket, `sip:`/`tel:` parsing, desktop notifications and Secret Service password storage over D-Bus (zbus with async-io). | Linux desktop services |
 | `rust-microsip` (app) | Command-line front end and the egui/eframe window; wires config, audio and engine. | none beyond eframe/wgpu |
 
+`crates/core/tests/layering.rs` enforces these boundaries from `cargo metadata`: each workspace package's normal dependencies are allowlisted and the UI module may not name SQL, SIP, TLS, Tokio, audio or D-Bus crates.
+
 ## Runtime model
 
 - **UI thread**: eframe event loop. It only sends `Command`s with a non-blocking `try_send` (a full queue yields `Notice::Overloaded`) and drains `Event`s each frame. The engine wakes it with `request_repaint`.
 - **Engine thread**: a two-worker Tokio runtime owns the SIP endpoint, dialogs, timers and per-call media tasks. A single actor serializes all state changes; spawned tasks report back over a bounded internal channel.
 - **Media**: one task per call ticks every 20 ms: capture → encode → (SRTP) → send, and receive → authenticate → decode → bounded jitter buffer → play. RTP is accepted only from the negotiated address.
 - **Audio devices**: cpal callbacks only move samples through preallocated SPSC rings; resampling runs on the media tick, never in a device callback.
+- **Supervision**: a panic in the engine actor is caught (the default `panic = "unwind"` is required) and reported as `Notice::EngineFailed`; a panic inside a spawned per-call task ends only that task; on shutdown the engine drains its event backlog (bounded) so `Stopped` is delivered.
 - **Signals**: SIGTERM/SIGINT close the window through the normal path, so the engine ends calls and unregisters within a bounded shutdown.
 
 ## Security boundaries

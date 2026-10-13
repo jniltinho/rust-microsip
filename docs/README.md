@@ -29,20 +29,19 @@ This directory holds the project's design records, evidence and guides. Start wi
 | Desktop | egui window: Phone/Calls/Contacts tabs, keypad, Call/End, DND/MUTE/HOLD/XFER, incoming-call banner, history filters and search, contact editor and CSV import, settings with audio device selection, themes, licences; graceful SIGTERM | [UI notes](ui/g0-native-ui.md), [screenshots](prints/) |
 | Linux integration | Single instance over a private Unix socket (a second launch forwards and exits), strict `sip:`/`tel:` link parsing that only fills the number, opt-in link handler entry, incoming-call notifications with Answer/Reject over D-Bus, quit confirmation during calls | `crates/platform` |
 | Resilience | Registration renewal, recovery after a network outage, BYE delivered after recovery, crash recovery of interrupted calls in history | [Config/recovery/release receipt](receipts/config-recovery-release-2026-10-13.md) |
-| Release engineering | AppImage, CI workflow, publication scanner (index, history and artifacts), reproducible clean-clone build, release-notes draft | [Release draft](release/v0.1.0-draft.md) |
+| Release engineering | AppImage, CI workflow passing on GitHub, a RustSec/source check job, publication scanner (index, history and artifacts), reproducible clean-clone build, release-notes draft | [Release draft](release/v0.1.0-draft.md) |
+| Hardening | Automated layering rule, bounded deterministic fuzzing of the dial-string, link, CSV, `.env`, argument, SDP, RTP and DTMF parsers, engine supervision, final events kept on shutdown, WCAG contrast test, theme switching during a call, exit with a frozen PBX, 100/150/200% scaling | [Hardening receipt](receipts/hardening-2026-10-13.md) |
 
 ## Remaining for v0.1.0
 
 | Area | Remaining work | OpenSpec tasks |
 | --- | --- | --- |
 | G0 gate | Same-stack spike with D-Bus/notifications and local IPC; clean GNOME/Wayland and KDE/X11 VMs; native dependency audit; recorded G0 decision | 1.5, 1.8, 1.9 |
-| Architecture | Platform contracts and fakes, supervision and saturation tests, fake clock and an automated layering rule | 2.1, 2.3, 2.5 |
-| Configuration | Keyring behaviour on real desktops (prompts, KWallet) | 3.3 |
-| Telephony | Suspend/resume on real desktops | 4.6 |
+| Architecture | Platform contracts and fakes for the Linux adapters | 2.1 |
 | Media | Device hotplug with real headsets, local test on real devices, NAT/STUN topology | 5.2, 5.3, 5.5 |
-| Desktop UI | Visual matrix against MicroSIP, remaining screens, validated settings persistence, accessibility, keyboard and scaling | 7.1–7.5 |
+| Desktop UI | Visual matrix against MicroSIP, remaining screens, screen-reader labels | 7.1–7.3, 7.5 |
 | Linux integration | Notification and tray checks on real desktops | 8.1 |
-| Release | AppImage, CI with fuzzing, publication scanning, full Asterisk suite, VM and human audio checklist, performance budgets, final review, SBOM and notes, publication | 9.1–9.10 |
+| Release | Real-desktop checks of keyring prompts/KWallet and suspend/resume (part of the VM checklist), AppImage licence review, the first `cargo deny` run, full Asterisk suite, VM and human audio checklist, performance budgets, final review, SBOM and notes, publication | 9.2, 9.3, 9.5–9.10 |
 | Agent CLI/MCP | Local control CLI and MCP server over authenticated IPC | [add-agent-cli-mcp](../openspec/changes/add-agent-cli-mcp/tasks.md) |
 
 ## Later releases
