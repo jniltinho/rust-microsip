@@ -8,6 +8,7 @@ the [documentation index](README.md) has the roadmap and the [architecture](arch
 - [Docker workflow](#docker-workflow)
 - [Common tasks](#common-tasks)
 - [Lab suite](#lab-suite)
+- [Desktop VMs](#desktop-vms)
 - [Running the app locally](#running-the-app-locally)
 - [Release process](#release-process)
 - [OpenSpec workflow](#openspec-workflow)
@@ -36,7 +37,7 @@ crates/storage        SQLite: settings, history, contacts, control ledger, grant
 crates/platform       single instance, control socket (SO_PEERCRED), links, notifications, keyring
 docker/asterisk/      disposable Asterisk lab and the lab suite (suite.sh)
 packaging/            AppImage, licence notices, release scripts (scanner, clean-clone build)
-scripts/              cargo-docker.sh (toolchain wrapper)
+scripts/              cargo-docker.sh (toolchain wrapper), vm/ (desktop test VMs)
 openspec/             proposals, designs, specs and task lists
 docs/                 architecture, ADRs, receipts, reviews, screenshots
 ```
@@ -115,6 +116,23 @@ AT-SPI), starts a fresh PBX per scenario and writes `artifacts/suite/<time>-<com
 `SKIP_BUILD=1` reuses an image built from the same commit. Scenarios: `engine-lab`,
 `engine-network`, `gui-link`, `gui-frozen-exit`, `gui-theme`, `gui-a11y`, `gui-a11y-call`,
 `gui-control`, `gui-grants`. Receipts in [docs/receipts/](receipts/) record the evidence.
+
+## Desktop VMs
+
+Clean VirtualBox VMs for checks on real desktops (KDE Plasma X11, GNOME Wayland), made from the
+official Ubuntu 24.04 cloud image with a fictional user and an SSH key generated locally:
+
+```sh
+sh scripts/vm/create-desktop-vm.sh kde 2251 <key-dir>
+sh scripts/vm/create-desktop-vm.sh gnome 2252 <key-dir>
+scp -i <key-dir>/id_vm -P 2251 dist/rust-microsip scripts/vm/vm-*.sh tester@127.0.0.1:
+ssh -i <key-dir>/id_vm -p 2251 tester@127.0.0.1 sh vm-run-app.sh ./rust-microsip elf
+ssh -i <key-dir>/id_vm -p 2251 tester@127.0.0.1 sh vm-quit-app.sh
+VBoxManage controlvm rust-microsip-kde screenshotpng shot.png
+```
+
+Provisioning takes about 15 minutes. The lab PBX is not reachable from these VMs.
+See [the desktop VM receipt](receipts/desktop-vms-2026-10-13.md).
 
 ## Running the app locally
 

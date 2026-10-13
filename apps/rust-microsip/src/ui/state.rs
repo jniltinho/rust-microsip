@@ -1591,15 +1591,44 @@ fn io_text(error: &std::io::Error) -> &'static str {
     }
 }
 
-/// Write [`rust_microsip_platform::DESKTOP_ENTRY`] to `path` atomically with
-/// mode `0644`, creating the `applications` directory when missing. Nothing
-/// is executed and no default handler is changed.
+/// Write the [`rust_microsip_platform::desktop_entry`] for this executable
+/// (`$APPIMAGE` inside an AppImage) to `path` atomically with
+/// mode `0644`, creating the `applications` directory when missing, and the
+/// app icon beside it in the data directory's hicolor theme (Wayland docks
+/// take the icon from the entry, not from the window). Nothing is executed
+/// and no default handler is changed.
 pub fn install_desktop_entry(path: &Path) -> std::io::Result<()> {
+    let executable = std::env::var_os("APPIMAGE")
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::current_exe().ok());
+    let entry = rust_microsip_platform::desktop_entry(executable.as_deref());
+    write_public(path, entry.as_bytes())?;
+    match icon_path(path) {
+        Some(icon) => write_public(&icon, super::ICON),
+        None => Ok(()),
+    }
+}
+
+/// `<data>/icons/hicolor/256x256/apps/rust-microsip.png` for the entry at
+/// `<data>/applications/rust-microsip.desktop`.
+fn icon_path(entry: &Path) -> Option<std::path::PathBuf> {
+    let data = entry.parent()?.parent()?;
+    Some(data.join("icons/hicolor/256x256/apps/rust-microsip.png"))
+}
+
+/// Atomic write with mode `0644`, creating the parent directory.
+fn write_public(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
     use std::os::unix::fs::OpenOptionsExt;
     let dir = path.parent().ok_or(std::io::ErrorKind::InvalidInput)?;
     std::fs::create_dir_all(dir)?;
-    let tmp = dir.join(format!(".{DESKTOP_FILE}.{}.tmp", std::process::id()));
+    let name = path.file_name().ok_or(std::io::ErrorKind::InvalidInput)?;
+    let tmp = dir.join(format!(
+        ".{}.{}.tmp",
+        name.to_string_lossy(),
+        std::process::id()
+    ));
     let _ = std::fs::remove_file(&tmp);
     let written = std::fs::OpenOptions::new()
         .write(true)
@@ -1610,7 +1639,7 @@ pub fn install_desktop_entry(path: &Path) -> std::io::Result<()> {
             use std::os::unix::fs::PermissionsExt;
             // Not subject to the umask: desktop entries are world-readable.
             file.set_permissions(std::fs::Permissions::from_mode(0o644))?;
-            file.write_all(rust_microsip_platform::DESKTOP_ENTRY.as_bytes())?;
+            file.write_all(bytes)?;
             file.sync_all()
         })
         .and_then(|()| std::fs::rename(&tmp, path));
@@ -1628,13 +1657,24 @@ pub fn install_desktop_entry(path: &Path) -> std::io::Result<()> {
 /// # Errors
 /// I/O failures, including [`std::io::ErrorKind::NotFound`].
 pub fn remove_desktop_entry(path: &Path) -> std::io::Result<bool> {
-    let expected = rust_microsip_platform::DESKTOP_ENTRY.as_bytes();
     let meta = std::fs::symlink_metadata(path)?;
     // The size check bounds the read below.
-    if !meta.is_file() || meta.len() != expected.len() as u64 || std::fs::read(path)? != expected {
+    if !meta.is_file()
+        || meta.len() > 8192
+        || !std::str::from_utf8(&std::fs::read(path)?)
+            .is_ok_and(rust_microsip_platform::is_desktop_entry)
+    {
         return Ok(false);
     }
     std::fs::remove_file(path)?;
+    // The icon goes too, but only if it is still exactly ours.
+    if let Some(icon) = icon_path(path)
+        && std::fs::symlink_metadata(&icon)
+            .is_ok_and(|m| m.is_file() && m.len() == super::ICON.len() as u64)
+        && std::fs::read(&icon).is_ok_and(|b| b == super::ICON)
+    {
+        let _ = std::fs::remove_file(icon);
+    }
     Ok(true)
 }
 
@@ -2653,17 +2693,26 @@ mod tests {
         );
         assert!(!entry.exists(), "nothing is installed without the action");
         run(&mut st, &b, &[Action::InstallLinkHandler]);
-        assert_eq!(
-            std::fs::read_to_string(&entry)?,
-            rust_microsip_platform::DESKTOP_ENTRY
-        );
+        let written = std::fs::read_to_string(&entry)?;
+        assert!(rust_microsip_platform::is_desktop_entry(&written));
+        let exe = std::env::current_exe()?;
+        if !exe.to_string_lossy().contains(['"', '`', '$', '\\', '%']) {
+            assert!(written.contains(&format!("Exec=\"{}\" %u", exe.display())));
+        }
         assert_eq!(
             std::fs::metadata(&entry)?.permissions().mode() & 0o777,
             0o644
         );
+        let icon = dir.join("icons/hicolor/256x256/apps/rust-microsip.png");
+        assert_eq!(
+            std::fs::read(&icon)?,
+            super::super::ICON,
+            "icon beside the entry"
+        );
         // Reinstalling replaces it atomically and leaves no temporary file.
         run(&mut st, &b, &[Action::InstallLinkHandler]);
         assert_eq!(std::fs::read_dir(dir.join("applications"))?.count(), 1);
+        assert_eq!(std::fs::read_dir(icon.parent().unwrap_or(&dir))?.count(), 1);
         // An entry that differs from ours (edited or foreign) is kept.
         let edited = rust_microsip_platform::DESKTOP_ENTRY.replace("%u", "--bogus %u");
         std::fs::write(&entry, &edited)?;
@@ -2676,6 +2725,7 @@ mod tests {
         run(&mut st, &b, &[Action::InstallLinkHandler]);
         run(&mut st, &b, &[Action::RemoveLinkHandler]);
         assert!(!entry.exists());
+        assert!(!icon.exists(), "our icon is removed with the entry");
         run(&mut st, &b, &[Action::RemoveLinkHandler]);
         assert_eq!(
             st.notice(Instant::now()),
