@@ -14,3 +14,5 @@ For structural code discovery, prefer the `codebase-memory` skill and the `codeb
 - Write all code, comments, CLI messages, documentation, and OpenSpec tasks in English.
 - Commit and push each verified milestone to the existing remote. Never include local-only references, secrets, or generated artifacts; release publication still requires all release gates.
 - Do not publish absolute personal home paths in documentation or examples. Use repository-relative paths or neutral placeholders and check staged content before every push.
+- At the start of each implementation turn and each milestone update, report the active OpenSpec change/task, verified completed/total tasks, remaining work, and genuine blockers. Distinguish main-release progress from linked CLI/MCP progress; do not invent completion percentages or delivery dates.
+- Use the Claude CLI for parallel native-UI implementation when the work has explicit file ownership and sanitized context. Begin with the G0 UI spike until its gates are proven; keep independent Claude reviews read-only and never equate UI generation with functional-call or release acceptance.
