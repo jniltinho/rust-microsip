@@ -35,7 +35,7 @@ password_env = "RUST_MICROSIP_SIP_PASSWORD"
 
 and export the password in that environment variable before starting. Passwords are never accepted as command-line arguments. `rust-microsip --doctor` prints a sanitized report of the effective configuration and where each value came from; `rust-microsip config validate` and `config export` check and print it without secrets.
 
-While the window runs, `rust-microsip status`, `rust-microsip call dial 1002` and `rust-microsip mcp --stdio` (for AI agents) control it locally; every change waits for **Allow** in the window. See [docs/agent-cli-mcp.md](docs/agent-cli-mcp.md) (preview: grants and the headless service are not available yet).
+While the window runs, `rust-microsip status`, `rust-microsip call dial 1002` and `rust-microsip mcp --stdio` (for AI agents) control it locally; every change waits for **Allow** in the window unless a person issued a scoped grant in Settings → Agent access. `rust-microsip service` runs without a window from a single-use bootstrap exported there. See [docs/agent-cli-mcp.md](docs/agent-cli-mcp.md) (preview).
 
 ## Proposal
 
