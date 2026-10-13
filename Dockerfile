@@ -138,6 +138,37 @@ if any(marker in p.read_text(errors="replace") for p in files):
     raise SystemExit("CONTEXT_REJECTED: synthetic private content")
 PY
 
+# Lab suite (docker/asterisk/suite.sh): the release app and the production
+# engine examples with a private X server and AT-SPI. Local test image only;
+# never published. Scenario scripts are mounted read-only at run time.
+# `build` is FROM `verify`: building this stage runs fmt, clippy, all
+# workspace tests and rustdoc for the same sources first.
+FROM build AS suite-build
+RUN --network=none cargo build -p rust-microsip-telephony --example engine_lab --example engine_network \
+        --release --frozen --target x86_64-unknown-linux-gnu
+FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS suite-runner
+COPY --from=bootstrap-ca /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+RUN printf '%s\n' \
+        'Types: deb' \
+        'URIs: https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/' \
+        'Suites: noble noble-updates noble-security' \
+        'Components: main universe' \
+        'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
+        'Check-Valid-Until: no' > /etc/apt/sources.list.d/ubuntu.sources \
+    && apt-get update --error-on=any \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        libasound2t64 libx11-6 libx11-xcb1 libxcb1 libxkbcommon0 libxkbcommon-x11-0 \
+        libwayland-client0 libwayland-cursor0 libwayland-egl1 \
+        libegl1 libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers \
+        xvfb x11-apps xdotool imagemagick procps \
+        dbus dbus-x11 at-spi2-core python3-pyatspi gir1.2-atspi-2.0 \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/rust-microsip /usr/local/bin/rust-microsip
+COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_lab /usr/local/bin/engine-lab
+COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_network /usr/local/bin/engine-network
+COPY --from=suite-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-suite/
+USER 10001:10001
+
 # Lab-only probe: same adapter source/lock as the workspace, not a client release.
 FROM verify AS g0-registration-build
 RUN --network=none cargo build -p rust-microsip-telephony --example g0_registration --release --frozen --target x86_64-unknown-linux-gnu
@@ -192,32 +223,3 @@ COPY --from=g0-transfer-build /opt/rust-licenses /usr/share/rust-microsip-g0/too
 COPY --from=g0-transfer-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/g0-transfer"]
-
-# Lab suite (docker/asterisk/suite.sh): the release app and the production
-# engine examples with a private X server and AT-SPI. Local test image only;
-# never published. Scenario scripts are mounted read-only at run time.
-FROM build AS suite-build
-RUN --network=none cargo build -p rust-microsip-telephony --example engine_lab --example engine_network \
-        --release --frozen --target x86_64-unknown-linux-gnu
-FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS suite-runner
-COPY --from=bootstrap-ca /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
-RUN printf '%s\n' \
-        'Types: deb' \
-        'URIs: https://snapshot.ubuntu.com/ubuntu/20261001T000000Z/' \
-        'Suites: noble noble-updates noble-security' \
-        'Components: main universe' \
-        'Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg' \
-        'Check-Valid-Until: no' > /etc/apt/sources.list.d/ubuntu.sources \
-    && apt-get update --error-on=any \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        libasound2t64 libx11-6 libx11-xcb1 libxcb1 libxkbcommon0 libxkbcommon-x11-0 \
-        libwayland-client0 libwayland-cursor0 libwayland-egl1 \
-        libegl1 libgl1-mesa-dri libglx-mesa0 mesa-vulkan-drivers \
-        xvfb x11-apps xdotool imagemagick procps \
-        dbus dbus-x11 at-spi2-core python3-pyatspi gir1.2-atspi-2.0 \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/rust-microsip /usr/local/bin/rust-microsip
-COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_lab /usr/local/bin/engine-lab
-COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_network /usr/local/bin/engine-network
-COPY --from=suite-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-suite/
-USER 10001:10001

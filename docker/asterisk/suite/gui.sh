@@ -28,7 +28,11 @@ python3 -I -c 'import gi; gi.require_version("Atspi", "2.0"); from gi.repository
 
 phase() { touch "/capture/phase-$1"; }
 # A phase the host inspects: wait until it has checked the PBX.
-checkpoint() { phase "$1"; timeout 60 sh -c "until [ -e /capture/ack-$1 ]; do sleep 0.2; done"; }
+checkpoint() {
+    phase "$1"
+    timeout 60 sh -c "until [ -e /capture/ack-$1 ]; do sleep 0.2; done" \
+        || echo "no host check at $1" >> /capture/failure
+}
 shot() { xwd -id "$window" -silent -out /tmp/shot.xwd && convert /tmp/shot.xwd "/capture/$1.png"; }
 # Mean brightness of a capture in percent (theme check).
 brightness() { convert "/capture/$1.png" -colorspace Gray -format '%[fx:int(100*mean)]' info:; }
@@ -92,9 +96,9 @@ case "$scenario" in
         xdotool type --delay 80 600; sleep 1; tabs pre 18
         xdotool key Return; sleep 6; checkpoint in-call
         tabs call 24
-        $tool sweep "In call" > /capture/screens.txt; echo "call_sweep_exit=$?" >> /capture/results.txt
+        $tool sweep "In call" End > /capture/screens.txt; echo "call_sweep_exit=$?" >> /capture/results.txt
         $tool press XFER >> /capture/atspi-steps.txt
-        $tool sweep "Transfer" >> /capture/screens.txt; echo "transfer_sweep_exit=$?" >> /capture/results.txt
+        $tool sweep "Transfer" "Transfer to" >> /capture/screens.txt; echo "transfer_sweep_exit=$?" >> /capture/results.txt
         $tool press Cancel End >> /capture/atspi-steps.txt; sleep 2; checkpoint ended
         stop_app app ;;
     *) echo "unknown scenario $scenario" > /capture/failure ;;

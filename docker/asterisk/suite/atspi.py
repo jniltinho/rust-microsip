@@ -1,6 +1,6 @@
 """Drive and inspect the rust-microsip window over AT-SPI (AccessKit).
 
-Usage: atspi.py press NAME... | sweep LABEL | screens | focused
+Usage: atspi.py press NAME... | sweep LABEL [MARKER] | screens | focused
 Runs inside the suite container's private D-Bus session; fictional data only.
 """
 
@@ -22,6 +22,9 @@ def app():
     return None
 
 
+ERRORS = []
+
+
 def nodes(node, out):
     try:
         out.append(node)
@@ -29,9 +32,13 @@ def nodes(node, out):
             child = node.get_child_at_index(index)
             if child is not None:
                 nodes(child, out)
-    except Exception:  # nodes can vanish between frames
-        pass
+    except Exception as error:  # nodes can vanish between frames; counted
+        ERRORS.append(type(error).__name__)
     return out
+
+
+def named(node):
+    return bool((node.get_name() or "").strip())
 
 
 def wait_for_window():
@@ -48,28 +55,33 @@ def press(name):
     for node in nodes(wait_for_window(), []):
         if node.get_name() == name:
             action = node.get_action_iface()
-            if action is not None and action.get_n_actions() > 0:
-                action.do_action(0)
+            if action is not None and action.get_n_actions() > 0 and action.do_action(0):
                 time.sleep(1.5)
                 return True
     print(f"NOT_FOUND {name!r}")
     return False
 
 
-def sweep(label):
-    """Print focusable/editable nodes; return how many have no name."""
-    found = []
+def sweep(label, marker=None, minimum=5):
+    """Print focusable/editable nodes; return the number of problems: nodes
+    without a name, a missing screen marker, too few nodes, or read errors."""
+    found, unnamed, names = [], 0, set()
+    del ERRORS[:]
     for node in nodes(wait_for_window(), []):
+        names.add(node.get_name())
         states = node.get_state_set()
         if states.contains(Atspi.StateType.FOCUSABLE) or states.contains(
             Atspi.StateType.EDITABLE
         ):
             found.append(f"{node.get_role_name()}: {node.get_name()!r}")
-    unnamed = sum(1 for line in found if line.endswith("''"))
-    print(f"== {label}: {len(found)} focusable, {unnamed} unnamed")
+            unnamed += not named(node)
+    missing = marker is not None and marker not in names
+    problems = unnamed + len(ERRORS) + (len(found) < minimum) + missing
+    print(f"== {label}: {len(found)} focusable, {unnamed} unnamed,"
+          f" marker {marker!r} {'missing' if missing else 'present'}, {len(ERRORS)} read errors")
     for line in found:
         print("   ", line)
-    return unnamed
+    return problems
 
 
 def focused():
@@ -82,19 +94,24 @@ def focused():
     return "none"
 
 
+# Each screen is identified by a control only it shows.
+SCREENS = [
+    ([], "Phone", "Number to call"),
+    (["Calls"], "Calls", "Missed"),
+    (["Contacts"], "Contacts", "Import"),
+    (["Add"], "Contact editor", "Add number"),
+    (["Cancel", "Import"], "Import", "Preview"),
+    (["Cancel", "Phone", "Menu", "Settings…"], "Settings", "Save and register"),
+    (["Cancel", "Menu", "About and licenses…"], "About", "Close"),
+]
+
+
 def screens():
-    bad = sweep("Phone")
-    for steps, label in [
-        (["Calls"], "Calls"),
-        (["Contacts"], "Contacts"),
-        (["Add"], "Contact editor"),
-        (["Cancel", "Import"], "Import"),
-        (["Cancel", "Phone", "Menu", "Settings…"], "Settings"),
-        (["Cancel", "Menu", "About and licenses…"], "About"),
-    ]:
+    bad = 0
+    for steps, label, marker in SCREENS:
         if not all(press(step) for step in steps):
             bad += 1
-        bad += sweep(label)
+        bad += sweep(label, marker)
     return bad
 
 
@@ -103,10 +120,11 @@ def main(argv):
     if command == "press":
         return 0 if all(press(name) for name in args) else 1
     if command == "sweep":
-        return 1 if sweep(args[0] if args else "window") else 0
+        label = args[0] if args else "window"
+        return 1 if sweep(label, args[1] if len(args) > 1 else None) else 0
     if command == "screens":
         bad = screens()
-        print("UNNAMED_TOTAL", bad)
+        print("SCREENS", len(SCREENS), "PROBLEMS", bad)
         return 1 if bad else 0
     if command == "focused":
         print(focused())

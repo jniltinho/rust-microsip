@@ -786,7 +786,14 @@ fn desktop(args: &CliArgs) -> ExitCode {
         // After SIGTERM/SIGINT: 143 or 130, as if killed by the signal.
         Ok(()) => match signal_code.load(Ordering::SeqCst) {
             0 => ExitCode::SUCCESS,
-            code => ExitCode::from(code),
+            code => {
+                // The window closed and the engine shut down normally.
+                let _ = writeln!(
+                    std::io::stderr().lock(),
+                    "rust-microsip: closed after signal"
+                );
+                ExitCode::from(code)
+            }
         },
         Err(_) => fail(
             "rust-microsip: cannot open the window (no usable display or graphics driver)",
