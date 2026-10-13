@@ -18,7 +18,7 @@ The SRTP packet adapter proven in the isolated experiments was adopted unchanged
 
 ## Runtime evidence
 
-`crates/telephony/examples/engine_lab.rs` drives two real engines (test `MediaIo` with 440/880 Hz tones and Goertzel meters) through the lab PBX, once per profile. Final run after the review fixes: log SHA-256 `2c0b85abfeae6c956fe99d29f7d5cc5036d66f59df97edfe60b12078f5b3f87e`; example ELF `073d03a9f21a41652256177dac71be46066e141ffa0b798fd58d0f70945d66af`.
+`crates/telephony/examples/engine_lab.rs` drives two real engines (test `MediaIo` with 440/880 Hz tones and Goertzel meters) through the lab PBX, once per profile. Final run after the review fixes: log SHA-256 `7cb7292ee3cf66bc4b16b7c2d864340cede8d5fe3ab157f5477b53ccfca33feb`; example ELF `a0d0ccd10df7803438f4108945077e31174954478986c87ad7eada4b69fe6d13`.
 
 | Step | UDP / RTP (1001→1002) | TLS / SRTP (1201→1202) |
 | --- | --- | --- |
@@ -33,6 +33,10 @@ The SRTP packet adapter proven in the isolated experiments was adopted unchanged
 | Reject / caller cancel / DND | Busy / Canceled on both sides / Busy | same |
 | Bounded shutdown | both engines stopped | same |
 | TLS negatives (untrusted CA, IP-literal server, PEM without certificates) | — | each `Failed(Certificate)`, never registered |
+| Wrong password | `Failed(Unauthorized)`, exactly one REGISTER attempt in 15 s (no automatic retry) | — |
+| Second incoming call while busy (third party on a **TCP** account) | refused with 486 (`Busy` at the caller), never shown to the busy callee; the active call kept two-way audio (76 frames, ratio ≥ 1661) while DND was switched on mid-call | — |
+| Reverse direction (B calls A, A answers and hangs up) | two-way audio, callee sees `Normal` | same |
+| CANCEL racing the callee's 200 OK (3 runs) | no call left on either side; caller `Canceled`, callee `Normal` | same |
 
 Two engine defects found by these runs were fixed before this receipt: a jitter buffer that discarded a new RTP source after a PBX bridge change (now restarts on SSRC change or a long late streak, with a unit test), and test-harness races (mute criterion, DND end detection).
 

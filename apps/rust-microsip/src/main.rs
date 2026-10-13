@@ -3,18 +3,27 @@
 //! Without a command it opens the window, starts the telephony engine on its
 //! own thread and connects the ALSA audio bridge (falling back to silence with
 //! a visible notice). A missing or invalid configuration never blocks the
-//! window: settings stay reachable and SIP simply does not start.
+//! window: settings stay reachable and SIP simply does not start. History and
+//! contacts use SQLite under the XDG data directory; if it cannot be opened,
+//! an in-memory store keeps the session working with a visible warning.
 
-use rust_microsip::ui::{self, Backend, Theme, UiSettings};
-use rust_microsip_audio::DeviceMedia;
+use rust_microsip::ui::{self, Backend, External, Storage, Theme, UiSettings};
+use rust_microsip_audio::{AudioDevices, DeviceMedia};
 use rust_microsip_config::{
     self as config, CliArgs, CliCommand, ConfigError, DoctorReport, EffectiveConfig,
     ResolveContext, StoredConfig,
 };
-use rust_microsip_core::{Command, Event, MediaIo, Notice, NullMedia};
+use rust_microsip_core::{
+    CallId, CallPhase, Command, Direction, Event, MediaIo, Notice, NullMedia,
+};
+use rust_microsip_platform::{
+    Ack, Acquired, CallAction, InstanceError, Listener, Notifier, Request, acquire,
+    default_runtime_dir, parse_dial_uri,
+};
+use rust_microsip_storage::{DEFAULT_RETENTION_DAYS, Store};
 use rust_microsip_telephony::engine::{EngineHandle, TrustAnchors};
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     io::Write,
     path::PathBuf,
     process::ExitCode,
@@ -38,6 +47,37 @@ struct EngineBackend {
     engine: Option<EngineHandle>,
     repaint: Arc<OnceLock<eframe::egui::Context>>,
     pending: RefCell<Vec<Event>>,
+    /// Single-instance listener (requests from later launches).
+    listener: Option<Listener>,
+    external: RefCell<Vec<External>>,
+    notifier: Notifier,
+    ringing: Cell<Option<CallId>>,
+}
+impl EngineBackend {
+    /// Mirror incoming-call state into a desktop notification and turn its
+    /// actions into commands, only while that same call is still ringing.
+    fn notify(&self, events: &[Event]) {
+        for event in events {
+            let Event::Call(call) = event else { continue };
+            let ringing = call.direction == Direction::Incoming && call.phase == CallPhase::Ringing;
+            if ringing && self.ringing.get() != Some(call.id) {
+                let _ = self.notifier.incoming_call(call.id, &call.remote);
+                self.ringing.set(Some(call.id));
+            } else if !ringing && self.ringing.get() == Some(call.id) {
+                let _ = self.notifier.close(call.id);
+                self.ringing.set(None);
+            }
+        }
+        while let Some(action) = self.notifier.try_recv_action() {
+            if self.ringing.get() == Some(action.call) {
+                let command = match action.action {
+                    CallAction::Answer => Command::Answer(action.call),
+                    CallAction::Reject => Command::Reject(action.call),
+                };
+                let _ = self.send(command);
+            }
+        }
+    }
 }
 impl Backend for EngineBackend {
     fn send(&self, command: Command) -> Result<(), Notice> {
@@ -51,10 +91,32 @@ impl Backend for EngineBackend {
         if let Some(engine) = &self.engine {
             events.extend(engine.try_events());
         }
+        self.notify(&events);
         events
     }
+    fn external(&self) -> Vec<External> {
+        let mut out = std::mem::take(&mut *self.external.borrow_mut());
+        if let Some(listener) = &self.listener {
+            while let Some(request) = listener.try_recv() {
+                out.push(match request {
+                    Request::Activate => External::Activate,
+                    Request::Dial(target) => External::Dial(target),
+                });
+            }
+        }
+        out
+    }
     fn attach_context(&self, ctx: &eframe::egui::Context) {
+        let window = ctx.clone();
+        let waker: rust_microsip_platform::Waker = Arc::new(move || window.request_repaint());
+        if let Some(listener) = &self.listener {
+            listener.set_waker(waker.clone());
+        }
+        self.notifier.set_waker(waker);
         let _ = self.repaint.set(ctx.clone());
+    }
+    fn audio_devices(&self) -> Option<AudioDevices> {
+        AudioDevices::enumerate().ok()
     }
 }
 impl Drop for EngineBackend {
@@ -81,7 +143,96 @@ fn config_theme(theme: Theme) -> config::Theme {
     }
 }
 
+/// `$XDG_DATA_HOME/rust-microsip/rust-microsip.sqlite3`, falling back to
+/// `$HOME/.local/share`; only absolute paths from the environment snapshot,
+/// never the working directory.
+fn store_path(env: &std::collections::BTreeMap<String, String>) -> Option<PathBuf> {
+    let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
+    let base = abs("XDG_DATA_HOME").or_else(|| abs("HOME").map(|h| h.join(".local/share")))?;
+    Some(base.join("rust-microsip").join("rust-microsip.sqlite3"))
+}
+
+/// Open the history store and apply retention. Never deletes the file: on
+/// failure the session uses an in-memory store and says so.
+fn open_storage(env: &std::collections::BTreeMap<String, String>) -> Storage {
+    let opened = store_path(env)
+        .ok_or_else(|| "no data directory (XDG_DATA_HOME/HOME) is available".to_owned())
+        .and_then(|path| Store::open(&path).map_err(|e| e.to_string()));
+    match opened {
+        Ok(mut store) => {
+            if let Err(error) = store.prune_older_than(DEFAULT_RETENTION_DAYS) {
+                let _ = writeln!(
+                    std::io::stderr().lock(),
+                    "rust-microsip: history retention not applied: {error}"
+                );
+            }
+            Storage {
+                store: Some(store),
+                warning: None,
+            }
+        }
+        Err(error) => {
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "rust-microsip: history storage unavailable: {error}"
+            );
+            Storage {
+                store: Store::open_in_memory().ok(),
+                warning: Some(
+                    "History and contacts are not saved to disk in this session.".to_owned(),
+                ),
+            }
+        }
+    }
+}
+
 fn desktop(args: &CliArgs) -> ExitCode {
+    // A link is validated before anything else; it only ever fills the number.
+    let request = match args.uri.as_deref().map(parse_dial_uri) {
+        None => Request::Activate,
+        Some(Ok(target)) => Request::Dial(target),
+        Some(Err(error)) => return fail(&format!("rust-microsip: link not accepted: {error}"), 2),
+    };
+    // Single instance: a later launch hands its request to the running window
+    // and exits before touching SIP, audio or the database.
+    let listener = match default_runtime_dir().and_then(|dir| acquire(&dir, &request)) {
+        Ok(Acquired::Owner(listener)) => Some(listener),
+        Ok(Acquired::Forwarded(Ack::Ok)) => return ExitCode::SUCCESS,
+        Ok(Acquired::Forwarded(ack)) => {
+            return fail(
+                &format!("rust-microsip: the running instance answered {ack:?}"),
+                1,
+            );
+        }
+        // Another instance holds the lock but did not answer: never start a
+        // second full instance (duplicate registration and database writers).
+        Err(error @ (InstanceError::NoResponse | InstanceError::Protocol)) => {
+            return fail(
+                &format!("rust-microsip: another instance is running but did not respond: {error}"),
+                1,
+            );
+        }
+        // An unsafe runtime directory is a configuration problem to fix, not
+        // a reason to run unprotected.
+        Err(error @ (InstanceError::Insecure(_) | InstanceError::Io { .. })) => {
+            return fail(
+                &format!("rust-microsip: cannot ensure a single instance: {error}"),
+                1,
+            );
+        }
+        // Sessions without XDG_RUNTIME_DIR: documented degraded mode.
+        Err(error) => {
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "rust-microsip: single-instance protection unavailable: {error}"
+            );
+            None
+        }
+    };
+    let initial = match request {
+        Request::Dial(target) => vec![External::Dial(target)],
+        Request::Activate => Vec::new(),
+    };
     let ctx = match ResolveContext::from_process(args) {
         Ok(ctx) => ctx,
         Err(error) => return fail(&format!("rust-microsip: {error}"), 1),
@@ -164,7 +315,10 @@ fn desktop(args: &CliArgs) -> ExitCode {
         theme: stored
             .as_ref()
             .map_or(Theme::System, |s| ui_theme(s.ui.theme)),
+        audio_input: audio_prefs.input_device.clone(),
+        audio_output: audio_prefs.output_device.clone(),
     };
+    let storage = open_storage(&ctx.env);
     let mut base = stored;
     let save: ui::SaveSettings = Box::new(move |settings: &UiSettings| {
         let Some(path) = save_path.as_ref() else {
@@ -183,6 +337,8 @@ fn desktop(args: &CliArgs) -> ExitCode {
         });
         next.account = account;
         next.ui.theme = config_theme(settings.theme);
+        next.audio.input_device.clone_from(&settings.audio_input);
+        next.audio.output_device.clone_from(&settings.audio_output);
         config::save(&next, path).map_err(|_| "Settings could not be saved.".to_owned())?;
         base = Some(next);
         Ok(())
@@ -191,8 +347,12 @@ fn desktop(args: &CliArgs) -> ExitCode {
         engine: Some(engine),
         repaint,
         pending: RefCell::new(notices),
+        listener,
+        external: RefCell::new(initial),
+        notifier: Notifier::session(),
+        ringing: Cell::new(None),
     };
-    match ui::run(Box::new(backend), settings, save) {
+    match ui::run(Box::new(backend), settings, save, storage) {
         Ok(()) => ExitCode::SUCCESS,
         Err(_) => fail(
             "rust-microsip: cannot open the window (no usable display or graphics driver)",

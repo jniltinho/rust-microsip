@@ -1,0 +1,17 @@
+[package]
+name = "rust-microsip-platform"
+description = "Linux desktop integration: single instance, local IPC, sip: URIs and notifications"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+rust-microsip-core = { path = "../core" }
+zbus = { version = "=5.19.0", default-features = false, features = ["async-io"] }
+thiserror = "=2.0.21"
+
+[lints]
+workspace = true

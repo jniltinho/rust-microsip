@@ -26,6 +26,8 @@ files += sorted((root / 'crates').rglob('*.rs'))
 files += sorted((root / 'crates').rglob('Cargo.toml'))
 files += sorted((root / 'packaging').glob('*.sh'))
 files += sorted((root / 'packaging').rglob('*.py'))
+files += sorted(p for p in (root / 'packaging' / 'appimage').rglob('*') if p.is_file())
+files += sorted((root / 'apps' / 'rust-microsip' / 'assets').rglob('*.svg'))
 sources = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
 digest = hashlib.sha256(json.dumps(sources, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
 version = subprocess.check_output(['/out/rust-microsip', '--version'], text=True).split()[1]
@@ -42,7 +44,7 @@ report.update({
     'rust_version': rust_version,
     'ubuntu_snapshot': snapshot,
     'ubuntu_image': ubuntu_image,
-    'scope': 'desktop ELF: egui UI, SIP/RTP/SRTP engine, ALSA audio, TOML config; no SQLite, IPC, tray or AppImage yet',
+    'scope': 'desktop ELF: egui UI, SIP/RTP/SRTP engine, ALSA audio, TOML config, SQLite history/contacts, single instance, notifications; the AppImage wraps the same ELF',
 })
 pathlib.Path('/out/build-manifest.json').write_text(json.dumps(report, indent=2) + '\n')
 sbom = {

@@ -562,8 +562,21 @@ fn cli_arguments() {
             command: CliCommand::Doctor { json: true },
             config: Some("/x/password.toml".into()),
             env_file: Some("/y.env".into()),
+            uri: None,
         })
     );
+    // One sip:/tel: link in run mode; never together with another command.
+    assert_eq!(
+        parse(&["sip:1002@pbx.invalid"]).map(|a| a.uri),
+        Ok(Some("sip:1002@pbx.invalid".into()))
+    );
+    assert_eq!(
+        parse(&["TEL:+5511"]).map(|a| a.command),
+        Ok(CliCommand::Run)
+    );
+    assert_eq!(parse(&["sip:1", "sip:2"]), Err(CliError::Duplicate("URI")));
+    assert_eq!(parse(&["--doctor", "sip:1"]), Err(CliError::Conflict));
+    assert_eq!(parse(&["sipx:1"]), Err(CliError::UnknownArgument));
     assert_eq!(
         parse(&["config", "validate"]).map(|a| a.command),
         Ok(CliCommand::ConfigValidate)

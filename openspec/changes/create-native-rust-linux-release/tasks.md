@@ -30,8 +30,8 @@
 ## 4. Complete release telephony
 
 - [ ] 4.1 Consolidate registration, renewal, and per-transport backoff in the selected adapter; verify 401/407, wrong passwords, duplicate accounts, and no infinite retries (SIP-01, SIP-02).
-- [ ] 4.2 Implement incoming/outgoing calls, acceptance/rejection, BYE/CANCEL; verify both directions and the CANCEL/200 OK race without ghost sessions (SIP-03, SIP-04).
-- [ ] 4.3 Implement busy and DND with coherent state; verify a second incoming call preserves the active call and DND does not interrupt it (SIP-05, SIP-07).
+- [x] 4.2 Implement incoming/outgoing calls, acceptance/rejection, BYE/CANCEL; verify both directions and the CANCEL/200 OK race without ghost sessions (SIP-03, SIP-04). Completed: the [production engine receipt](../../../docs/receipts/production-engine-2026-10-13.md) covers calls in both directions, answer, reject, BYE and CANCEL, and three CANCEL/200 OK races that left no call on either side, over UDP/RTP and TLS/SRTP.
+- [x] 4.3 Implement busy and DND with coherent state; verify a second incoming call preserves the active call and DND does not interrupt it (SIP-05, SIP-07). Completed: the [production engine receipt](../../../docs/receipts/production-engine-2026-10-13.md) shows a second incoming call (TCP account) refused with 486 while the active call kept two-way audio with DND switched on mid-call, and DND answering new calls with 486.
 - [x] 4.4 Consolidate DTMF and hold/resume re-INVITE; verify the IVR recognizes the sequence and audio is restored (SIP-06). Completed: the [production engine receipt](../../../docs/receipts/production-engine-2026-10-13.md) shows DTMF `123` selecting the IVR 1 kHz branch and two-way audio restored after hold/resume (holder hears 0 frames while held), over UDP/RTP and TLS/SRTP.
 - [x] 4.5 Consolidate blind transfer with NOTIFY; verify final success and an invalid destination without losing the original call when its dialog is preserved (SIP-08). Completed: the [production engine receipt](../../../docs/receipts/production-engine-2026-10-13.md) shows a transfer to the 1 kHz route ending the transferor's call and the transferee hearing the destination, and a transfer to a missing route reporting final NOTIFY 404 while the original call keeps two-way audio.
 - [ ] 4.6 Implement TLS/custom-CA validation and network/suspend recovery; verify negative certificates, bounded retries, and no automatic redial (SIP-09, SIP-10).
@@ -46,10 +46,10 @@
 
 ## 6. Contacts and history
 
-- [ ] 6.1 Implement SQLite contacts, multiple numbers, and favorites; verify persistence, search, and selection before dialing (CH-01).
-- [ ] 6.2 Implement bounded, transactional CSV preview/import; verify duplicates, UTF-8, size, and invalid records without partial writes (CH-02).
+- [x] 6.1 Implement SQLite contacts, multiple numbers, and favorites; verify persistence, search, and selection before dialing (CH-01). Completed: [integration and persistence receipt](../../../docs/receipts/integration-persistence-2026-10-13.md): SQLite contacts with multiple numbers and favorites, literal search and number selection before dialing (storage and reducer tests).
+- [x] 6.2 Implement bounded, transactional CSV preview/import; verify duplicates, UTF-8, size, and invalid records without partial writes (CH-02). Completed: [integration and persistence receipt](../../../docs/receipts/integration-persistence-2026-10-13.md): bounded RFC 4180 preview with per-line issues, duplicate handling, UTF-8 input, size/record limits and an all-or-nothing transactional import (tests include forced rollback).
 - [ ] 6.3 Persist session outcomes, monotonic duration, and crash recovery; verify session uniqueness and real outcomes (CH-03).
-- [ ] 6.4 Implement filters, local search, 90-day retention, and confirmed cleanup; verify zero search traffic and removal of active entries (CH-04).
+- [x] 6.4 Implement filters, local search, 90-day retention, and confirmed cleanup; verify zero search traffic and removal of active entries (CH-04). Completed: [integration and persistence receipt](../../../docs/receipts/integration-persistence-2026-10-13.md): history filters, local-only search, 90-day pruning at start and confirmed deletion/clear of entries.
 
 ## 7. Compact MicroSIP UI and themes
 
@@ -63,7 +63,7 @@
 
 - [ ] 8.1 Implement optional notifications and tray; verify desktops with and without support and always-accessible incoming calls (LIN-01).
 - [ ] 8.2 Implement URI parsing and opt-in integration; verify confirmation, CR/LF, long input, and rejected shell commands (LIN-02).
-- [ ] 8.3 Implement single instance and protected local IPC; verify a second instance causes neither new registration nor destructive database contention (LIN-03).
+- [x] 8.3 Implement single instance and protected local IPC; verify a second instance causes neither new registration nor destructive database contention (LIN-03). Completed: [integration and persistence receipt](../../../docs/receipts/integration-persistence-2026-10-13.md): a second launch forwards over the private socket and exits before SIP, audio or the database are touched (GUI smoke: exit 0, no second registration); unresponsive owners and unsafe runtime directories stop the launch.
 - [ ] 8.4 Implement close/hide/quit, confirmation, and bounded shutdown; verify exit during a call, SIGTERM, an unresponsive PBX, and released audio (LIN-04).
 
 ## 9. Build, security, and release candidate

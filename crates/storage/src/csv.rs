@@ -6,6 +6,9 @@ use crate::{
 };
 use std::collections::HashMap;
 
+/// Columns a CSV row may have (`name,number[,label]`).
+const MAX_FIELDS: usize = 3;
+
 /// Maximum CSV input size in bytes (10 MiB).
 pub const CSV_MAX_BYTES: usize = 10 * 1024 * 1024;
 /// Maximum data records per CSV file, excluding the header.
@@ -195,7 +198,14 @@ fn parse(input: &str) -> Result<Vec<Row>> {
         }
         match c {
             ',' => {
-                row.fields.push(std::mem::take(&mut field));
+                // At most name,number,label: extra fields mark the row
+                // malformed instead of allocating one string per comma.
+                if row.fields.len() >= MAX_FIELDS {
+                    row.malformed = true;
+                    field.clear();
+                } else {
+                    row.fields.push(std::mem::take(&mut field));
+                }
                 (quoted, closed) = (false, false);
             }
             '\r' if chars.peek() == Some(&'\n') => {}

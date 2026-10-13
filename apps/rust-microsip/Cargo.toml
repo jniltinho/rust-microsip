@@ -13,6 +13,8 @@ rust-microsip-core = { path = "../../crates/core" }
 rust-microsip-telephony = { path = "../../crates/telephony" }
 rust-microsip-audio = { path = "../../crates/audio" }
 rust-microsip-config = { path = "../../crates/config" }
+rust-microsip-storage = { path = "../../crates/storage" }
+rust-microsip-platform = { path = "../../crates/platform" }
 eframe = { version = "=0.36.2", default-features = false, features = ["wgpu_no_default_features", "wayland", "x11", "accesskit"] }
 wgpu = { version = "=30.0.0", default-features = false, features = ["std", "parking_lot", "vulkan", "gles", "wgsl"] }
 secrecy = "=0.10.3"

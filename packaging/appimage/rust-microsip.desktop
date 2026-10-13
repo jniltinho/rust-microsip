@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=rust-microsip
+Comment=SIP softphone
+Exec=rust-microsip
+Icon=rust-microsip
+Terminal=false
+Categories=Network;Telephony;
+StartupWMClass=rust-microsip

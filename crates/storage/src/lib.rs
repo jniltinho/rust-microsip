@@ -757,6 +757,16 @@ impl Store {
                     for n in &contact.numbers {
                         added += stmt.execute(params![id, n.number, n.label])?;
                     }
+                    let total: i64 = tx.query_row(
+                        "SELECT COUNT(*) FROM contact_numbers WHERE contact_id = ?1",
+                        [id],
+                        |row| row.get(0),
+                    )?;
+                    // The per-contact bound holds for merged contacts too;
+                    // returning rolls back the whole import.
+                    if total > MAX_NUMBERS_PER_CONTACT as i64 {
+                        return Err(StorageError::Invalid(InvalidField::NumberCount));
+                    }
                     if added > 0 {
                         summary.contacts_merged += 1;
                         summary.numbers_added += added;

@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 /// Usage text for `--help`.
 pub const HELP: &str = "\
-Usage: rust-microsip [OPTIONS] [COMMAND]
+Usage: rust-microsip [OPTIONS] [COMMAND | sip:URI | tel:URI]
 
 Options:
   --config PATH     Use this TOML file instead of the XDG default
@@ -18,7 +18,8 @@ Commands:
   config validate   Validate the effective configuration and exit
   config export     Print the effective configuration as TOML (without secrets)
 
-Passwords are never accepted as arguments; use password_env, a private
+A sip: or tel: link fills the number in the running window; it never dials
+without confirmation. Passwords are never accepted as arguments; use password_env, a private
 password_file, or the interactive prompt.
 ";
 
@@ -52,6 +53,8 @@ pub struct CliArgs {
     pub config: Option<PathBuf>,
     /// `--env-file PATH`.
     pub env_file: Option<PathBuf>,
+    /// One `sip:`/`tel:` link to hand to the window (validated by the caller).
+    pub uri: Option<String>,
 }
 
 /// Argument error. Never includes the offending argument, which may be a secret.
@@ -76,8 +79,13 @@ pub enum CliError {
     PasswordNotAccepted,
 }
 
+fn is_link(arg: &str) -> bool {
+    let lower = arg.get(..4).map(str::to_ascii_lowercase);
+    matches!(lower.as_deref(), Some("sip:" | "tel:"))
+}
+
 /// Parse arguments, excluding the program name (`std::env::args_os().skip(1)`).
-/// Supports `--opt VALUE` and `--opt=VALUE`.
+/// Supports `--opt VALUE` and `--opt=VALUE`, and one `sip:`/`tel:` link in run mode.
 ///
 /// # Errors
 /// [`CliError`] for unknown, duplicate, conflicting or password arguments.
@@ -126,8 +134,17 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliArgs, C
                     _ => return Err(CliError::UnknownArgument),
                 }
             }
+            _ if is_link(name) && inline.is_none() => {
+                if out.uri.is_some() {
+                    return Err(CliError::Duplicate("URI"));
+                }
+                out.uri = Some(text.to_owned());
+            }
             _ => return Err(CliError::UnknownArgument),
         }
+    }
+    if out.uri.is_some() && out.command != CliCommand::Run {
+        return Err(CliError::Conflict);
     }
     if json {
         match &mut out.command {

@@ -23,6 +23,9 @@ apps/rust-microsip/assets/**
 !apps/rust-microsip/assets/NotoSans-Regular.ttf
 !apps/rust-microsip/assets/OFL.txt
 !apps/rust-microsip/assets/source.json
+!apps/rust-microsip/assets/icons/
+apps/rust-microsip/assets/icons/**
+!apps/rust-microsip/assets/icons/rust-microsip.svg
 !apps/rust-microsip/tests/
 apps/rust-microsip/tests/**
 !apps/rust-microsip/tests/*.rs
@@ -38,6 +41,14 @@ packaging/**
 !packaging/reviewed-licenses.json
 !packaging/third-party-notices/
 !packaging/third-party-notices/**
+!packaging/appimage/
+packaging/appimage/**
+!packaging/appimage/build-appimage.sh
+!packaging/appimage/verify.sh
+!packaging/appimage/pins.txt
+!packaging/appimage/rust-microsip.desktop
+!packaging/appimage/runtime-licenses/
+!packaging/appimage/runtime-licenses/**
 !packaging/tests/
 packaging/tests/**
 !packaging/tests/test_g0_dependencies.py
@@ -95,3 +106,9 @@ crates/storage/src/**
 !crates/storage/tests/
 crates/storage/tests/**
 !crates/storage/tests/*.rs
+!crates/platform/
+crates/platform/**
+!crates/platform/Cargo.toml
+!crates/platform/src/
+crates/platform/src/**
+!crates/platform/src/*.rs

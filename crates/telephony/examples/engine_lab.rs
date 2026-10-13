@@ -201,6 +201,7 @@ fn account(user: &str, transport: Transport, media: MediaSecurity) -> AccountSet
 fn scenario(
     label: &str,
     users: (&str, &str),
+    third: Option<&str>,
     transport: Transport,
     media: MediaSecurity,
     passwords: &BTreeMap<String, String>,
@@ -344,6 +345,104 @@ fn scenario(
     a.send(Command::Hangup(a.id()?))?;
     wait(&mut [&mut a], 10, |s| s[0].call.is_none())?;
 
+    // 6b. Busy: a second incoming call (TCP account) is refused with 486 while
+    // the active call keeps two-way audio.
+    let mut busy_case = serde_json::Value::Null;
+    if let Some(third_user) = third {
+        let mut c = Side::new(660.0)?;
+        let password = passwords.get(third_user).ok_or("password")?;
+        c.send(Command::Register(
+            Box::new(account(third_user, Transport::Tcp, MediaSecurity::PlainRtp)),
+            SecretString::from(password.clone()),
+        ))?;
+        wait(&mut [&mut c], 15, |s| {
+            s[0].registration == RegistrationState::Registered
+        })?;
+        a.send(Command::Dial(target(users.1)?))?;
+        wait(&mut [&mut a, &mut b], 10, |s| {
+            phase(s[1]) == Some(CallPhase::Ringing)
+        })?;
+        b.send(Command::Answer(b.id()?))?;
+        wait(&mut [&mut a, &mut b], 10, |s| {
+            s.iter().all(|s| phase(s) == Some(CallPhase::Established))
+        })?;
+        let b_calls_before = b.events.len();
+        let c_ended_before = c.ended.len();
+        c.send(Command::Dial(target(users.1)?))?;
+        wait(&mut [&mut a, &mut b, &mut c], 15, |s| {
+            s[2].ended.len() > c_ended_before
+        })?;
+        let refused = c.ended.last().map(|x| x.phase);
+        // DND switched on during the active call must not interrupt it.
+        b.send(Command::SetDnd(true))?;
+        let b_saw_second = b.events[b_calls_before..].iter().any(
+            |e| matches!(e, Event::Call(snap) if Some(snap.id) != b.call.as_ref().map(|x| x.id)),
+        );
+        settle(&mut [&mut a, &mut b, &mut c], 0.3);
+        a.measure(&[880.0, 440.0]);
+        b.measure(&[440.0, 880.0]);
+        settle(&mut [&mut a, &mut b, &mut c], 1.5);
+        let kept = [voice(&a, "a during busy")?, voice(&b, "b during busy")?];
+        b.send(Command::SetDnd(false))?;
+        b.send(Command::Hangup(b.id()?))?;
+        wait(&mut [&mut a, &mut b], 10, |s| {
+            s.iter().all(|s| s.call.is_none())
+        })?;
+        let _ = c.engine.shutdown(Duration::from_secs(5));
+        if refused != Some(CallPhase::Ended(EndReason::Busy)) || b_saw_second {
+            return Err(format!(
+                "busy: refused {refused:?} second_seen {b_saw_second}"
+            ));
+        }
+        busy_case = serde_json::json!({"third_party_transport":"tcp","refused":"busy","active_call_kept":kept});
+    }
+
+    // 6d. Reverse direction: B calls A, A answers, two-way audio, A hangs up.
+    b.send(Command::Dial(target(users.0)?))?;
+    wait(&mut [&mut a, &mut b], 10, |s| {
+        phase(s[0]) == Some(CallPhase::Ringing)
+    })?;
+    a.send(Command::Answer(a.id()?))?;
+    wait(&mut [&mut a, &mut b], 10, |s| {
+        s.iter().all(|s| phase(s) == Some(CallPhase::Established))
+    })?;
+    settle(&mut [&mut a, &mut b], 0.5);
+    a.measure(&[880.0, 440.0]);
+    b.measure(&[440.0, 880.0]);
+    settle(&mut [&mut a, &mut b], 1.5);
+    let reverse = [voice(&a, "a reverse")?, voice(&b, "b reverse")?];
+    a.send(Command::Hangup(a.id()?))?;
+    wait(&mut [&mut a, &mut b], 10, |s| {
+        s.iter().all(|s| s.call.is_none())
+    })?;
+    if b.ended.last().map(|x| x.phase) != Some(CallPhase::Ended(EndReason::Normal)) {
+        return Err("reverse: callee hangup not seen as normal".into());
+    }
+
+    // 6c. CANCEL/200 race: the caller hangs up while the callee answers.
+    // Whatever wins, neither side may keep a call.
+    let mut race_outcomes = Vec::new();
+    for _ in 0..3 {
+        a.send(Command::Dial(target(users.1)?))?;
+        wait(&mut [&mut a, &mut b], 10, |s| {
+            phase(s[1]) == Some(CallPhase::Ringing)
+        })?;
+        let (caller, callee) = (a.id()?, b.id()?);
+        b.send(Command::Answer(callee))?;
+        a.send(Command::Hangup(caller))?;
+        wait(&mut [&mut a, &mut b], 40, |s| {
+            s.iter().all(|s| s.call.is_none())
+        })?;
+        settle(&mut [&mut a, &mut b], 1.0);
+        if a.call.is_some() || b.call.is_some() {
+            return Err("race left a call".into());
+        }
+        race_outcomes.push(serde_json::json!({
+            "caller": format!("{:?}", a.ended.last().map(|x| x.phase)),
+            "callee": format!("{:?}", b.ended.last().map(|x| x.phase)),
+        }));
+    }
+
     // 7. Reject, caller cancel and DND busy.
     a.send(Command::Dial(target(users.1)?))?;
     wait(&mut [&mut a, &mut b], 10, |s| {
@@ -400,7 +499,7 @@ fn scenario(
     Ok(
         serde_json::json!({"scenario":label,"secure":secure,"before":before,"held_frames":held_frames,"resumed":resumed,
         "muted_rms_at_peer":muted_rms,"failed_transfer_status":failed_status,"after_failed_transfer":after_failed_transfer,
-        "transferred":transferred,"destination_tone":destination,"ivr_123_branch":ivr,"reject":"busy","cancel":"canceled","dnd":"busy","stopped":true}),
+        "transferred":transferred,"destination_tone":destination,"busy":busy_case,"reverse_direction":reverse,"cancel_answer_race":race_outcomes,"ivr_123_branch":ivr,"reject":"busy","cancel":"canceled","dnd":"busy","stopped":true}),
     )
 }
 
@@ -456,31 +555,62 @@ fn tls_negatives(
     Ok(serde_json::json!({"scenario":"tls-negatives","cases":results}))
 }
 
+/// A wrong password is a typed `Unauthorized` failure and is never retried.
+fn wrong_password() -> Result<serde_json::Value, String> {
+    let mut side = Side::new(440.0)?;
+    side.send(Command::Register(
+        Box::new(account("1001", Transport::Udp, MediaSecurity::PlainRtp)),
+        SecretString::from("fictional-wrong-password".to_owned()),
+    ))?;
+    wait(&mut [&mut side], 20, |s| {
+        matches!(s[0].registration, RegistrationState::Failed(_))
+    })?;
+    let state = side.registration;
+    settle(&mut [&mut side], 15.0);
+    let attempts = side
+        .events
+        .iter()
+        .filter(|e| **e == Event::Registration(RegistrationState::Registering))
+        .count();
+    let _ = side.engine.shutdown(Duration::from_secs(5));
+    let unauthorized =
+        state == RegistrationState::Failed(rust_microsip_core::RegistrationFailure::Unauthorized);
+    if !unauthorized || attempts != 1 {
+        return Err(format!("wrong password: {state:?} attempts {attempts}"));
+    }
+    Ok(
+        serde_json::json!({"scenario":"wrong-password","failed":"unauthorized","register_attempts_in_15s":attempts}),
+    )
+}
+
 fn main() {
     let read = |path: &str| std::fs::read(path).map_err(|_| "fixture".to_owned());
     let result = (|| -> Result<(), String> {
         let passwords: BTreeMap<String, String> =
             serde_json::from_slice(&read("/lab/credentials.json")?).map_err(|_| "credentials")?;
         let ca = read("/lab/ca.crt")?;
+        println!("{}", wrong_password()?);
         println!(
             "{}",
             tls_negatives(&passwords, &ca, &read("/lab/untrusted-ca.crt")?)?
         );
-        for (label, users, transport, media) in [
+        for (label, users, third, transport, media) in [
             (
                 "udp-rtp",
                 ("1001", "1002"),
+                Some("1101"),
                 Transport::Udp,
                 MediaSecurity::PlainRtp,
             ),
             (
                 "tls-srtp",
                 ("1201", "1202"),
+                None,
                 Transport::Tls,
                 MediaSecurity::Srtp,
             ),
         ] {
-            let row = scenario(label, users, transport, media, &passwords, &ca)?;
+            let row = scenario(label, users, third, transport, media, &passwords, &ca)?;
             println!("{row}");
         }
         Ok(())

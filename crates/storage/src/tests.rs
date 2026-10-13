@@ -475,3 +475,36 @@ fn backup_is_private_readable_and_never_overwrites() -> TestResult {
     assert_eq!(copy.search_contacts("Backup", 10)?.len(), 1);
     Ok(())
 }
+
+#[test]
+fn csv_rows_with_extra_fields_are_rejected_without_growth() -> TestResult {
+    let commas = ",".repeat(100_000);
+    let input = format!("name,number\nAlice,1001{commas}\n");
+    let preview = preview_csv(&input)?;
+    assert!(!preview.is_importable());
+    assert_eq!(preview.issues().len(), 1);
+    Ok(())
+}
+
+#[test]
+fn csv_merge_respects_the_per_contact_number_bound() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    let existing: Vec<String> = (0..MAX_NUMBERS_PER_CONTACT)
+        .map(|i| format!("1{i:03}"))
+        .collect();
+    let refs: Vec<&str> = existing.iter().map(String::as_str).collect();
+    store.add_contact(&contact("Alice", false, &refs))?;
+    let preview = preview_csv("name,number\nAlice,2001\n")?;
+    assert!(preview.is_importable());
+    let before = count(&store, "contact_numbers")?;
+    assert!(matches!(
+        store.import_csv(&preview),
+        Err(StorageError::Invalid(InvalidField::NumberCount))
+    ));
+    assert_eq!(
+        count(&store, "contact_numbers")?,
+        before,
+        "import rolled back"
+    );
+    Ok(())
+}

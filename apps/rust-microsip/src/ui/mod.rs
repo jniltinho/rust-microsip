@@ -9,13 +9,16 @@ mod state;
 
 pub use state::{Theme, UiSettings};
 
+use rust_microsip_audio::AudioDevices;
+use rust_microsip_storage::{HistoryFilter, Store};
+
 use eframe::egui;
 use rust_microsip_core::{
     CallPhase, Command, Direction, Event, MediaSecurity, Notice, RegistrationState, Transport,
 };
 use state::{
-    Action, MAX_NUMBER_CHARS, SaveFn, Tab, UiState, View, format_duration, phase_text,
-    registration_text, transfer_text,
+    Action, ContactForm, ImportForm, MAX_NUMBER_CHARS, SaveFn, Tab, UiState, View, format_duration,
+    outcome_text, phase_text, registration_text, transfer_text,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -35,6 +38,25 @@ pub trait Backend {
     fn attach_context(&self, ctx: &egui::Context) {
         let _ = ctx;
     }
+    /// List audio devices for settings; `None` when unavailable. Called on
+    /// opening settings, never per frame.
+    fn audio_devices(&self) -> Option<AudioDevices> {
+        None
+    }
+    /// Requests from outside the window (a second instance or a `sip:` link).
+    fn external(&self) -> Vec<External> {
+        Vec::new()
+    }
+}
+
+/// A request from outside the window. A dial request only fills the number:
+/// the user still confirms with Call.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum External {
+    /// Bring the window to the front.
+    Activate,
+    /// Bring the window to the front and fill this number.
+    Dial(rust_microsip_core::DialTarget),
 }
 
 /// Persists secret-free settings; returns a user-safe message on failure.
@@ -141,15 +163,34 @@ pub fn native_options() -> eframe::NativeOptions {
     }
 }
 
+/// History/contacts database for the window. Without a store nothing is
+/// recorded; `warning` stays visible in the Calls and Contacts tabs.
+#[derive(Debug, Default)]
+pub struct Storage {
+    /// Open store (on disk, or in memory as a fallback).
+    pub store: Option<Store>,
+    /// User-safe text explaining degraded persistence.
+    pub warning: Option<String>,
+}
+
 /// Open the window and block until it closes.
 ///
 /// # Errors
 /// Returns the eframe error when the native runtime fails to start.
-pub fn run(backend: Box<dyn Backend>, settings: UiSettings, save: SaveSettings) -> eframe::Result {
+pub fn run(
+    backend: Box<dyn Backend>,
+    settings: UiSettings,
+    save: SaveSettings,
+    storage: Storage,
+) -> eframe::Result {
     eframe::run_native(
         APP_NAME,
         native_options(),
-        Box::new(move |cc| Ok(Box::new(SoftphoneApp::new(cc, backend, settings, save)))),
+        Box::new(move |cc| {
+            Ok(Box::new(SoftphoneApp::new(
+                cc, backend, settings, save, storage,
+            )))
+        }),
     )
 }
 
@@ -170,8 +211,9 @@ impl SoftphoneApp {
         backend: Box<dyn Backend>,
         settings: UiSettings,
         save: SaveSettings,
+        storage: Storage,
     ) -> Self {
-        Self::with_context(&cc.egui_ctx, backend, settings, save)
+        Self::with_context(&cc.egui_ctx, backend, settings, save, storage)
     }
 
     fn with_context(
@@ -179,16 +221,20 @@ impl SoftphoneApp {
         backend: Box<dyn Backend>,
         settings: UiSettings,
         save: SaveSettings,
+        storage: Storage,
     ) -> Self {
         install_font(ctx);
         ctx.options_mut(|o| o.fallback_theme = egui::Theme::Light);
         ctx.set_theme(theme_preference(settings.theme));
         backend.attach_context(ctx);
+        let applied_theme = settings.theme;
+        let mut state = UiState::new(settings);
+        state.attach_store(storage.store, storage.warning, Instant::now());
         Self {
             backend,
             save,
-            applied_theme: settings.theme,
-            state: UiState::new(settings),
+            applied_theme,
+            state,
             focus_number: true,
         }
     }
@@ -214,6 +260,17 @@ impl SoftphoneApp {
         let now = Instant::now();
         for event in self.backend.poll() {
             self.state.apply_event(event, now);
+        }
+        for request in self.backend.external() {
+            if let External::Dial(target) = request
+                && self.state.call.is_none()
+            {
+                self.state.number = target.as_str().to_owned();
+                self.dispatch(ctx, Action::SelectTab(Tab::Phone));
+                self.focus_number = true;
+            }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
+            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
         if ctx.input(|i| i.viewport().close_requested()) && !self.state.quitting {
             self.dispatch(ctx, Action::Quit);
@@ -289,18 +346,34 @@ impl SoftphoneApp {
                 if let Some(text) = st.notice(now) {
                     ui.label(egui::RichText::new(text).color(palette.warn));
                 }
+                if let Some(confirm) = st.confirm {
+                    ui.group(|ui| {
+                        ui.label(egui::RichText::new(confirm.question()).strong());
+                        ui.horizontal(|ui| {
+                            if ui.button("Delete").clicked() {
+                                out.push(Action::Confirm);
+                            }
+                            if ui.button("Cancel").clicked() {
+                                out.push(Action::CancelConfirm);
+                            }
+                        });
+                    });
+                }
+                if matches!(st.tab, Tab::Calls | Tab::Contacts)
+                    && !matches!(st.view, View::Settings | View::About)
+                    && let Some(text) = &st.storage_warning
+                {
+                    ui.label(egui::RichText::new(text).small().color(palette.warn));
+                }
                 match st.view {
                     View::Settings => settings(ui, st, &palette, &mut out),
                     View::About => about(ui, &mut out),
+                    View::ContactEdit => contact_editor(ui, st, &mut out),
+                    View::Import => import(ui, st, &palette, &mut out),
                     View::Main => match st.tab {
                         Tab::Phone => phone(ui, st, focus_number, &mut out),
                         Tab::Calls => calls(ui, st, &mut out),
-                        Tab::Contacts => {
-                            ui.add_space(8.0);
-                            ui.label(
-                                egui::RichText::new("Contacts arrive in a later release.").weak(),
-                            );
-                        }
+                        Tab::Contacts => contacts(ui, st, &mut out),
                     },
                 }
             });
@@ -335,7 +408,8 @@ fn guarded(ui: &mut egui::Ui, button: egui::Button<'_>, enabled: Result<(), &str
 fn tab_strip(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
     ui.horizontal(|ui| {
         for tab in Tab::ALL {
-            let selected = st.view == View::Main && st.tab == tab;
+            let selected =
+                st.tab == tab && matches!(st.view, View::Main | View::ContactEdit | View::Import);
             if ui
                 .add(egui::Button::new(tab.label()).selected(selected))
                 .clicked()
@@ -610,33 +684,349 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
     }
 }
 
-fn calls(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
-    if st.history.is_empty() {
-        ui.label(egui::RichText::new("No calls in this session.").weak());
-    }
-    for (index, entry) in st.history.iter().enumerate() {
-        let direction = if entry.direction == Direction::Outgoing {
-            "Outgoing"
-        } else {
-            "Incoming"
-        };
-        let duration = entry.duration.map(format_duration).unwrap_or_default();
-        let text = format!(
-            "{direction}  {}\n{}  {duration}",
-            entry.remote,
-            state::end_reason_text(entry.outcome)
-        );
+/// A row of `height` whose children are laid out right to left. Bounded so
+/// a centered layout inside the scroll area does not take unbounded space.
+fn right_row(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui)) {
+    let size = egui::vec2(ui.available_width(), height);
+    ui.allocate_ui_with_layout(size, egui::Layout::right_to_left(egui::Align::Center), add);
+}
+
+fn search_box(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
+    ui.add(
+        egui::TextEdit::singleline(text)
+            .hint_text("Search")
+            .char_limit(MAX_NUMBER_CHARS)
+            .desired_width(width),
+    )
+    .on_hover_text("Searches local data only")
+    .changed()
+}
+
+fn calls(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        for (filter, label) in [
+            (HistoryFilter::All, "All"),
+            (HistoryFilter::Incoming, "In"),
+            (HistoryFilter::Outgoing, "Out"),
+            (HistoryFilter::Missed, "Missed"),
+        ] {
+            if ui
+                .add(egui::Button::new(label).selected(st.history_filter == filter))
+                .clicked()
+            {
+                out.push(Action::SetHistoryFilter(filter));
+            }
+        }
+    });
+    ui.horizontal(|ui| {
+        let width = ui.available_width() - 50.0;
+        if search_box(ui, &mut st.history_search, width) {
+            out.push(Action::SearchHistory);
+        }
         if ui
-            .add_sized(
-                [ui.available_width(), 0.0],
-                egui::Button::new(text).frame(false),
-            )
-            .on_hover_text("Copy to the number field")
+            .add_enabled(!st.history.is_empty(), egui::Button::new("Clear"))
+            .on_hover_text("Delete the whole history")
             .clicked()
         {
-            out.push(Action::FillFromHistory(index));
+            out.push(Action::ClearHistory);
+        }
+    });
+    if st.history.is_empty() {
+        ui.label(egui::RichText::new("No calls.").weak());
+    }
+    let now = state::utc_now();
+    for entry in &st.history {
+        let call = &entry.call;
+        let direction = if call.direction == Direction::Outgoing {
+            "Out"
+        } else {
+            "In"
+        };
+        let duration = call
+            .duration_ms
+            .map(|ms| format!("  {}", format_duration(Duration::from_millis(ms))))
+            .unwrap_or_default();
+        let secure = if call.secure { "  SRTP" } else { "" };
+        let text = format!(
+            "{direction}  {}\n{}  {}{duration}{secure}",
+            call.remote,
+            outcome_text(call.outcome),
+            state::age_text(now - call.started_utc)
+        );
+        right_row(ui, 2.0 * tokens::CONTROL_HEIGHT, |ui| {
+            if ui
+                .small_button("Del")
+                .on_hover_text("Delete this entry")
+                .clicked()
+            {
+                out.push(Action::DeleteCall(entry.id));
+            }
+            if ui.small_button("Call").on_hover_text("Dial").clicked() {
+                out.push(Action::DialNumber(call.remote.clone()));
+            }
+            let row = ui
+                .add_sized(
+                    [ui.available_width(), 0.0],
+                    egui::Button::new(text).frame(false),
+                )
+                .on_hover_text("Click: copy to the number field. Double-click: dial");
+            if row.double_clicked() {
+                out.push(Action::DialNumber(call.remote.clone()));
+            } else if row.clicked() {
+                out.push(Action::FillNumber(call.remote.clone()));
+            }
+        });
+        ui.separator();
+    }
+}
+
+fn contacts(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        let width = ui.available_width() - 100.0;
+        if search_box(ui, &mut st.contact_search, width) {
+            out.push(Action::SearchContacts);
+        }
+        if ui.button("Add").clicked() {
+            out.push(Action::NewContact);
+        }
+        if ui
+            .button("Import")
+            .on_hover_text("Import contacts from a CSV file")
+            .clicked()
+        {
+            out.push(Action::OpenImport);
+        }
+    });
+    if st.contacts.is_empty() {
+        ui.label(egui::RichText::new("No contacts.").weak());
+    }
+    for contact in &st.contacts {
+        right_row(ui, tokens::CONTROL_HEIGHT, |ui| {
+            if ui.small_button("Del").clicked() {
+                out.push(Action::DeleteContact(contact.id));
+            }
+            if ui.small_button("Edit").clicked() {
+                out.push(Action::EditContact(contact.id));
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.add(egui::Label::new(egui::RichText::new(&contact.name).strong()).truncate());
+                if contact.favorite {
+                    ui.label(egui::RichText::new("Favorite").small());
+                }
+            });
+        });
+        for number in &contact.numbers {
+            right_row(ui, tokens::TOGGLE_HEIGHT, |ui| {
+                if ui.small_button("Call").on_hover_text("Dial").clicked() {
+                    out.push(Action::DialNumber(number.number.clone()));
+                }
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    ui.add_space(tokens::SPACING * 2.0);
+                    let label = number.label.as_deref().unwrap_or("");
+                    if ui
+                        .add(
+                            egui::Button::new(format!("{}  {label}", number.number))
+                                .frame(false)
+                                .truncate(),
+                        )
+                        .on_hover_text("Copy to the number field")
+                        .clicked()
+                    {
+                        out.push(Action::FillNumber(number.number.clone()));
+                    }
+                });
+            });
         }
         ui.separator();
+    }
+}
+
+fn contact_editor(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
+    let Some(form) = st.contact_form.as_mut() else {
+        return;
+    };
+    ui.heading(if form.id.is_some() {
+        "Edit contact"
+    } else {
+        "New contact"
+    });
+    contact_fields(ui, form, out);
+    ui.horizontal(|ui| {
+        if ui.button("Save").clicked() {
+            out.push(Action::SaveContact);
+        }
+        if ui.button("Cancel").on_hover_text("Esc").clicked() {
+            out.push(Action::CloseView);
+        }
+    });
+}
+
+fn contact_fields(ui: &mut egui::Ui, form: &mut ContactForm, out: &mut Vec<Action>) {
+    ui.horizontal(|ui| {
+        let label = ui.label("Name");
+        ui.add(
+            egui::TextEdit::singleline(&mut form.name)
+                .char_limit(rust_microsip_storage::MAX_NAME_LEN)
+                .desired_width(f32::INFINITY),
+        )
+        .labelled_by(label.id);
+    });
+    ui.checkbox(&mut form.favorite, "Favorite");
+    ui.label("Numbers");
+    for (index, (number, label)) in form.numbers.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            let gap = ui.spacing().item_spacing.x;
+            let width = ui.available_width() - 40.0 - 2.0 * gap;
+            ui.add(
+                egui::TextEdit::singleline(number)
+                    .hint_text("Number")
+                    .char_limit(MAX_NUMBER_CHARS)
+                    .desired_width(width * 0.6),
+            );
+            ui.add(
+                egui::TextEdit::singleline(label)
+                    .hint_text("Label")
+                    .char_limit(rust_microsip_storage::MAX_LABEL_LEN)
+                    .desired_width(width * 0.4),
+            );
+            if ui
+                .small_button("Del")
+                .on_hover_text("Remove this number")
+                .clicked()
+            {
+                out.push(Action::RemoveNumberRow(index));
+            }
+        });
+    }
+    if ui.button("Add number").clicked() {
+        out.push(Action::AddNumberRow);
+    }
+}
+
+fn import(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out: &mut Vec<Action>) {
+    let Some(form) = st.import.as_mut() else {
+        return;
+    };
+    ui.heading("Import contacts");
+    ui.label(
+        egui::RichText::new(
+            "UTF-8 CSV with the header name,number or name,number,label; at most 10 MiB.",
+        )
+        .small(),
+    );
+    import_fields(ui, form, palette, out);
+    if ui.button("Cancel").on_hover_text("Esc").clicked() {
+        out.push(Action::CloseView);
+    }
+}
+
+fn import_fields(
+    ui: &mut egui::Ui,
+    form: &mut ImportForm,
+    palette: &tokens::Palette,
+    out: &mut Vec<Action>,
+) {
+    let path = ui.add(
+        egui::TextEdit::singleline(&mut form.path)
+            .hint_text("/path/to/contacts.csv")
+            .char_limit(4096)
+            .desired_width(f32::INFINITY),
+    );
+    if path.changed() {
+        form.preview = None;
+        form.error = None;
+    }
+    if ui.button("Preview").clicked() {
+        out.push(Action::PreviewImport);
+    }
+    if let Some(error) = &form.error {
+        ui.label(egui::RichText::new(error).color(palette.error));
+    }
+    let Some(preview) = &form.preview else {
+        return;
+    };
+    ui.label(format!(
+        "{} records, {} contacts, {} duplicate rows skipped",
+        preview.record_count(),
+        preview.contacts().len(),
+        preview.duplicate_count()
+    ));
+    let issues = preview.issues();
+    if !issues.is_empty() {
+        ui.label(
+            egui::RichText::new(format!(
+                "{} invalid rows; nothing will be imported until they are fixed",
+                issues.len()
+            ))
+            .color(palette.error),
+        );
+        for issue in issues.iter().take(state::MAX_ISSUES_SHOWN) {
+            ui.label(format!(
+                "Line {}: {}",
+                issue.line,
+                state::csv_issue_text(issue.kind)
+            ));
+        }
+        if issues.len() > state::MAX_ISSUES_SHOWN {
+            ui.label(format!(
+                "and {} more",
+                issues.len() - state::MAX_ISSUES_SHOWN
+            ));
+        }
+    }
+    let ready = if preview.is_importable() {
+        Ok(())
+    } else {
+        Err("Nothing valid to import")
+    };
+    if guarded(ui, egui::Button::new("Import"), ready) {
+        out.push(Action::ConfirmImport);
+    }
+}
+
+fn audio_settings(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
+    ui.label("Audio devices (applied on the next start)");
+    let Some(devices) = &st.audio_devices else {
+        ui.label(egui::RichText::new("No audio devices could be listed.").weak());
+        return;
+    };
+    for (label, list, current, input) in [
+        ("Microphone", &devices.inputs, &st.audio_input, true),
+        ("Speaker", &devices.outputs, &st.audio_output, false),
+    ] {
+        ui.horizontal(|ui| {
+            ui.label(label);
+            let mut selected = current.clone();
+            let shown = match selected.as_deref() {
+                None => "System default".to_owned(),
+                Some(key) => list
+                    .iter()
+                    .find(|d| state::device_key(d) == key)
+                    .map_or_else(|| format!("{key} (not found)"), |d| d.name.clone()),
+            };
+            egui::ComboBox::from_id_salt(label)
+                .selected_text(shown)
+                .width(ui.available_width())
+                .truncate()
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut selected, None, "System default");
+                    for device in list {
+                        let text = if device.is_default {
+                            format!("{} (default)", device.name)
+                        } else {
+                            device.name.clone()
+                        };
+                        ui.selectable_value(&mut selected, Some(state::device_key(device)), text);
+                    }
+                });
+            if selected != *current {
+                out.push(if input {
+                    Action::SetAudioInput(selected)
+                } else {
+                    Action::SetAudioOutput(selected)
+                });
+            }
+        });
     }
 }
 
@@ -715,6 +1105,9 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
             out.push(Action::SetTheme(theme));
         }
     });
+    ui.separator();
+    audio_settings(ui, st, out);
+    ui.separator();
     ui.horizontal(|ui| {
         if ui.button("Save and register").clicked() {
             out.push(Action::SaveSettings);
@@ -780,9 +1173,30 @@ mod tests {
         let mut app = SoftphoneApp::with_context(
             &ctx,
             Box::new(backend),
-            UiSettings::default(),
+            UiSettings {
+                audio_input: Some("missing-device".into()),
+                ..UiSettings::default()
+            },
             Box::new(|_| Ok(())),
+            Storage {
+                store: Store::open_in_memory().ok(),
+                warning: Some("Not saved to disk.".into()),
+            },
         );
+        app.state.audio_devices = Some(AudioDevices {
+            inputs: vec![rust_microsip_audio::DeviceInfo {
+                id: "alsa:default".into(),
+                name: "Default Audio Device".into(),
+                is_default: true,
+            }],
+            outputs: Vec::new(),
+        });
+        app.state.contact_form = Some(ContactForm {
+            numbers: vec![("1002".into(), "work".into())],
+            ..ContactForm::default()
+        });
+        app.state.import = Some(ImportForm::default());
+        app.state.confirm = Some(state::Confirm::ClearHistory);
         app.poll(&ctx);
         assert!(app.state.call.is_some());
         let input = || egui::RawInput {
@@ -798,6 +1212,8 @@ mod tests {
             (Theme::Dark, View::Main, Tab::Contacts),
             (Theme::Light, View::Settings, Tab::Phone),
             (Theme::System, View::About, Tab::Phone),
+            (Theme::Light, View::ContactEdit, Tab::Contacts),
+            (Theme::Dark, View::Import, Tab::Contacts),
         ] {
             ctx.set_theme(theme_preference(theme));
             app.state.view = view;

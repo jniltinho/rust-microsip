@@ -68,8 +68,32 @@ FROM verify AS build
 RUN --network=none cargo build --workspace --release --frozen --target x86_64-unknown-linux-gnu \
     && sh packaging/export-scaffold.sh
 
+# AppImage tools from the same pinned snapshot plus the pinned official runtime.
+FROM toolchain AS appimage-tools
+USER root
+COPY packaging/appimage/pins.txt /tmp/appimage-pins.txt
+RUN set -eu; apt-get update --error-on=any \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        squashfs-tools librsvg2-bin desktop-file-utils \
+    && rm -rf /var/lib/apt/lists/*; \
+    mkdir -p /opt/appimage; \
+    awk '$2 == "runtime-x86_64" { print $1, $3 }' /tmp/appimage-pins.txt | { \
+        read -r checksum url; \
+        curl --fail --show-error --silent --location --retry 3 "$url" -o /opt/appimage/runtime-x86_64; \
+        printf '%s  %s\n' "$checksum" /opt/appimage/runtime-x86_64 | sha256sum --check --strict -; }; \
+    chmod 0644 /opt/appimage/runtime-x86_64
+USER builder
+
+# Convenience AppImage around the unchanged ELF; the ELF remains the primary artifact.
+FROM appimage-tools AS appimage
+COPY --from=build --chown=builder:builder /out/ /out/
+COPY --chown=builder:builder packaging/appimage/ packaging/appimage/
+COPY --chown=builder:builder apps/rust-microsip/assets/OFL.txt apps/rust-microsip/assets/OFL.txt
+COPY --chown=builder:builder apps/rust-microsip/assets/icons/rust-microsip.svg apps/rust-microsip/assets/icons/rust-microsip.svg
+RUN --network=none sh packaging/appimage/build-appimage.sh
+
 FROM scratch AS artifacts
-COPY --from=build /out/ /
+COPY --from=appimage /out/ /
 
 # Inspect the filtered context using synthetic sentinels in tests.
 FROM toolchain AS context-audit
@@ -82,11 +106,14 @@ allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
     "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256",
-    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml",
+    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml", "crates/platform/Cargo.toml",
     "packaging/reviewed-licenses.json",
     "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
     "apps/rust-microsip/assets/source.json",
     "packaging/verify.sh", "packaging/export-scaffold.sh",
+    "packaging/appimage/build-appimage.sh", "packaging/appimage/verify.sh",
+    "packaging/appimage/pins.txt", "packaging/appimage/rust-microsip.desktop",
+    "apps/rust-microsip/assets/icons/rust-microsip.svg",
     "packaging/check-g0-dependencies.py", "packaging/tests/test_g0_dependencies.py",
     "packaging/collect-cargo-notices.py", "packaging/tests/test_cargo_notices.py",
 }
@@ -98,10 +125,10 @@ for path in files:
         "apps/rust-microsip/src", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
         "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui",
-        "crates/telephony/src/engine", "crates/core/src", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests",
+        "crates/telephony/src/engine", "crates/core/src", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src",
     }
     # Reviewed, commit-pinned third-party license texts only.
-    is_source = is_source or relative.startswith("packaging/third-party-notices/")
+    is_source = is_source or relative.startswith(("packaging/third-party-notices/", "packaging/appimage/runtime-licenses/"))
     if relative not in allowed and not is_source:
         unexpected.append(relative)
 if unexpected:

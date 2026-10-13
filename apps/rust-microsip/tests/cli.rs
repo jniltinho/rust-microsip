@@ -129,3 +129,24 @@ fn desktop_without_a_display_fails_honestly() -> std::io::Result<()> {
     assert!(text(&output).contains("cannot open the window"));
     Ok(())
 }
+
+#[test]
+fn desktop_opens_the_history_store_without_changing_the_display_error() -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = temp_dir("store")?;
+    let data = dir.to_string_lossy().into_owned();
+    let output = run(&[], &[("XDG_DATA_HOME", &data)])?;
+    assert_eq!(output.status.code(), Some(1));
+    assert!(text(&output).contains("cannot open the window"));
+    let db = dir.join("rust-microsip").join("rust-microsip.sqlite3");
+    assert_eq!(std::fs::metadata(&db)?.permissions().mode() & 0o777, 0o600);
+    // An unreadable database is kept untouched; the session falls back.
+    let junk = vec![b'x'; 4096];
+    std::fs::write(&db, &junk)?;
+    let output = run(&[], &[("XDG_DATA_HOME", &data)])?;
+    assert_eq!(output.status.code(), Some(1));
+    let out = text(&output);
+    assert!(out.contains("cannot open the window") && out.contains("history storage unavailable"));
+    assert_eq!(std::fs::read(&db)?, junk);
+    std::fs::remove_dir_all(dir)
+}
