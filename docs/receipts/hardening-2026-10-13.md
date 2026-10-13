@@ -35,6 +35,10 @@ Run `38423434363` on `6324e2f` succeeded: publication scan with negative control
 
 An apparent dropped call during this work was a harness race (the host counted PBX channels while the app was already being terminated); a 40 s echo call held one channel throughout.
 
+## Screen-reader tree and keyboard focus
+
+The release ELF ran in a private D-Bus session with the AT-SPI bus and registry (`at-spi2-core`, accessibility enabled, no network) under Xvfb; `pyatspi` read the AccessKit tree of the main window. The first dump showed the number field and the two volume sliders without names; they, the transfer, search, contact-number, label and CSV-path fields now carry accessible names. Second dump: 28 focusable nodes, all named (tabs Phone/Calls/Contacts, Menu, "Number to call", the twelve keys with their letters, Back, +, C, Call, End, "Speaker volume", "Microphone volume", DND, MUTE, HOLD, XFER), plus the status labels. `Tab` moved focus through consecutive keypad buttons and `Shift+Tab` moved back, as reported by the AT-SPI focused state. Orca itself was not run. Tree dump SHA-256 `0fbf6d9775cb8591a882ab0a68c9fd1a58696019ba027a296d099b13b183499b` (release ELF `11c7a559ea255c3492c28ca0a6e3ed9b777e9ed0539116cebdc696cd1c8745fb`).
+
 ## Mute keeps reception (lab)
 
 `engine_lab` now also measures the muted side while muted. Full run, both profiles passed (log SHA-256 `142b16a39d0fbc36ee79eee1b56d7081463a89ec1fa5436b1337592da916279b`, example ELF `0e914aaceece6a8b359c976cb5ece551032bbcf175330c8280e89f8a9b5372d1`):
@@ -56,4 +60,4 @@ Four Claude CLI static rounds ([record](../reviews/claude-hardening-2026-10-13.m
 
 ## Not established
 
-Audio device release on real hardware (the containers have no sound card), screen-reader/AT-SPI labels, the first `supply-chain` CI run, coverage-guided fuzzing, real desktops and VMs, human audio and publication.
+Audio device release on real hardware (the containers have no sound card), use with a real screen reader (Orca), the first `supply-chain` CI run, coverage-guided fuzzing, real desktops and VMs, human audio and publication.

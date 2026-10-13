@@ -214,6 +214,15 @@ mod tokens {
     }
 }
 
+/// Give a widget without a visible label (placeholder-only fields,
+/// sliders) an accessible name for screen readers.
+fn named(response: egui::Response, name: &str) -> egui::Response {
+    response
+        .ctx
+        .accesskit_node_builder(response.id, |node| node.set_label(name));
+    response
+}
+
 fn number_id() -> egui::Id {
     egui::Id::new("rust_microsip_number")
 }
@@ -668,7 +677,8 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
     // During a call the status panel above shows the number; hiding the
     // field keeps the compact window free of scrolling.
     if !in_call {
-        let response = ui.add(edit).on_hover_text("Number to call (Ctrl+L)");
+        let response =
+            named(ui.add(edit), "Number to call").on_hover_text("Number to call (Ctrl+L)");
         if focus_number {
             response.request_focus();
             response.scroll_to_me(None);
@@ -726,17 +736,28 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
         }
     });
     ui.add_space(tokens::SPACING);
-    for (text, hover) in [
-        ("Spk", "Speaker volume arrives in a later release"),
-        ("Mic", "Microphone volume arrives in a later release"),
+    for (text, name, hover) in [
+        (
+            "Spk",
+            "Speaker volume",
+            "Speaker volume arrives in a later release",
+        ),
+        (
+            "Mic",
+            "Microphone volume",
+            "Microphone volume arrives in a later release",
+        ),
     ] {
         ui.horizontal(|ui| {
             ui.label(text);
             ui.spacing_mut().slider_width = ui.available_width();
             let mut level = 1.0_f32;
-            ui.add_enabled(
-                false,
-                egui::Slider::new(&mut level, 0.0..=1.0).show_value(false),
+            named(
+                ui.add_enabled(
+                    false,
+                    egui::Slider::new(&mut level, 0.0..=1.0).show_value(false),
+                ),
+                name,
             )
             .on_disabled_hover_text(hover);
         });
@@ -789,12 +810,15 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
     if let Some(target) = st.transfer_target.as_mut() {
         ui.group(|ui| {
             ui.label("Transfer to");
-            let response = ui.add(
-                egui::TextEdit::singleline(target)
-                    .id(transfer_id())
-                    .char_limit(MAX_NUMBER_CHARS)
-                    .desired_width(f32::INFINITY)
-                    .hint_text("Number"),
+            let response = named(
+                ui.add(
+                    egui::TextEdit::singleline(target)
+                        .id(transfer_id())
+                        .char_limit(MAX_NUMBER_CHARS)
+                        .desired_width(f32::INFINITY)
+                        .hint_text("Number"),
+                ),
+                "Transfer to number",
             );
             if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 out.push(Action::ConfirmTransfer);
@@ -819,11 +843,14 @@ fn right_row(ui: &mut egui::Ui, height: f32, add: impl FnOnce(&mut egui::Ui)) {
 }
 
 fn search_box(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
-    ui.add(
-        egui::TextEdit::singleline(text)
-            .hint_text("Search")
-            .char_limit(MAX_NUMBER_CHARS)
-            .desired_width(width),
+    named(
+        ui.add(
+            egui::TextEdit::singleline(text)
+                .hint_text("Search")
+                .char_limit(MAX_NUMBER_CHARS)
+                .desired_width(width),
+        ),
+        "Search",
     )
     .on_hover_text("Searches local data only")
     .changed()
@@ -1004,17 +1031,23 @@ fn contact_fields(ui: &mut egui::Ui, form: &mut ContactForm, out: &mut Vec<Actio
         ui.horizontal(|ui| {
             let gap = ui.spacing().item_spacing.x;
             let width = ui.available_width() - 40.0 - 2.0 * gap;
-            ui.add(
-                egui::TextEdit::singleline(number)
-                    .hint_text("Number")
-                    .char_limit(MAX_NUMBER_CHARS)
-                    .desired_width(width * 0.6),
+            named(
+                ui.add(
+                    egui::TextEdit::singleline(number)
+                        .hint_text("Number")
+                        .char_limit(MAX_NUMBER_CHARS)
+                        .desired_width(width * 0.6),
+                ),
+                "Contact number",
             );
-            ui.add(
-                egui::TextEdit::singleline(label)
-                    .hint_text("Label")
-                    .char_limit(rust_microsip_storage::MAX_LABEL_LEN)
-                    .desired_width(width * 0.4),
+            named(
+                ui.add(
+                    egui::TextEdit::singleline(label)
+                        .hint_text("Label")
+                        .char_limit(rust_microsip_storage::MAX_LABEL_LEN)
+                        .desired_width(width * 0.4),
+                ),
+                "Number label",
             );
             if ui
                 .small_button("Del")
@@ -1053,11 +1086,14 @@ fn import_fields(
     palette: &tokens::Palette,
     out: &mut Vec<Action>,
 ) {
-    let path = ui.add(
-        egui::TextEdit::singleline(&mut form.path)
-            .hint_text("/path/to/contacts.csv")
-            .char_limit(4096)
-            .desired_width(f32::INFINITY),
+    let path = named(
+        ui.add(
+            egui::TextEdit::singleline(&mut form.path)
+                .hint_text("/path/to/contacts.csv")
+                .char_limit(4096)
+                .desired_width(f32::INFINITY),
+        ),
+        "CSV file path",
     );
     if path.changed() {
         form.preview = None;

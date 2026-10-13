@@ -38,7 +38,7 @@ This directory holds the project's design records, evidence and guides. Start wi
 | --- | --- | --- |
 | G0 gate | Same-stack spike with D-Bus/notifications and local IPC; clean GNOME/Wayland and KDE/X11 VMs; native dependency audit; recorded G0 decision | 1.5, 1.8, 1.9 |
 | Media | Device hotplug with real headsets, local test on real devices, NAT/STUN topology | 5.2, 5.3, 5.5 |
-| Desktop UI | Visual matrix against MicroSIP, remaining screens, screen-reader labels | 7.1–7.3, 7.5 |
+| Desktop UI | Visual matrix against MicroSIP, remaining screens | 7.1–7.3 |
 | Linux integration | Notification and tray checks on real desktops | 8.1 |
 | Release | Real-desktop checks of keyring prompts/KWallet and suspend/resume (part of the VM checklist), AppImage licence review, the first `cargo deny` run, full Asterisk suite, VM and human audio checklist, performance budgets, final review, SBOM and notes, publication | 9.2, 9.3, 9.5–9.10 |
 | Agent CLI/MCP | Local control CLI and MCP server over authenticated IPC | [add-agent-cli-mcp](../openspec/changes/add-agent-cli-mcp/tasks.md) |
