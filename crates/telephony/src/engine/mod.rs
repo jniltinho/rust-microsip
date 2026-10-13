@@ -862,11 +862,12 @@ impl Actor {
         let task = tokio::spawn(async move {
             // Devices are opened only for the call's media and released after it.
             // The guard releases them however the task ends, even mid-open.
-            let (opened, _devices) = media::open_devices(&media).await;
+            let (opened, devices) = media::open_devices(&media).await;
             if !opened {
                 let _ = internal.send(Internal::AudioUnavailable).await;
             }
             let stats = media::run(params, Arc::clone(&media), rx).await;
+            drop(devices);
             if let Some(failure) = stats.failure {
                 let _ = internal.send(Internal::MediaFailed(id, failure)).await;
             }

@@ -12,6 +12,8 @@ uploads binaries. Tagging is the owner's decision.
    on GitHub (required reviewer; only `v*` tags may deploy). A first job refuses to run when that
    environment is missing or lost this protection. An agent can push a tag but cannot publish.
    The workflow file itself lives on `main`, so this relies on only the owner pushing to `main`.
+   Admin bypass is disabled. Approval comes from the owner's GitHub account, so never give an
+   agent credentials that can approve deployments.
 4. A **final** version (`vX.Y.Z`) needs `docs/release/vX.Y.Z.md` (release notes and gate
    checklist) that passes `packaging/release/check-gates.sh X.Y.Z`: no open checkbox in any
    task-list syntax, every task id of the [Linux release change](../openspec/changes/create-native-rust-linux-release/tasks.md)

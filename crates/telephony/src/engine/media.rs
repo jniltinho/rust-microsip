@@ -199,8 +199,10 @@ impl Sender {
 pub(super) async fn open_devices(media: &SharedMedia) -> (bool, Option<DeviceGuard>) {
     let media = Arc::clone(media);
     tokio::task::spawn_blocking(move || {
+        // Made before `start` so a panic inside it still releases the devices.
+        let guard = DeviceGuard(Arc::clone(&media));
         let opened = lock_media(&media).start();
-        (opened, Some(DeviceGuard(media)))
+        (opened, Some(guard))
     })
     .await
     .unwrap_or((false, None))
@@ -220,6 +222,8 @@ impl Drop for DeviceGuard {
         let media = Arc::clone(&self.0);
         let stop = move || lock_media(&media).stop();
         // Closing streams joins device threads: keep it off the async workers.
+        // Order against the next call's `start` does not matter: `MediaIo`
+        // implementations count users and close only when the last one stops.
         // ponytail: during runtime shutdown the blocking task may not run; the
         // process is exiting then and the OS closes the devices.
         match tokio::runtime::Handle::try_current() {

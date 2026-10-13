@@ -28,6 +28,8 @@ jobs:
             || { echo "the release environment does not exist" >&2; exit 1; }
           printf '%s' "$env" | jq -e '[.protection_rules[].type] | index("required_reviewers")' >/dev/null \
             || { echo "the release environment has no required reviewer" >&2; exit 1; }
+          printf '%s' "$env" | jq -e '.can_admins_bypass == false' >/dev/null \
+            || { echo "admins can bypass the release environment" >&2; exit 1; }
           printf '%s' "$env" | jq -e '.deployment_branch_policy.custom_branch_policies == true' >/dev/null \
             || { echo "the release environment does not restrict deployments" >&2; exit 1; }
           policies=$(gh api "repos/$GITHUB_REPOSITORY/environments/release/deployment-branch-policies" \

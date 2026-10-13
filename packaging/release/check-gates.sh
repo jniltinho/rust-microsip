@@ -10,7 +10,7 @@ cd "${CHECK_GATES_ROOT:-$(dirname "$0")/../..}"
 version=${1:?usage: check-gates.sh X.Y.Z}
 notes="docs/release/v$version.md"
 [ -f "$notes" ] || { echo "missing $notes" >&2; exit 1; }
-item='^[>[:space:]]*([-*+]|[0-9]+\.)[[:space:]]+'
+item='^[>[:space:]]*([-*+]|[0-9]+[.)])[[:space:]]+'
 if grep -nE "$item\\[[[:space:]]*\\]" "$notes"; then
     echo "open release gates in $notes" >&2
     exit 1
@@ -24,8 +24,12 @@ missing=0
 for change in create-native-rust-linux-release add-agent-cli-mcp; do
     tasks="openspec/changes/$change/tasks.md"
     [ -f "$tasks" ] || { echo "missing $tasks" >&2; exit 1; }
-    ids=$(sed -nE 's/^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]+([0-9]+(\.[0-9]+)+)[[:space:]].*/\1/p' "$tasks")
+    ids=$(sed -nE 's/^[[:space:]]*[-*+][[:space:]]+\[[ xX]\][[:space:]]+([0-9]+(\.[0-9]+)+)([[:space:]].*)?$/\1/p' "$tasks")
     [ -n "$ids" ] || { echo "no task ids found in $tasks" >&2; exit 1; }
+    # Every checkbox of the change must carry an id, or it would go unchecked.
+    boxes=$(grep -cE "$item\\[[[:space:]xX]*\\]" "$tasks" || true)
+    [ "$boxes" = "$(printf '%s\n' "$ids" | wc -l | tr -d ' ')" ] \
+        || { echo "$tasks has checkboxes without a task id" >&2; exit 1; }
     for id in $ids; do
         checked "$change $id" || { echo "gate not checked: $change $id" >&2; missing=1; }
     done

@@ -35,7 +35,14 @@ expect_fail "one id covering both changes" "$(printf '%s\n' "$good" | grep -v 'a
 expect_fail "unescaped dot" "$(printf '%s\n' "$good" | sed 's/linux-release 1\.2/linux-release 102/')"
 expect_fail "id mentioned inside another item" "$(printf '%s\n' "$good" | grep -v 'linux-release 1.2')
 - [x] create-native-rust-linux-release 1.1 (see create-native-rust-linux-release 1.2)"
+expect_fail "open checkbox with 1) marker" "$good
+1) [ ] later"
 expect_fail "owner decision missing" "$(printf '%s\n' "$good" | grep -v Owner)"
+printf -- '- [ ] 1.1 Agent.\n- [ ] 1.2\n' > "$root/openspec/changes/add-agent-cli-mcp/tasks.md"
+expect_fail "id at the end of the line is required too" "$good"
+printf -- '- [ ] 1.1 Agent.\n1. [ ] 2.1 Numbered.\n' > "$root/openspec/changes/add-agent-cli-mcp/tasks.md"
+expect_fail "numbered task without a parsed id" "$good"
+printf -- '- [ ] 1.1 Agent.\n' > "$root/openspec/changes/add-agent-cli-mcp/tasks.md"
 mv "$root/openspec/changes/add-agent-cli-mcp/tasks.md" "$root/tasks.bak"
 expect_fail "tasks.md missing" "$good"
 printf 'no tasks\n' > "$root/openspec/changes/add-agent-cli-mcp/tasks.md"
