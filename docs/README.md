@@ -30,6 +30,7 @@ This directory holds the project's design records, evidence and guides. Start wi
 | Linux integration | Single instance over a private Unix socket (a second launch forwards and exits), strict `sip:`/`tel:` link parsing that only fills the number, opt-in link handler entry, incoming-call notifications with Answer/Reject over D-Bus, quit confirmation during calls | `crates/platform` |
 | Resilience | Registration renewal, recovery after a network outage, BYE delivered after recovery, crash recovery of interrupted calls in history | [Config/recovery/release receipt](receipts/config-recovery-release-2026-10-13.md) |
 | Release engineering | AppImage, CI workflow passing on GitHub including the RustSec/source check, versioned lab suite (7 scenarios, per-scenario reports), publication scanner (index, history and artifacts), reproducible clean-clone build, release-notes draft | [Release draft](release/v0.1.0-draft.md) |
+| Agent control (preview) | Kernel-authenticated control socket, CLI and stdio MCP server (official SDK); every change approved by a person in the window and executed once; lab proof with Asterisk | [Agent control receipt](receipts/agent-control-2026-10-13.md), [usage](agent-cli-mcp.md) |
 | Lab suite | `docker/asterisk/suite.sh`: engine call matrix, renewal and network loss, link forwarding, exit with a paused PBX, theme switch during a call, accessibility sweeps; 7/7 on a clean commit with per-scenario reports | [Lab suite receipt](receipts/lab-suite-2026-10-13.md) |
 | Hardening | Automated layering rule, bounded deterministic fuzzing of the dial-string, link, CSV, `.env`, argument, SDP, RTP and DTMF parsers, engine supervision, final events kept on shutdown, WCAG contrast test, theme switching during a call, exit with a frozen PBX, 100/150/200% scaling | [Hardening receipt](receipts/hardening-2026-10-13.md) |
 
@@ -42,7 +43,7 @@ This directory holds the project's design records, evidence and guides. Start wi
 | Desktop UI | Visual matrix against MicroSIP, remaining screens | 7.1–7.3 |
 | Linux integration | Notification and tray checks on real desktops | 8.1 |
 | Release | Real-desktop checks of keyring prompts/KWallet and suspend/resume (part of the VM checklist), AppImage licence review, VM and human audio checklist, performance budgets, final review, SBOM and notes, publication | 9.2, 9.6–9.10 |
-| Agent CLI/MCP | Local control CLI and MCP server over authenticated IPC | [add-agent-cli-mcp](../openspec/changes/add-agent-cli-mcp/tasks.md) |
+| Agent CLI/MCP | Read/control grants, headless service with single-use bootstrap, remaining call controls in the lab, audit deletion, human G4 acceptance | [add-agent-cli-mcp](../openspec/changes/add-agent-cli-mcp/tasks.md) |
 
 ## Later releases
 
