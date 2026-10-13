@@ -39,7 +39,7 @@ Resulting requirement: two-way audio on the **exact release artifact**, no inher
 - PhotoCraft: https://github.com/storytold/photocraft ; examined Cargo.toml, MIT OR Apache-2.0.
 - OpenSpec: https://github.com/Fission-AI/OpenSpec ; installed CLI 1.10.0 templates/validation.
 - Native UI: https://docs.rs/eframe/latest/eframe/ .
-- SIP candidate: https://github.com/restsend/rsipstack ; transport/transaction descriptions do not prove a complete softphone.
+- SIP stack upstream: https://github.com/restsend/rsipstack ; the experimental adapter's selected registry version and limitations are documented in [ADR 0004](adr/0004-experimental-sip-adapter.md). Upstream descriptions do not prove a complete softphone.
 - Media candidate: https://github.com/restsend/rustrtc ; validate SIP/SDES, never infer identical WebRTC/SIP negotiation.
 - Audio candidate: https://docs.rs/cpal/latest/cpal/ ; inventory Linux dependencies before backend selection.
 - Embedded SQLite: https://github.com/rusqlite/rusqlite .
@@ -47,6 +47,20 @@ Resulting requirement: two-way audio on the **exact release artifact**, no inher
 - Requested Docker PBX foundation: https://github.com/andrius/asterisk ; exact version/digest and limitations in [ADR 0002](adr/0002-disposable-asterisk-lab.md).
 
 Candidates are not automatically approved/locked dependencies. G0 decides versions/features/licenses/integration. Proposed own-code license is GPL-3.0-or-later, with compatibility review before third-party code/assets; not a legal opinion.
+
+## Rust telephony reference projects
+
+Added at the user's request on 2026-10-12. These public projects are technical design and comparison references, not vendored source trees or submodules. The roles below are our research targets, not independently verified upstream capability claims.
+
+| Project | Pinned research revision | Intended reference role | Current incorporation |
+|---|---|---|---|
+| [eisenzopf/rvoip](https://github.com/eisenzopf/rvoip) | [`f4d528eaabbac935bce9a6404d3ce4fdec35ed0f`](https://github.com/eisenzopf/rvoip/tree/f4d528eaabbac935bce9a6404d3ce4fdec35ed0f) | Compare endpoint/session lifecycles, call-control APIs, media boundaries and interoperability test scenarios. | Reference only; no rvoip dependency, source or assets incorporated. |
+| [restsend/rustpbx](https://github.com/restsend/rustpbx) | [`32cb50efb50ca7bb41af6f56eca73e06411efcc6`](https://github.com/restsend/rustpbx/tree/32cb50efb50ca7bb41af6f56eca73e06411efcc6) | Study server-side routing, signaling/media integration and PBX-facing behavior; not a desktop-client architecture substitute. | Reference only; no RustPBX dependency, server or image adopted. The disposable PBX remains pinned andrius/asterisk. |
+| [restsend/rsipstack](https://github.com/restsend/rsipstack) | [`3187537725cebac6db5ef801001f0d23c551881f`](https://github.com/restsend/rsipstack/tree/3187537725cebac6db5ef801001f0d23c551881f) | Investigate SIP transport, transaction and dialog APIs behind the project's telephony adapter. | The adapter already uses registry rsipstack **0.7.3**, not a Git/main dependency. This research revision does not replace Cargo.lock's source/checksum or approve an upgrade. See [ADR 0004](adr/0004-experimental-sip-adapter.md). |
+
+For each pinned revision, research inspected root `README.md` descriptions, `Cargo.toml` license declarations and the root `LICENSE` over HTTPS without executing upstream code. Each root manifest declares MIT and its root license contains MIT terms: [rvoip license](https://github.com/eisenzopf/rvoip/blob/f4d528eaabbac935bce9a6404d3ce4fdec35ed0f/LICENSE), [RustPBX license](https://github.com/restsend/rustpbx/blob/32cb50efb50ca7bb41af6f56eca73e06411efcc6/LICENSE), [rsipstack license](https://github.com/restsend/rsipstack/blob/3187537725cebac6db5ef801001f0d23c551881f/LICENSE). This is a root-file observation, not a per-file/transitive license audit, security assessment or legal certification. RustPBX's [pinned README](https://github.com/restsend/rustpbx/blob/32cb50efb50ca7bb41af6f56eca73e06411efcc6/README.md) distinguishes Community from commercial editions; root MIT terms are not blanket approval of commercial images or add-ons.
+
+Use these references to formulate comparisons and tests. Any future dependency, code or asset adoption still requires exact-version source/notice, feature-union, native/crypto boundary and interoperability review under [ADR 0003](adr/0003-g0-license-and-native-boundaries.md). No upstream examples, binaries, recordings, credentials or build instructions are imported by this documentation update. Upstream test results and README claims do not satisfy our G0 or release gates; evidence must come from our selected build and disposable lab. No personal absolute paths or local reference contents are published.
 
 ## MicroSIP: primary compact-UI reference
 

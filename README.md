@@ -45,6 +45,8 @@ The scaffold builder exists. The [disposable PBX lab](docker/asterisk/README.md)
 
 ## Local references and skills
 
+Additional Rust telephony references are [rvoip](https://github.com/eisenzopf/rvoip) for client/session/media design, [RustPBX](https://github.com/restsend/rustpbx) for server-side integration, and [rsipstack](https://github.com/restsend/rsipstack) for SIP transport/transactions/dialogs. Their [pinned research snapshots and adoption boundaries](docs/reference-sources.md#rust-telephony-reference-projects) distinguish reference material from dependencies; only rsipstack is currently incorporated, as an experimental, version-pinned dependency. These references do not replace the andrius/asterisk lab or establish feature parity.
+
 `base/` is local-only material, ignored by Git and unnecessary to read the proposal in a fresh clone. Reproducible references are documented by URL/revision without including upstream sources, AppImages, personal logs, or databases.
 
 Project-installed Rust skills: Apollo `rust-best-practices`, `rust-async-patterns`, and `rust-testing`, shared by Codex and Claude. These support development; they are not application dependencies. See [provenance](docs/development-skills.md).

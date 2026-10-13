@@ -1,0 +1,9 @@
+# Claude review — Rust telephony reference inventory
+
+Date: 2026-10-12. Baseline: `400d458`. Scope: README and reference-inventory documentation delta only. Independent read-only Claude CLI ran in a neutral temporary directory with tools, MCP, hooks and session persistence disabled. Input SHA-256: `931af3a1988f0c558745f37139e68489fdcc82098eea071e2f8b274e480d3519`. CLI exit 0, subtype `success`, `is_error=false`.
+
+Verdict: **APPROVE — documentation slice only.** The reviewer found no blocking accuracy, licensing-scope, privacy or contradictory-adoption issues. It checked the supplied public revision/hash metadata against the documentation, the reference/dependency distinction, pinned license links, the README anchor and the explicit limits on upstream capability and license claims. The implementing agent separately fetched the public files over HTTPS and checked their root license declarations and revision consistency; Claude did not retrieve or independently audit upstream files.
+
+Non-blocking suggestions were to emphasize the separation between the rsipstack research commit and registry 0.7.3 notice review, frame the short README roles as comparisons, and reiterate pre-G0 status. The table already separates research and selected registry identities, links ADR 0004 and disclaims independent capability verification; the README states that G0 remains pending. These optional wording suggestions were not treated as runtime acceptance requirements.
+
+No implementation code, runtime artifacts, pending transfer files or OpenSpec tasks were included in this review. No source/assets were adopted by this milestone. This is not a per-file/transitive license audit, interoperability test, production approval, G0 completion or release approval. See the [reference inventory](../reference-sources.md#rust-telephony-reference-projects).
