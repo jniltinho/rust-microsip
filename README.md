@@ -15,7 +15,7 @@ docker buildx build --platform linux/amd64 --target artifacts --output type=loca
 ./dist/rust-microsip --help
 ```
 
-After fetching, the build runs fmt, clippy, tests, rustdoc and the dependency/notice policy without network access, then exports the ELF, `SHA256SUMS`, licenses, a build manifest and an SBOM. The ELF needs the host's glibc and `libasound.so.2` (ALSA, present on standard desktops). See the [development guide](docs/DEVELOPMENT.md) and [ADR 0012](docs/adr/0012-production-dependency-graph.md).
+After fetching, the build runs fmt, clippy, tests, rustdoc and the dependency/notice policy without network access, then exports the ELF, `SHA256SUMS`, licenses, a build manifest and an SBOM. The ELF needs the host's glibc (2.39 or newer), `libasound.so.2` (ALSA) and, on X11, `libxkbcommon-x11`; standard GNOME and KDE desktops have them, minimal Xfce installs may need `libxkbcommon-x11`. Checked on Ubuntu 24.04 and 26.04, Fedora 44 and Arch Linux ([desktop VM receipt](docs/receipts/desktop-vms-2026-10-13.md)). See the [development guide](docs/DEVELOPMENT.md) and [ADR 0012](docs/adr/0012-production-dependency-graph.md).
 
 ## Run
 

@@ -1592,16 +1592,13 @@ fn io_text(error: &std::io::Error) -> &'static str {
 }
 
 /// Write the [`rust_microsip_platform::desktop_entry`] for this executable
-/// (`$APPIMAGE` inside an AppImage) to `path` atomically with
+/// ([`rust_microsip_platform::desktop_executable`]) to `path` atomically with
 /// mode `0644`, creating the `applications` directory when missing, and the
 /// app icon beside it in the data directory's hicolor theme (Wayland docks
 /// take the icon from the entry, not from the window). Nothing is executed
 /// and no default handler is changed.
 pub fn install_desktop_entry(path: &Path) -> std::io::Result<()> {
-    let executable = std::env::var_os("APPIMAGE")
-        .map(std::path::PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::current_exe().ok());
+    let executable = rust_microsip_platform::desktop_executable();
     let entry = rust_microsip_platform::desktop_entry(executable.as_deref());
     write_public(path, entry.as_bytes())?;
     match icon_path(path) {
@@ -1657,25 +1654,35 @@ fn write_public(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 /// # Errors
 /// I/O failures, including [`std::io::ErrorKind::NotFound`].
 pub fn remove_desktop_entry(path: &Path) -> std::io::Result<bool> {
-    let meta = std::fs::symlink_metadata(path)?;
-    // The size check bounds the read below.
-    if !meta.is_file()
-        || meta.len() > 8192
-        || !std::str::from_utf8(&std::fs::read(path)?)
-            .is_ok_and(rust_microsip_platform::is_desktop_entry)
-    {
-        return Ok(false);
+    use rust_microsip_platform::{
+        PrivateFileError, desktop_entry, desktop_executable, read_own_file,
+    };
+    // Our icon goes with our entry, or alone when the entry is already gone;
+    // an entry kept as someone's edit keeps its icon.
+    let remove_icon = || {
+        if let Some(icon) = icon_path(path)
+            && read_own_file(&icon, super::ICON.len() as u64).is_ok_and(|b| b == super::ICON)
+        {
+            let _ = std::fs::remove_file(icon);
+        }
+    };
+    let ours = [
+        desktop_entry(None),
+        desktop_entry(desktop_executable().as_deref()),
+    ];
+    // One O_NOFOLLOW open and a bounded read: a swapped symlink or FIFO is refused.
+    match read_own_file(path, 8192) {
+        Ok(bytes) if ours.iter().any(|e| e.as_bytes() == bytes) => {
+            std::fs::remove_file(path)?;
+            remove_icon();
+            Ok(true)
+        }
+        Err(PrivateFileError::Unreadable) if std::fs::symlink_metadata(path).is_err() => {
+            remove_icon();
+            Err(std::io::ErrorKind::NotFound.into())
+        }
+        _ => Ok(false),
     }
-    std::fs::remove_file(path)?;
-    // The icon goes too, but only if it is still exactly ours.
-    if let Some(icon) = icon_path(path)
-        && std::fs::symlink_metadata(&icon)
-            .is_ok_and(|m| m.is_file() && m.len() == super::ICON.len() as u64)
-        && std::fs::read(&icon).is_ok_and(|b| b == super::ICON)
-    {
-        let _ = std::fs::remove_file(icon);
-    }
-    Ok(true)
 }
 
 /// Read a CSV file for preview: absolute path, regular file, at most
@@ -2694,9 +2701,11 @@ mod tests {
         assert!(!entry.exists(), "nothing is installed without the action");
         run(&mut st, &b, &[Action::InstallLinkHandler]);
         let written = std::fs::read_to_string(&entry)?;
-        assert!(rust_microsip_platform::is_desktop_entry(&written));
         let exe = std::env::current_exe()?;
-        if !exe.to_string_lossy().contains(['"', '`', '$', '\\', '%']) {
+        if !exe
+            .to_string_lossy()
+            .contains(['"', '`', '$', '\\', '%', '='])
+        {
             assert!(written.contains(&format!("Exec=\"{}\" %u", exe.display())));
         }
         assert_eq!(
@@ -2718,10 +2727,21 @@ mod tests {
         std::fs::write(&entry, &edited)?;
         run(&mut st, &b, &[Action::RemoveLinkHandler]);
         assert_eq!(std::fs::read_to_string(&entry)?, edited);
+        assert!(icon.exists(), "a kept entry keeps its icon");
         assert!(
             st.notice(Instant::now())
                 .is_some_and(|n| n.contains("left in place"))
         );
+        // An entry pointing at another program is someone's edit: kept.
+        let other = rust_microsip_platform::desktop_entry(Some(Path::new("/opt/other/app")));
+        std::fs::write(&entry, &other)?;
+        run(&mut st, &b, &[Action::RemoveLinkHandler]);
+        assert_eq!(std::fs::read_to_string(&entry)?, other);
+        assert!(icon.exists());
+        // An icon left without its entry is still cleaned up.
+        std::fs::remove_file(&entry)?;
+        run(&mut st, &b, &[Action::RemoveLinkHandler]);
+        assert!(!icon.exists());
         run(&mut st, &b, &[Action::InstallLinkHandler]);
         run(&mut st, &b, &[Action::RemoveLinkHandler]);
         assert!(!entry.exists());

@@ -120,7 +120,7 @@ pub struct EngineHandle {
     commands: mpsc::Sender<Command>,
     events: Mutex<mpsc::Receiver<Event>>,
     custom_ca: Arc<Mutex<TrustAnchors>>,
-    thread: Option<JoinHandle<()>>,
+    thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl EngineHandle {
@@ -178,7 +178,7 @@ impl EngineHandle {
             commands,
             events: Mutex::new(events),
             custom_ca,
-            thread: Some(thread),
+            thread: Mutex::new(Some(thread)),
         })
     }
 
@@ -215,17 +215,23 @@ impl EngineHandle {
     }
 
     /// Request shutdown and wait up to `timeout` for the engine thread.
-    /// Returns `true` if the engine stopped in time.
-    pub fn shutdown(mut self, timeout: Duration) -> bool {
+    /// Returns `true` if the engine stopped in time. Safe to call from more
+    /// than one thread (for example the window and a signal handler).
+    pub fn shutdown(&self, timeout: Duration) -> bool {
         let _ = self.commands.try_send(Command::Shutdown);
         let deadline = std::time::Instant::now() + timeout;
         while std::time::Instant::now() < deadline {
-            if self.thread.as_ref().is_none_or(JoinHandle::is_finished) {
-                if let Some(thread) = self.thread.take() {
+            let mut thread = self
+                .thread
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if thread.as_ref().is_none_or(JoinHandle::is_finished) {
+                if let Some(thread) = thread.take() {
                     let _ = thread.join();
                 }
                 return true;
             }
+            drop(thread);
             std::thread::sleep(Duration::from_millis(20));
         }
         false

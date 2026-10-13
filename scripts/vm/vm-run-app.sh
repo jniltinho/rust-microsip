@@ -5,10 +5,15 @@
 # and reports the session type, tray watcher/item and (X11) window icon. The
 # app keeps running until vm-quit-app.sh.
 bin=$1; label=$2
-# Environment of a client in the graphical session (the compositor itself lacks WAYLAND_DISPLAY).
-shell=$(for p in $(pgrep -u tester); do tr '\0' '\n' 2>/dev/null < /proc/$p/environ | grep -qE '^(WAYLAND_)?DISPLAY=' && { echo $p; break; }; done)
-eval "$(tr '\0' '\n' < /proc/$shell/environ | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS|XDG_CURRENT_DESKTOP|XDG_SESSION_TYPE)=' | sed 's/^/export /')"
-scratch=$(mktemp -d /tmp/rms-XXXX); mkdir -p $scratch/c $scratch/d
+# Environment of a client in the graphical session (the compositor itself
+# lacks WAYLAND_DISPLAY); only these variables are copied, without eval.
+shell=$(for p in $(pgrep -u "$(id -un)"); do tr '\0' '\n' 2>/dev/null < /proc/$p/environ | grep -qE '^(WAYLAND_)?DISPLAY=' && { echo $p; break; }; done)
+[ -n "$shell" ] || { echo "no graphical session found" >&2; exit 1; }
+while IFS= read -r var; do export "$var"; done <<VARS
+$(tr '\0' '\n' < /proc/$shell/environ | grep -E '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|XDG_RUNTIME_DIR|DBUS_SESSION_BUS_ADDRESS|XDG_CURRENT_DESKTOP|XDG_SESSION_TYPE)=')
+VARS
+state="${XDG_RUNTIME_DIR:?}/rms-last"
+scratch=$(mktemp -d /tmp/tmp.XXXXXXXXXX); mkdir -p $scratch/c $scratch/d
 XDG_CONFIG_HOME=$scratch/c XDG_DATA_HOME=$scratch/d setsid "$bin" > $scratch/app.log 2>&1 < /dev/null &
 pid=$!
 sleep 8
@@ -18,4 +23,4 @@ echo "watcher=$(busctl --user list 2>/dev/null | grep -c '^org.kde.StatusNotifie
 echo "item=$(busctl --user list 2>/dev/null | grep -c "^org.kde.StatusNotifierItem-$pid-1 ")"
 [ -n "$DISPLAY" ] && [ "$XDG_SESSION_TYPE" = x11 ] && for w in $(xprop -root _NET_CLIENT_LIST | tr -d ',' | grep -o '0x[0-9a-f]*'); do [ "$(xprop -id $w _NET_WM_PID | grep -o '[0-9]*$')" = "$pid" ] && echo "icon=$(xprop -id $w -len 8 _NET_WM_ICON | grep -o 'Icon ([0-9]* x [0-9]*)')"; done
 echo "log:"; cat $scratch/app.log
-echo "$pid $scratch" > /tmp/rms-last
+echo "$pid $scratch" > "$state"

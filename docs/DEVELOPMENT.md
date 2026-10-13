@@ -137,7 +137,7 @@ See [the desktop VM receipt](receipts/desktop-vms-2026-10-13.md).
 ## Running the app locally
 
 Build in Docker, run the binary on the host (it needs your X11/Wayland session, a Vulkan or OpenGL
-driver and `libasound.so.2`).
+driver, `libasound.so.2` and, on X11, `libxkbcommon-x11`).
 
 ```sh
 make dist

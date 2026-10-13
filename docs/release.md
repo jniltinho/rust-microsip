@@ -29,7 +29,7 @@ uploads binaries. Tagging is the owner's decision.
 The workflow then builds `docker buildx build --target artifacts`, checks `SHA256SUMS`, verifies that
 the AppImage wraps the identical ELF, runs the publication scan over the artifacts and publishes:
 
-- `rust-microsip-X.Y.Z-x86_64` (ELF; needs glibc and `libasound.so.2`)
+- `rust-microsip-X.Y.Z-x86_64` (ELF; needs glibc ≥ 2.39, `libasound.so.2` and, on X11, `libxkbcommon-x11`)
 - `rust-microsip-X.Y.Z-x86_64.AppImage`
 - `rust-microsip-X.Y.Z-sbom.cdx.json`
 - `rust-microsip-X.Y.Z-licenses.tar.gz` (LICENSE, NOTICE, Rust dependency and toolchain notices,

@@ -25,7 +25,7 @@ pub use instance::{
 pub use notify::{
     CallAction, Delivery, NotificationAction, Notifier, NotifierStatus, sanitize_caller,
 };
-pub use private_file::{PrivateFileError, read_private_file};
+pub use private_file::{PrivateFileError, read_own_file, read_private_file};
 pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};
 pub use tray::{Tray, TrayAction, TrayStatus};
 pub use uri::{MAX_URI_LEN, UriError, parse_dial_uri};
@@ -54,15 +54,15 @@ StartupNotify=true
 /// GLib ignores an entry whose `Exec` program is not on `PATH`, which is the
 /// usual case for a downloaded ELF or an AppImage: the dock icon and the link
 /// handler only work when the entry names the real file. Paths that would
-/// need escaping (quotes, `` ` ``, `$`, `\`, `%`, control characters) fall back
-/// to the bare name.
+/// need escaping or are not allowed in `Exec` (quotes, `` ` ``, `$`, `\`,
+/// `%`, `=`, control characters) fall back to the bare name.
 pub fn desktop_entry(executable: Option<&std::path::Path>) -> String {
     let quoted = executable
         .filter(|p| p.is_absolute())
         .and_then(|p| p.to_str())
         .filter(|p| {
             !p.chars()
-                .any(|c| matches!(c, '"' | '`' | '$' | '\\' | '%') || c.is_control())
+                .any(|c| matches!(c, '"' | '`' | '$' | '\\' | '%' | '=') || c.is_control())
         })
         .map(|p| format!("\"{p}\""));
     match quoted {
@@ -73,57 +73,44 @@ pub fn desktop_entry(executable: Option<&std::path::Path>) -> String {
     }
 }
 
-/// Whether `text` is exactly an entry [`desktop_entry`] can write (for any
-/// executable path), so removing it never deletes a user's or another
-/// application's edits.
-pub fn is_desktop_entry(text: &str) -> bool {
-    let Some(start) = text.find("\nExec=") else {
-        return false;
-    };
-    let line_end = text[start + 1..]
-        .find('\n')
-        .map_or(text.len(), |i| start + 1 + i);
-    let exec = &text[start + 1..line_end];
-    let generic = format!(
-        "{}{}",
-        &text[..start + 1],
-        text.get(line_end + 1..).unwrap_or("")
-    );
-    let ours = exec == "Exec=rust-microsip %u"
-        || exec
-            .strip_prefix("Exec=\"/")
-            .and_then(|rest| rest.strip_suffix("\" %u"))
-            .is_some_and(|path| {
-                !path
-                    .chars()
-                    .any(|c| matches!(c, '"' | '`' | '$' | '\\' | '%') || c.is_control())
-            });
-    ours && generic == DESKTOP_ENTRY.replace("Exec=rust-microsip %u\n", "")
+/// The file a desktop entry should start: the AppImage when this process
+/// runs inside one, otherwise this executable. `$APPIMAGE` is trusted only
+/// when this executable lies under `$APPDIR` (a child of another AppImage
+/// inherits both), and only existing regular files count (not a replaced
+/// binary's "(deleted)" path).
+pub fn desktop_executable() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let appimage = std::env::var_os("APPDIR")
+        .map(std::path::PathBuf::from)
+        .filter(|dir| dir.is_absolute() && exe.starts_with(dir))
+        .and_then(|_| std::env::var_os("APPIMAGE"))
+        .map(std::path::PathBuf::from)
+        .filter(|p| p.is_absolute() && p.is_file());
+    appimage.or_else(|| Some(exe).filter(|p| p.is_file()))
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn entry_names_the_real_executable_and_is_recognized() {
+    fn entry_names_the_real_executable() {
         use std::path::Path;
         let entry = super::desktop_entry(Some(Path::new("/opt/My Apps/rust-microsip.AppImage")));
         assert!(entry.contains("\nExec=\"/opt/My Apps/rust-microsip.AppImage\" %u\n"));
-        assert!(super::is_desktop_entry(&entry));
-        assert!(super::is_desktop_entry(super::DESKTOP_ENTRY));
-        for odd in ["relative/app", "/tmp/a\"b", "/tmp/$HOME", "/tmp/50%"] {
+        assert_eq!(entry.matches("\nExec=").count(), 1);
+        for odd in [
+            "relative/app",
+            "/tmp/a\"b",
+            "/tmp/$HOME",
+            "/tmp/50%",
+            "/tmp/a=b",
+        ] {
             assert_eq!(
                 super::desktop_entry(Some(Path::new(odd))),
                 super::DESKTOP_ENTRY
             );
         }
-        let edited = super::DESKTOP_ENTRY.replace("%u", "--bogus %u");
-        assert!(!super::is_desktop_entry(&edited));
-        assert!(!super::is_desktop_entry(
-            &entry.replace("Telephony", "Office")
-        ));
-        assert!(!super::is_desktop_entry(
-            &entry.replace("\" %u", "\" --x %u")
-        ));
+        // The test binary is a regular file outside any AppImage.
+        assert_eq!(super::desktop_executable(), std::env::current_exe().ok());
     }
 
     #[test]

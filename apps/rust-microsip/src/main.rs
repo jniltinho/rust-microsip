@@ -12,6 +12,7 @@
 //! in-memory store keeps the session usable with a visible warning, but the
 //! account is not registered automatically and settings cannot be saved.
 
+mod bridge;
 mod service;
 
 use rust_microsip::cli;
@@ -26,26 +27,24 @@ use rust_microsip_config::{
     StoredConfig,
 };
 use rust_microsip_control::{ControlError, ErrorCode, Operation, OwnerMode, Response};
-use rust_microsip_core::{
-    CallId, CallPhase, Command, Direction, Event, FRAME_SAMPLES, MediaIo, Notice,
-};
+use rust_microsip_core::{Command, Event, FRAME_SAMPLES, MediaIo, Notice};
 use rust_microsip_platform::{
-    Ack, Acquired, CallAction, ControlClient, ControlServer, ControlSocketError, Incoming,
-    InstanceError, Listener, Notifier, Request, SecretStore, Tray, TrayAction, Waker, acquire,
-    default_runtime_dir, parse_dial_uri,
+    Ack, Acquired, ControlClient, ControlServer, ControlSocketError, Incoming, InstanceError,
+    Listener, Notifier, Request, SecretStore, Tray, Waker, acquire, default_runtime_dir,
+    parse_dial_uri,
 };
 use rust_microsip_storage::{DEFAULT_RETENTION_DAYS, Store};
 use rust_microsip_telephony::engine::{EngineHandle, TrustAnchors};
 use secrecy::{ExposeSecret, SecretString};
 use std::{
-    cell::{Cell, RefCell},
+    cell::RefCell,
     collections::BTreeMap,
     io::{BufRead, Read, Write},
     path::PathBuf,
     process::ExitCode,
     sync::{
         Arc, OnceLock,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering},
         mpsc::{self, Receiver, Sender, SyncSender, TrySendError},
     },
     time::Duration,
@@ -66,15 +65,14 @@ fn fail(text: &str, code: u8) -> ExitCode {
 struct EngineBackend {
     /// Control socket for CLI/MCP clients (owner only).
     control: Option<ControlServer>,
-    engine: Option<EngineHandle>,
+    engine: Option<Arc<EngineHandle>>,
+    /// Engine events, notifications and tray clicks (see [`bridge`]).
+    bridge: Option<bridge::Bridge>,
     repaint: Arc<OnceLock<eframe::egui::Context>>,
     pending: RefCell<Vec<Event>>,
     /// Single-instance listener (requests from later launches).
     listener: Option<Listener>,
     external: RefCell<Vec<External>>,
-    notifier: Notifier,
-    tray: Tray,
-    ringing: Cell<Option<CallId>>,
     /// Set by the signal thread: quit without asking.
     terminating: Arc<AtomicBool>,
     /// Serialized keyring worker.
@@ -85,32 +83,6 @@ struct EngineBackend {
     devices_running: Arc<AtomicBool>,
     wake: Waker,
 }
-impl EngineBackend {
-    /// Mirror incoming-call state into a desktop notification and turn its
-    /// actions into commands, only while that same call is still ringing.
-    fn notify(&self, events: &[Event]) {
-        for event in events {
-            let Event::Call(call) = event else { continue };
-            let ringing = call.direction == Direction::Incoming && call.phase == CallPhase::Ringing;
-            if ringing && self.ringing.get() != Some(call.id) {
-                let _ = self.notifier.incoming_call(call.id, &call.remote);
-                self.ringing.set(Some(call.id));
-            } else if !ringing && self.ringing.get() == Some(call.id) {
-                let _ = self.notifier.close(call.id);
-                self.ringing.set(None);
-            }
-        }
-        while let Some(action) = self.notifier.try_recv_action() {
-            if self.ringing.get() == Some(action.call) {
-                let command = match action.action {
-                    CallAction::Answer => Command::Answer(action.call),
-                    CallAction::Reject => Command::Reject(action.call),
-                };
-                let _ = self.send(command);
-            }
-        }
-    }
-}
 impl Backend for EngineBackend {
     fn send(&self, command: Command) -> Result<(), Notice> {
         self.engine
@@ -120,10 +92,10 @@ impl Backend for EngineBackend {
     }
     fn poll(&self) -> Vec<Event> {
         let mut events = std::mem::take(&mut *self.pending.borrow_mut());
-        if let Some(engine) = &self.engine {
-            events.extend(engine.try_events());
+        if let Some(bridge) = &self.bridge {
+            bridge.tick();
+            events.extend(bridge.events());
         }
-        self.notify(&events);
         events
     }
     fn external(&self) -> Vec<External> {
@@ -131,11 +103,8 @@ impl Backend for EngineBackend {
         if self.terminating.swap(false, Ordering::SeqCst) {
             out.push(External::Quit);
         }
-        while let Some(action) = self.tray.try_recv() {
-            out.push(match action {
-                TrayAction::Show => External::Activate,
-                TrayAction::Quit => External::QuitRequest,
-            });
+        if let Some(bridge) = &self.bridge {
+            out.extend(bridge.external());
         }
         if let Some(listener) = &self.listener {
             while let Some(request) = listener.try_recv() {
@@ -156,8 +125,6 @@ impl Backend for EngineBackend {
         if let Some(control) = &self.control {
             control.set_waker(waker.clone());
         }
-        self.tray.set_waker(waker.clone());
-        self.notifier.set_waker(waker);
         let _ = self.repaint.set(ctx.clone());
     }
     fn run_job(&self, job: Job) -> Result<(), &'static str> {
@@ -376,9 +343,11 @@ fn spawn_keyring_worker(results: Sender<JobResult>, wake: Waker) -> Option<SyncS
 }
 impl Drop for EngineBackend {
     fn drop(&mut self) {
+        // The bridge stops first; it holds the engine's event stream.
+        drop(self.bridge.take());
         if let Some(engine) = self.engine.take() {
             // Bounded: unregister and BYE are best-effort within this time.
-            let _ = engine.shutdown(Duration::from_secs(4));
+            let _ = engine.shutdown(bridge::SHUTDOWN);
         }
     }
 }
@@ -732,16 +701,10 @@ fn desktop(args: &CliArgs) -> ExitCode {
         audio_prefs.output_device.clone(),
     ));
     let repaint: Arc<OnceLock<eframe::egui::Context>> = Arc::new(OnceLock::new());
-    let wake = repaint.clone();
-    let engine = match EngineHandle::spawn(
-        media,
-        Arc::new(move || {
-            if let Some(ctx) = wake.get() {
-                ctx.request_repaint();
-            }
-        }),
-    ) {
-        Ok(engine) => engine,
+    // Engine events go to the bridge thread first, which wakes the window.
+    let nudge = bridge::nudge_channel();
+    let engine = match EngineHandle::spawn(media, bridge::nudger(&nudge.0)) {
+        Ok(engine) => Arc::new(engine),
         Err(_) => return fail("rust-microsip: cannot start the telephony engine", 1),
     };
     let mut load_password = None;
@@ -800,10 +763,12 @@ fn desktop(args: &CliArgs) -> ExitCode {
     }
     let terminating = Arc::new(AtomicBool::new(false));
     let signal_code = Arc::new(AtomicU8::new(0));
+    let ticks = Arc::new(AtomicU64::new(0));
     watch_signals(
         repaint.clone(),
         Arc::clone(&terminating),
         Arc::clone(&signal_code),
+        (Arc::clone(&engine), Arc::clone(&ticks)),
     );
     let settings = UiSettings {
         account: stored.as_ref().map(|s| s.account.clone()),
@@ -827,17 +792,22 @@ fn desktop(args: &CliArgs) -> ExitCode {
     });
     let backend = EngineBackend {
         control,
+        bridge: Some(bridge::Bridge::spawn(
+            Arc::clone(&engine),
+            Notifier::session(),
+            {
+                let icon = ui::window_icon();
+                Tray::session(icon.width, icon.height, &icon.rgba)
+            },
+            nudge,
+            wake.clone(),
+            ticks,
+        )),
         engine: Some(engine),
         repaint,
         pending: RefCell::new(notices),
         listener,
         external: RefCell::new(initial),
-        notifier: Notifier::session(),
-        tray: {
-            let icon = ui::window_icon();
-            Tray::session(icon.width, icon.height, &icon.rgba)
-        },
-        ringing: Cell::new(None),
         terminating,
         keyring: spawn_keyring_worker(results_tx.clone(), wake.clone()),
         results_tx,
@@ -864,7 +834,20 @@ fn desktop(args: &CliArgs) -> ExitCode {
         }
         None => {}
     }
-    match ui::run(Box::new(backend), settings, save, storage) {
+    // The windowing stack loads some system libraries at run time and panics
+    // when one is missing (libxkbcommon-x11 on X11): report it and exit
+    // cleanly instead of crashing. The panic message above names the library.
+    let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        ui::run(Box::new(backend), settings, save, storage)
+    }));
+    let Ok(run) = run else {
+        return fail(
+            "rust-microsip: the window could not start because a system library is missing \
+             (see above; on X11 the usual one is libxkbcommon-x11)",
+            1,
+        );
+    };
+    match run {
         // After SIGTERM/SIGINT: 143 or 130, as if killed by the signal.
         Ok(()) => match signal_code.load(Ordering::SeqCst) {
             0 => ExitCode::SUCCESS,
@@ -894,6 +877,7 @@ fn watch_signals(
     window: Arc<OnceLock<eframe::egui::Context>>,
     terminating: Arc<AtomicBool>,
     code: Arc<AtomicU8>,
+    (engine, ticks): (Arc<EngineHandle>, Arc<AtomicU64>),
 ) {
     let spawned = std::thread::Builder::new()
         .name("rust-microsip-signals".into())
@@ -923,6 +907,19 @@ fn watch_signals(
                     Some(ctx) => ctx.send_viewport_cmd(eframe::egui::ViewportCommand::Close),
                     None => std::process::exit(first.into()),
                 }
+                // A stalled window loop (a covered or minimized window on
+                // Wayland runs no frames) never sees the close request: shut
+                // the engine down here and exit with the signal's code.
+                let before = ticks.load(Ordering::SeqCst);
+                let _ = std::thread::Builder::new()
+                    .name("rust-microsip-exit".into())
+                    .spawn(move || {
+                        std::thread::sleep(bridge::STALL);
+                        if bridge::stalled(before, ticks.load(Ordering::SeqCst)) {
+                            let _ = engine.shutdown(bridge::SHUTDOWN);
+                            std::process::exit(first.into());
+                        }
+                    });
                 let second: u8 = tokio::select! {
                     _ = term.recv() => 143,
                     _ = int.recv() => 130,

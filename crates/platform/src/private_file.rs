@@ -29,25 +29,41 @@ pub enum PrivateFileError {
 /// # Errors
 /// [`PrivateFileError`] describing the refusal, never the contents.
 pub fn read_private_file(path: &Path, max: u64) -> Result<String, PrivateFileError> {
+    let bytes = read_checked(path, max, true)?;
+    String::from_utf8(bytes).map_err(|_| PrivateFileError::Unreadable)
+}
+
+/// Read up to `max` bytes from `path` if it is a regular file owned by this
+/// user (any mode), with the same single `O_NOFOLLOW | O_NONBLOCK` open as
+/// [`read_private_file`].
+///
+/// # Errors
+/// [`PrivateFileError`]; [`PrivateFileError::Unreadable`] also covers a
+/// missing file.
+pub fn read_own_file(path: &Path, max: u64) -> Result<Vec<u8>, PrivateFileError> {
+    read_checked(path, max, false)
+}
+
+fn read_checked(path: &Path, max: u64, private: bool) -> Result<Vec<u8>, PrivateFileError> {
     let flags = OFlags::RDONLY | OFlags::NOFOLLOW | OFlags::NONBLOCK | OFlags::CLOEXEC;
     let fd =
         rustix::fs::open(path, flags, Mode::empty()).map_err(|_| PrivateFileError::Unreadable)?;
     let stat = rustix::fs::fstat(&fd).map_err(|_| PrivateFileError::Unreadable)?;
     if FileType::from_raw_mode(stat.st_mode) != FileType::RegularFile
         || stat.st_uid != rustix::process::geteuid().as_raw()
-        || stat.st_mode & 0o077 != 0
+        || (private && stat.st_mode & 0o077 != 0)
     {
         return Err(PrivateFileError::NotPrivate);
     }
-    let mut text = String::new();
+    let mut bytes = Vec::new();
     std::fs::File::from(fd)
         .take(max + 1)
-        .read_to_string(&mut text)
+        .read_to_end(&mut bytes)
         .map_err(|_| PrivateFileError::Unreadable)?;
-    if text.len() as u64 > max {
+    if bytes.len() as u64 > max {
         return Err(PrivateFileError::TooLarge);
     }
-    Ok(text)
+    Ok(bytes)
 }
 
 #[cfg(test)]
@@ -85,6 +101,12 @@ mod tests {
             read_private_file(&dir, 64),
             Err(PrivateFileError::NotPrivate)
         );
+        set(0o644).unwrap_or_default();
+        assert_eq!(
+            read_own_file(&file, 64).as_deref(),
+            Ok(&b"fictional-capability"[..])
+        );
+        assert_eq!(read_own_file(&link, 64), Err(PrivateFileError::Unreadable));
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

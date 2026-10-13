@@ -35,8 +35,36 @@ The fix:
 
 Unit tests cover entry rendering, recognition, odd paths, and the install and remove round trip.
 
+## More distributions (same day)
+
+The owner asked for Ubuntu 26.04 and an Arch or Red Hat family system as well. [`create-desktop-vm.sh`](../../scripts/vm/create-desktop-vm.sh) gained three flavors. The images were checked as follows: Ubuntu by signature, Fedora by signature with only the signed text parsed, and Arch by SHA256 over HTTPS.
+
+| VM | Desktop | glibc | ELF | AppImage | Tray | Quit |
+| --- | --- | --- | --- | --- | --- | --- |
+| Ubuntu 26.04.1 LTS | GNOME Wayland (AppIndicator on) | 2.43 | opens | opens without `libfuse2` | registered | tray menu |
+| Fedora 44 | KDE Plasma 6 Wayland | 2.43 | opens | opens | registered, shown in the system tray | tray menu |
+| Arch Linux (2026-10-01 image) | Xfce X11 | 2.44 | opens once `libxkbcommon-x11` is installed | — | registered; `_NET_WM_ICON` 256×256 | tray menu |
+
+These runs found and fixed three more problems in the VM setup:
+- The Ubuntu 26.04 `gdm3` conffile prompt; the fix is `--force-confold`.
+- The Fedora 44 Plasma Login Manager and its `plasma-setup` first-run wizard took the seat; autologin now goes in `/etc/plasmalogin.conf.d/` and the wizard is removed.
+- The Fedora `CHECKSUM` file is clearsigned; only the signed text is parsed now.
+
+### Defects found in the app and fixed
+
+1. **Covered, minimized or locked window on Wayland froze the app's duties.**
+   - Cause: eframe draws a frame only after the compositor's frame callback, and a compositor sends none to a window that is fully covered or behind the lock screen. Every duty driven from the window loop then stopped.
+   - Observed on Ubuntu 26.04 with the window covered: tray Quit and SIGTERM did nothing, and `rust-microsip status` timed out.
+   - Fix: a bridge thread now takes engine events first. It shows and closes the incoming-call notification, sends its Answer/Reject to the engine, and forwards tray clicks.
+   - If the window loop has not run for 3 s after a tray Quit with no call, or after SIGTERM, the engine shuts down within its bounded time and the process exits.
+   - Re-checked in the same setup: tray Quit exited; SIGTERM exited after 3 s with code 143. That run also showed that GNOME disables extensions, and with them the tray, while the screen is locked.
+2. **Missing `libxkbcommon-x11` on X11 crashed the window.** winit loads the library at run time and panics without it. This happened on Arch Xfce. The app now prints that a system library is missing (naming it) and exits with code 1.
+3. **No dock or task bar icon on Wayland.** Plasma 6 also shows a generic icon until the link handler entry (fixed above) is installed. winit does not implement a per-window icon protocol on Wayland.
+
 ## Not established
 
 - Incoming-call notifications and their Answer/Reject actions on these desktops: no PBX is reachable from the VMs (task 8.1 stays open).
 - On Wayland, the fallback window frame drawn by winit shows no title text. This is cosmetic; the title is still set for the compositor.
+- On Wayland, while the window is covered, control requests (CLI/MCP) wait for it, and tray "Show" cannot raise it: approvals need the visible window anyway, and the dock or task bar raises it.
+- An incoming call notification while the window is covered: the bridge handles it, but no PBX is reachable from the VMs to prove it there.
 - Calls, audio and the full manual checklist on the exact candidate (tasks 1.5, 9.6).
