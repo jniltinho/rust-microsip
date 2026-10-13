@@ -520,6 +520,10 @@ impl eframe::App for SoftphoneApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        ui.ctx()
+            .accesskit_node_builder(egui::accesskit_root_id(), |node| {
+                node.set_label("rust-microsip");
+            });
         self.draw(ui);
     }
 }
@@ -712,11 +716,9 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
             ("+", "Add +", Action::Plus),
             ("C", "Clear the number", Action::ClearNumber),
         ] {
-            if ui
-                .add_enabled(!in_call, egui::Button::new(text).min_size(size.into()))
-                .on_hover_text(hover)
-                .clicked()
-            {
+            // The hover text doubles as the screen-reader name.
+            let button = ui.add_enabled(!in_call, egui::Button::new(text).min_size(size.into()));
+            if named(button, hover).on_hover_text(hover).clicked() {
                 out.push(action);
             }
         }
@@ -809,17 +811,16 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
     );
     if let Some(target) = st.transfer_target.as_mut() {
         ui.group(|ui| {
-            ui.label("Transfer to");
-            let response = named(
-                ui.add(
+            let label = ui.label("Transfer to");
+            let response = ui
+                .add(
                     egui::TextEdit::singleline(target)
                         .id(transfer_id())
                         .char_limit(MAX_NUMBER_CHARS)
                         .desired_width(f32::INFINITY)
                         .hint_text("Number"),
-                ),
-                "Transfer to number",
-            );
+                )
+                .labelled_by(label.id);
             if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
                 out.push(Action::ConfirmTransfer);
             }
@@ -1171,7 +1172,7 @@ fn audio_settings(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
                     .find(|d| state::device_key(d) == key)
                     .map_or_else(|| format!("{key} (not found)"), |d| d.name.clone()),
             };
-            egui::ComboBox::from_id_salt(label)
+            let combo = egui::ComboBox::from_id_salt(label)
                 .selected_text(shown)
                 .width(ui.available_width())
                 .truncate()
@@ -1186,6 +1187,7 @@ fn audio_settings(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
                         ui.selectable_value(&mut selected, Some(state::device_key(device)), text);
                     }
                 });
+            named(combo.response, &format!("{label} device"));
             if selected != *current {
                 out.push(if input {
                     Action::SetAudioInput(selected)

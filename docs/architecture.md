@@ -48,5 +48,6 @@ See [ADR 0012](adr/0012-production-dependency-graph.md) for the dependency graph
 ## Porting and UI changes
 
 - **macOS/Windows**: core, media, telephony and storage are portable Rust. Porting needs the cpal backend for the platform (already provided by cpal), platform paths/permissions in config, and packaging. Nothing in the engine depends on Linux APIs.
+- **UI contract errors**: adapters keep typed errors (`SecretError`, `InstanceError`, `StorageError`, ...); what crosses into the window through `Backend` jobs is already user-safe text, so the UI never formats adapter internals.
 - **Another UI toolkit** (for example Slint or a webview shell): implement the same `Backend` contract — send `Command`, poll `Event` — and keep the reducer in `apps/rust-microsip/src/ui/state.rs` as the model. The engine, audio and storage do not change.
 - **Agent CLI/MCP and web**: separate OpenSpec changes reuse `core` and the engine through the same command/event contract.
