@@ -5,8 +5,10 @@
 //! window is hidden), so anything driven from the UI loop stalls. This thread
 //! takes the engine's events first: it shows and closes the incoming-call
 //! notification and sends its Answer/Reject straight to the engine, forwards
-//! tray clicks, and passes everything on to the window. When the window loop
-//! is stalled, a tray Quit without a call shuts the engine down and exits.
+//! tray clicks, and passes everything on to the window. A tray Quit still
+//! goes through the window (it may need to confirm hanging up, and the window
+//! records history), so it waits until the window draws again; SIGTERM has
+//! its own fallback in `main`.
 
 use rust_microsip::ui::External;
 use rust_microsip_core::{CallId, CallPhase, Command, Direction, Event};
@@ -16,11 +18,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::thread::JoinHandle;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-/// How long the window loop may stay silent before it counts as stalled.
+/// How long the window loop may stay silent after SIGTERM before the
+/// process exits without it.
 pub const STALL: Duration = Duration::from_secs(3);
-/// Bounded engine shutdown (unregister, BYE) before exiting without the window.
+/// Bounded engine shutdown (unregister, BYE).
 pub const SHUTDOWN: Duration = Duration::from_secs(4);
 const IDLE: Duration = Duration::from_millis(250);
 
@@ -50,7 +53,8 @@ pub fn nudger(nudge: &SyncSender<()>) -> Waker {
 impl Bridge {
     /// Start the thread. `ui_wake` repaints the window after new input;
     /// `nudge`/`nudged` come from [`nudge_channel`], and the engine must have
-    /// been started with [`nudger`] on the same channel.
+    /// been started with [`nudger`] on the same channel. `None` when the
+    /// thread cannot be created (nothing would then read engine events).
     pub fn spawn(
         engine: Arc<EngineHandle>,
         notifier: Notifier,
@@ -58,7 +62,7 @@ impl Bridge {
         (nudge, nudged): (SyncSender<()>, Receiver<()>),
         ui_wake: Waker,
         ticks: Arc<AtomicU64>,
-    ) -> Self {
+    ) -> Option<Self> {
         notifier.set_waker(nudger(&nudge));
         tray.set_waker(nudger(&nudge));
         let (events_tx, events) = mpsc::channel();
@@ -69,26 +73,23 @@ impl Bridge {
             notifier,
             tray,
             ui_wake,
-            ticks: Arc::clone(&ticks),
             stop: Arc::clone(&stop),
             events: events_tx,
             external: external_tx,
             ringing: None,
-            in_call: false,
-            quit_requested: None,
         };
         let thread = std::thread::Builder::new()
             .name("rust-microsip-bridge".into())
             .spawn(move || worker.run(&nudged))
-            .ok();
-        Self {
+            .ok()?;
+        Some(Self {
             events,
             external,
             ticks,
             stop,
             nudge,
-            thread,
-        }
+            thread: Some(thread),
+        })
     }
 
     /// Engine events forwarded since the last call.
@@ -101,7 +102,8 @@ impl Bridge {
         self.external.try_iter().collect()
     }
 
-    /// Record that the window loop ran (it is not stalled).
+    /// Record that the window loop ran (it is not stalled); also called when
+    /// the window shuts down, so the SIGTERM fallback never races it.
     pub fn tick(&self) {
         self.ticks.fetch_add(1, Ordering::SeqCst);
     }
@@ -122,13 +124,11 @@ struct Worker {
     notifier: Notifier,
     tray: Tray,
     ui_wake: Waker,
-    ticks: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
     events: mpsc::Sender<Vec<Event>>,
     external: mpsc::Sender<External>,
+    // ponytail: one ringing call; the engine handles one call at a time.
     ringing: Option<CallId>,
-    in_call: bool,
-    quit_requested: Option<(Instant, u64)>,
 }
 
 impl Worker {
@@ -159,39 +159,20 @@ impl Worker {
             while let Some(action) = self.tray.try_recv() {
                 let request = match action {
                     TrayAction::Show => External::Activate,
-                    TrayAction::Quit => {
-                        self.quit_requested = Some((Instant::now(), self.ticks()));
-                        External::QuitRequest
-                    }
+                    TrayAction::Quit => External::QuitRequest,
                 };
                 wake |= self.external.send(request).is_ok();
             }
             if wake {
                 (self.ui_wake)();
             }
-            if let Some((at, tick)) = self.quit_requested
-                && at.elapsed() >= STALL
-            {
-                self.quit_requested = None;
-                // The window never ran: quit without it, but never drop a call
-                // (that needs the window's confirmation).
-                if stalled(tick, self.ticks()) && !self.in_call {
-                    let _ = self.engine.shutdown(SHUTDOWN);
-                    std::process::exit(0);
-                }
-            }
         }
-    }
-
-    fn ticks(&self) -> u64 {
-        self.ticks.load(Ordering::SeqCst)
     }
 
     /// Mirror incoming-call state into the desktop notification.
     fn observe(&mut self, events: &[Event]) {
         for event in events {
             let Event::Call(call) = event else { continue };
-            self.in_call = !matches!(call.phase, CallPhase::Ended(_));
             let ringing = call.direction == Direction::Incoming && call.phase == CallPhase::Ringing;
             if ringing && self.ringing != Some(call.id) {
                 let _ = self.notifier.incoming_call(call.id, &call.remote);

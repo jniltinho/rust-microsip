@@ -52,13 +52,17 @@ These runs found and fixed three more problems in the VM setup:
 
 ### Defects found in the app and fixed
 
-1. **Covered, minimized or locked window on Wayland froze the app's duties.**
+1. **A covered, minimized or locked window on Wayland stalled the app's duties.**
    - Cause: eframe draws a frame only after the compositor's frame callback, and a compositor sends none to a window that is fully covered or behind the lock screen. Every duty driven from the window loop then stopped.
    - Observed on Ubuntu 26.04 with the window covered: tray Quit and SIGTERM did nothing, and `rust-microsip status` timed out.
-   - Fix: a bridge thread now takes engine events first. It shows and closes the incoming-call notification, sends its Answer/Reject to the engine, and forwards tray clicks.
-   - If the window loop has not run for 3 s after a tray Quit with no call, or after SIGTERM, the engine shuts down within its bounded time and the process exits.
-   - Re-checked in the same setup: tray Quit exited; SIGTERM exited after 3 s with code 143. That run also showed that GNOME disables extensions, and with them the tray, while the screen is locked.
-2. **Missing `libxkbcommon-x11` on X11 crashed the window.** winit loads the library at run time and panics without it. This happened on Arch Xfce. The app now prints that a system library is missing (naming it) and exits with code 1.
+   - Fix: a bridge thread now takes engine events first. It shows and closes the incoming-call notification, sends its Answer/Reject straight to the engine (the engine ignores them unless the call is still ringing), and forwards tray clicks.
+   - After SIGTERM, if the window loop has not run for 3 s, the engine shuts down within its bounded time and the process exits with 143. Events the window had not applied by then may be missing from the history.
+   - A tray Quit still goes through the window: it may need to confirm hanging up, and the window records history. It therefore waits until the window draws again.
+   - Re-checked in the same setup:
+     - SIGTERM with the window covered: the app exits after 3 s.
+     - Tray Quit with the window covered: the app waits, then exits 1 s after the window is uncovered.
+     - With the screen locked, GNOME disables extensions, and with them the tray.
+2. **Missing `libxkbcommon-x11` on X11 crashed the window.** winit loads the library at run time and panics without it. This happened on Arch Xfce. That panic, recognised by its "could not be loaded" message, is now reported as a missing system library and the app exits with code 1. Any other panic still propagates.
 3. **No dock or task bar icon on Wayland.** Plasma 6 also shows a generic icon until the link handler entry (fixed above) is installed. winit does not implement a per-window icon protocol on Wayland.
 
 ## Not established

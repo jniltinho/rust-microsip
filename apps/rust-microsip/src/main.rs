@@ -343,8 +343,11 @@ fn spawn_keyring_worker(results: Sender<JobResult>, wake: Waker) -> Option<SyncS
 }
 impl Drop for EngineBackend {
     fn drop(&mut self) {
-        // The bridge stops first; it holds the engine's event stream.
-        drop(self.bridge.take());
+        // The bridge stops first; it holds the engine's event stream. The
+        // tick tells the SIGTERM fallback that the window is shutting down.
+        if let Some(bridge) = self.bridge.take() {
+            bridge.tick();
+        }
         if let Some(engine) = self.engine.take() {
             // Bounded: unregister and BYE are best-effort within this time.
             let _ = engine.shutdown(bridge::SHUTDOWN);
@@ -790,19 +793,22 @@ fn desktop(args: &CliArgs) -> ExitCode {
             ctx.request_repaint();
         }
     });
+    let Some(bridge) = bridge::Bridge::spawn(
+        Arc::clone(&engine),
+        Notifier::session(),
+        {
+            let icon = ui::window_icon();
+            Tray::session(icon.width, icon.height, &icon.rgba)
+        },
+        nudge,
+        wake.clone(),
+        Arc::clone(&ticks),
+    ) else {
+        return fail("rust-microsip: cannot start the event thread", 1);
+    };
     let backend = EngineBackend {
         control,
-        bridge: Some(bridge::Bridge::spawn(
-            Arc::clone(&engine),
-            Notifier::session(),
-            {
-                let icon = ui::window_icon();
-                Tray::session(icon.width, icon.height, &icon.rgba)
-            },
-            nudge,
-            wake.clone(),
-            ticks,
-        )),
+        bridge: Some(bridge),
         engine: Some(engine),
         repaint,
         pending: RefCell::new(notices),
@@ -840,12 +846,18 @@ fn desktop(args: &CliArgs) -> ExitCode {
     let run = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         ui::run(Box::new(backend), settings, save, storage)
     }));
-    let Ok(run) = run else {
-        return fail(
-            "rust-microsip: the window could not start because a system library is missing \
-             (see above; on X11 the usual one is libxkbcommon-x11)",
-            1,
-        );
+    let run = match run {
+        Ok(run) => run,
+        // A library the windowing stack loads at run time ("Library
+        // libxkbcommon-x11.so could not be loaded."); any other panic is a bug.
+        Err(panic) if panic_text(&*panic).contains("could not be loaded") => {
+            return fail(
+                "rust-microsip: the window could not start because a system library is missing \
+                 (see above; on X11 the usual one is libxkbcommon-x11)",
+                1,
+            );
+        }
+        Err(panic) => std::panic::resume_unwind(panic),
     };
     match run {
         // After SIGTERM/SIGINT: 143 or 130, as if killed by the signal.
@@ -865,6 +877,15 @@ fn desktop(args: &CliArgs) -> ExitCode {
             1,
         ),
     }
+}
+
+/// The message of a panic payload (`&str` or `String`), or "".
+fn panic_text(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or("")
 }
 
 /// SIGTERM/SIGINT close the window through the normal path without the
