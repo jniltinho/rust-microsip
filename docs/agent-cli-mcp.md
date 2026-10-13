@@ -38,7 +38,18 @@ private file (mode 0600) under `$XDG_RUNTIME_DIR/rust-microsip/grants/`; pass it
 (another number, a used-up call limit, another operation) still asks you. Grants end
 when they expire, when you press **Revoke**, or when the window restarts. The secret
 is never stored, only its hash. **Clear audit log** deletes the record of requests
-and decisions after confirmation.
+and decisions after confirmation. **Deny all and pause** in a prompt also stops
+grants for 5 minutes and cancels granted operations not yet run.
+
+Know the limits before granting:
+
+- **May answer** trusts the caller identity the PBX passes on (the SIP `From`), which
+  a caller can fake unless your PBX asserts identities. Granting `control:answer`
+  lets the agent open the microphone for anyone who claims to be a listed number.
+- **`control:dtmf`** sends any digits: PBX feature codes and IVRs can transfer or
+  dial numbers outside **May call**. Grant it only with that in mind.
+- Grant and bootstrap files are not deleted automatically after use, expiry or
+  revocation (they are inert then); delete them when you no longer need them.
 
 ## Headless service
 
@@ -57,8 +68,11 @@ microphone becomes active and stops on SIGTERM. Clients use the same file:
 `rust-microsip status --grant-file FILE`. A bootstrap starts one service session
 only; a new session needs a new export from the window. While the service runs, the
 window refuses to open (`engine_owned_by_service`) and `sip:` links are not dialed.
-The service needs a working audio device for real calls; without one it warns and
-calls carry no local audio.
+Audio devices open only while a call's media runs (the log says when the
+microphone becomes active and is released); without a device a call carries no
+local audio. The service's grant cannot be revoked while it runs (the window is
+closed): stop the service to end it; after the grant expires the service stays
+registered but serves nothing.
 
 ## CLI
 

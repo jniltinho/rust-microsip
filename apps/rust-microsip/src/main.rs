@@ -31,8 +31,8 @@ use rust_microsip_core::{
 };
 use rust_microsip_platform::{
     Ack, Acquired, CallAction, ControlClient, ControlServer, ControlSocketError, Incoming,
-    InstanceError, Listener, Notifier, Request, SecretStore, Waker, acquire, default_runtime_dir,
-    parse_dial_uri,
+    InstanceError, Listener, Notifier, Request, SecretStore, Tray, TrayAction, Waker, acquire,
+    default_runtime_dir, parse_dial_uri,
 };
 use rust_microsip_storage::{DEFAULT_RETENTION_DAYS, Store};
 use rust_microsip_telephony::engine::{EngineHandle, TrustAnchors};
@@ -73,6 +73,7 @@ struct EngineBackend {
     listener: Option<Listener>,
     external: RefCell<Vec<External>>,
     notifier: Notifier,
+    tray: Tray,
     ringing: Cell<Option<CallId>>,
     /// Set by the signal thread: quit without asking.
     terminating: Arc<AtomicBool>,
@@ -130,6 +131,12 @@ impl Backend for EngineBackend {
         if self.terminating.swap(false, Ordering::SeqCst) {
             out.push(External::Quit);
         }
+        while let Some(action) = self.tray.try_recv() {
+            out.push(match action {
+                TrayAction::Show => External::Activate,
+                TrayAction::Quit => External::QuitRequest,
+            });
+        }
         if let Some(listener) = &self.listener {
             while let Some(request) = listener.try_recv() {
                 out.push(match request {
@@ -149,6 +156,7 @@ impl Backend for EngineBackend {
         if let Some(control) = &self.control {
             control.set_waker(waker.clone());
         }
+        self.tray.set_waker(waker.clone());
         self.notifier.set_waker(waker);
         let _ = self.repaint.set(ctx.clone());
     }
@@ -390,13 +398,14 @@ fn config_theme(theme: Theme) -> config::Theme {
     }
 }
 
-/// `$XDG_DATA_HOME`, falling back to `$HOME/.local/share`; only absolute
-/// paths from the environment snapshot, never the working directory.
+/// `$XDG_CONFIG_HOME`, falling back to `$HOME/.config`; absolute paths only.
 fn config_home(env: &BTreeMap<String, String>) -> Option<PathBuf> {
     let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
     abs("XDG_CONFIG_HOME").or_else(|| abs("HOME").map(|h| h.join(".config")))
 }
 
+/// `$XDG_DATA_HOME`, falling back to `$HOME/.local/share`; only absolute
+/// paths from the environment snapshot, never the working directory.
 fn data_home(env: &BTreeMap<String, String>) -> Option<PathBuf> {
     let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
     abs("XDG_DATA_HOME").or_else(|| abs("HOME").map(|h| h.join(".local/share")))
@@ -824,6 +833,10 @@ fn desktop(args: &CliArgs) -> ExitCode {
         listener,
         external: RefCell::new(initial),
         notifier: Notifier::session(),
+        tray: {
+            let icon = ui::window_icon();
+            Tray::session(icon.width, icon.height, &icon.rgba)
+        },
         ringing: Cell::new(None),
         terminating,
         keyring: spawn_keyring_worker(results_tx.clone(), wake.clone()),

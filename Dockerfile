@@ -113,7 +113,7 @@ allowed = {
     "packaging/verify.sh", "packaging/export-scaffold.sh",
     "packaging/appimage/build-appimage.sh", "packaging/appimage/verify.sh",
     "packaging/appimage/pins.txt", "packaging/appimage/rust-microsip.desktop",
-    "apps/rust-microsip/assets/icons/rust-microsip.svg",
+    "apps/rust-microsip/assets/icons/rust-microsip.svg", "apps/rust-microsip/assets/icons/rust-microsip-256.png",
     "packaging/check-g0-dependencies.py", "packaging/tests/test_g0_dependencies.py",
     "packaging/collect-cargo-notices.py", "packaging/tests/test_cargo_notices.py",
 }
@@ -164,6 +164,9 @@ RUN printf '%s\n' \
         xvfb x11-apps xdotool imagemagick procps \
         dbus dbus-x11 at-spi2-core python3-pyatspi gir1.2-atspi-2.0 \
     && rm -rf /var/lib/apt/lists/*
+# A null ALSA device: calls really open and release capture and playback
+# (no sound card in the container, nothing is recorded).
+RUN printf '%s\n' 'pcm.!default { type null }' 'ctl.!default { type hw card 0 }' > /etc/asound.conf
 COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/rust-microsip /usr/local/bin/rust-microsip
 COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_lab /usr/local/bin/engine-lab
 COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_network /usr/local/bin/engine-network

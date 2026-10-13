@@ -32,6 +32,7 @@ apps/rust-microsip/assets/**
 !apps/rust-microsip/assets/icons/
 apps/rust-microsip/assets/icons/**
 !apps/rust-microsip/assets/icons/rust-microsip.svg
+!apps/rust-microsip/assets/icons/rust-microsip-256.png
 !apps/rust-microsip/tests/
 apps/rust-microsip/tests/**
 !apps/rust-microsip/tests/*.rs

@@ -51,21 +51,12 @@ pub struct ControlCommand {
 }
 
 fn read_private(path: &std::path::Path) -> Result<String, String> {
-    use std::io::Read;
-    use std::os::unix::fs::MetadataExt;
-    let meta =
-        std::fs::symlink_metadata(path).map_err(|_| "the grant file cannot be read".to_owned())?;
-    let uid = std::fs::metadata("/proc/self").map_or(u32::MAX, |m| m.uid());
-    if !meta.is_file() || meta.uid() != uid || meta.mode() & 0o077 != 0 || meta.len() > 512 {
-        return Err(
-            "the grant file must be a private regular file (mode 0600) of this user".into(),
-        );
-    }
-    let mut text = String::new();
-    std::fs::File::open(path)
-        .and_then(|f| f.take(513).read_to_string(&mut text))
-        .map_err(|_| "the grant file cannot be read".to_owned())?;
-    Ok(text)
+    rust_microsip_platform::read_private_file(path, 512).map_err(|e| match e {
+        rust_microsip_platform::PrivateFileError::Unreadable => {
+            "the grant file cannot be read".to_owned()
+        }
+        _ => "the grant file must be a private regular file (mode 0600) of this user".to_owned(),
+    })
 }
 
 /// Read the `(bootstrap_id, capability)` of a headless bootstrap file

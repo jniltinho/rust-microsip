@@ -6,16 +6,23 @@ uploads binaries. Tagging is the owner's decision.
 
 ## Rules enforced by the workflow
 
-1. The tagged commit has a **successful `ci.yml` run** (tag only green commits).
+1. The tagged commit is **on `main`** and has a **successful `ci.yml` push run on `main`**.
 2. The tag equals `version` in `[workspace.package]` of `Cargo.toml`.
-3. A **final** version (`vX.Y.Z` without a suffix) needs `docs/release/vX.Y.Z.md` — the release
-   notes and gate checklist — with **no unchecked `- [ ]` item**. For v0.1.0 that checklist covers
-   every gate of the [Linux release change](../openspec/changes/create-native-rust-linux-release/tasks.md),
-   the CLI/MCP gates AG-01..06 and the owner's visibility decision (see the
-   [v0.1.0 draft](release/v0.1.0-draft.md)).
-4. `-rc.N` tags are published as **pre-releases** without the gate check, for example to carry the
-   exact ELF and AppImage into the clean VMs of the acceptance checklist. Their notes must say they
-   are not a release.
+3. The job runs in the protected **`release` environment**: it waits until the owner approves it
+   on GitHub (required reviewer; only `v*` tags may deploy). A first job refuses to run when that
+   environment is missing or lost this protection. An agent can push a tag but cannot publish.
+   The workflow file itself lives on `main`, so this relies on only the owner pushing to `main`.
+4. A **final** version (`vX.Y.Z`) needs `docs/release/vX.Y.Z.md` (release notes and gate
+   checklist) that passes `packaging/release/check-gates.sh X.Y.Z`: no open checkbox in any
+   task-list syntax, every task id of the [Linux release change](../openspec/changes/create-native-rust-linux-release/tasks.md)
+   and the [CLI/MCP change](../openspec/changes/add-agent-cli-mcp/tasks.md) listed as checked,
+   `AG-01`..`AG-06` checked and an `Owner decision` line checked. Each item starts with its own
+   label (`- [x] create-native-rust-linux-release 1.1 ...`); `check-gates-selftest.sh` holds the
+   negative controls. Never tick a gate without a
+   receipt bound to a commit.
+5. Only `vX.Y.Z-rc.N` tags are pre-releases (no gate check), for example to carry the exact ELF and
+   AppImage into the clean VMs of the acceptance checklist; their notes say they are not a release.
+   Any other suffix is refused.
 
 The workflow then builds `docker buildx build --target artifacts`, checks `SHA256SUMS`, verifies that
 the AppImage wraps the identical ELF, runs the publication scan over the artifacts and publishes:

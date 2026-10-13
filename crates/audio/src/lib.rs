@@ -436,6 +436,10 @@ pub struct OnDemandMedia {
     input: Option<String>,
     output: Option<String>,
     open: Option<DeviceMedia>,
+    /// Calls whose media currently use the devices (overlaps are possible
+    /// when a call's media restarts).
+    users: u32,
+    observer: Option<Arc<dyn Fn(bool) + Send + Sync>>,
 }
 impl OnDemandMedia {
     /// Remember the selection; nothing is opened yet.
@@ -445,7 +449,17 @@ impl OnDemandMedia {
             input,
             output,
             open: None,
+            users: 0,
+            observer: None,
         }
+    }
+
+    /// Call `observer(true)` when the devices (microphone included) really
+    /// open and `observer(false)` when they are released.
+    #[must_use]
+    pub fn with_observer(mut self, observer: Arc<dyn Fn(bool) + Send + Sync>) -> Self {
+        self.observer = Some(observer);
+        self
     }
     /// Whether the devices are open now.
     #[must_use]
@@ -463,13 +477,25 @@ impl MediaIo for OnDemandMedia {
         }
     }
     fn start(&mut self) -> bool {
+        self.users += 1;
         if self.open.is_none() {
             self.open = DeviceMedia::open(self.input.as_deref(), self.output.as_deref()).ok();
+            if self.open.is_some()
+                && let Some(observer) = &self.observer
+            {
+                observer(true);
+            }
         }
         self.open.is_some()
     }
     fn stop(&mut self) {
-        self.open = None;
+        self.users = self.users.saturating_sub(1);
+        if self.users == 0
+            && self.open.take().is_some()
+            && let Some(observer) = &self.observer
+        {
+            observer(false);
+        }
     }
 }
 

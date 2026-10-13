@@ -192,23 +192,41 @@ impl Sender {
 }
 
 /// Open the devices for a call's media (blocking work off the workers).
-/// Returns `false` when no device could be opened.
-pub(super) async fn open_devices(media: &SharedMedia) -> bool {
+/// Returns `false` when no device could be opened, and the guard that
+/// releases them. The guard is made on the blocking thread right after
+/// `start`, so a task aborted while waiting here still releases the devices:
+/// tokio drops the output of a blocking task whose handle is gone.
+pub(super) async fn open_devices(media: &SharedMedia) -> (bool, Option<DeviceGuard>) {
     let media = Arc::clone(media);
-    tokio::task::spawn_blocking(move || media.lock().is_ok_and(|mut io| io.start()))
-        .await
-        .unwrap_or(false)
+    tokio::task::spawn_blocking(move || {
+        let opened = lock_media(&media).start();
+        (opened, Some(DeviceGuard(media)))
+    })
+    .await
+    .unwrap_or((false, None))
 }
 
-/// Release the devices after a call's media ended.
-pub(super) async fn close_devices(media: &SharedMedia) {
-    let media = Arc::clone(media);
-    let _ = tokio::task::spawn_blocking(move || {
-        if let Ok(mut io) = media.lock() {
-            io.stop();
+fn lock_media(media: &SharedMedia) -> std::sync::MutexGuard<'_, Box<dyn MediaIo>> {
+    media
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// Releases the devices when a call's media task ends — also when the task
+/// is aborted at the end of a call, which skips any code after an `.await`.
+pub(super) struct DeviceGuard(SharedMedia);
+impl Drop for DeviceGuard {
+    fn drop(&mut self) {
+        let media = Arc::clone(&self.0);
+        let stop = move || lock_media(&media).stop();
+        // Closing streams joins device threads: keep it off the async workers.
+        // ponytail: during runtime shutdown the blocking task may not run; the
+        // process is exiting then and the OS closes the devices.
+        match tokio::runtime::Handle::try_current() {
+            Ok(handle) => drop(handle.spawn_blocking(stop)),
+            Err(_) => stop(),
         }
-    })
-    .await;
+    }
 }
 
 /// Run until `control` closes. The device bridge is used only on the tick.
@@ -632,8 +650,10 @@ mod tests {
             0,
             "nothing opened at creation"
         );
-        assert!(open_devices(&media).await);
-        close_devices(&media).await;
+        let (opened, guard) = open_devices(&media).await;
+        assert!(opened);
+        drop(guard);
+        settle().await;
         assert_eq!(
             (
                 counts.0.load(Ordering::SeqCst),
@@ -641,11 +661,61 @@ mod tests {
             ),
             (1, 1)
         );
+        // An aborted media task still releases the devices.
+        let held = Arc::clone(&media);
+        let task = tokio::spawn(async move {
+            let _guard = open_devices(&held).await.1;
+            std::future::pending::<()>().await;
+        });
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        task.abort();
+        let _ = task.await;
+        settle().await;
+        assert_eq!(counts.1.load(Ordering::SeqCst), 2, "released on abort");
         let missing: SharedMedia =
             Arc::new(Mutex::new(Box::new(Counted(Arc::clone(&counts), false))));
-        assert!(
-            !open_devices(&missing).await,
-            "a missing device is reported"
+        let (opened, guard) = open_devices(&missing).await;
+        assert!(!opened, "a missing device is reported");
+        drop(guard);
+        settle().await;
+        assert_eq!(counts.1.load(Ordering::SeqCst), 3);
+    }
+
+    /// Wait for the guard's blocking `stop` to run.
+    async fn settle() {
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn aborted_while_opening_still_releases() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        struct Slow(Arc<AtomicU32>);
+        impl MediaIo for Slow {
+            fn capture(&mut self, _: &mut [i16; FRAME_SAMPLES]) -> bool {
+                false
+            }
+            fn play(&mut self, _: &[i16; FRAME_SAMPLES]) {}
+            fn start(&mut self) -> bool {
+                std::thread::sleep(Duration::from_millis(200));
+                true
+            }
+            fn stop(&mut self) {
+                self.0.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let stops = Arc::new(AtomicU32::new(0));
+        let media: SharedMedia = Arc::new(Mutex::new(Box::new(Slow(Arc::clone(&stops)))));
+        let task = tokio::spawn(async move {
+            let _guard = open_devices(&media).await.1;
+        });
+        tokio::time::sleep(Duration::from_millis(20)).await;
+        task.abort();
+        let _ = task.await;
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        assert_eq!(
+            stops.load(Ordering::SeqCst),
+            1,
+            "stop after an aborted open"
         );
     }
 }

@@ -58,8 +58,9 @@ dist-check: ## Check the artifacts in DIST=dist (checksums, AppImage wraps the s
 scan: ## Publication scan of the index, history and staged content; run before every push
 	sh packaging/release/scan-publication.sh
 
-selftest: ## Prove the scanner blocks injected secrets, paths and base/ (no Docker)
+selftest: ## Prove the scanner and the release gate check block injected failures (no Docker)
 	sh packaging/release/ci-selftest.sh --no-docker
+	sh packaging/release/check-gates-selftest.sh
 
 context: ## Docker context allowlist audit with a negative control
 	sh packaging/check-context.sh
@@ -76,7 +77,8 @@ lab-init: ## Generate the lab's fictional accounts and certificates
 suite: ## Run the lab suite (all scenarios; SCENARIOS="gui-link gui-control" for a subset)
 	sh docker/asterisk/suite.sh $(SCENARIOS)
 
-clean: ## Delete target/ and DIST=dist without asking
+clean: ## Delete target/ and DIST=dist (inside the checkout) without asking
+	@case "$(DIST)" in /*|*..*|'') echo "DIST must be a relative path inside the checkout" >&2; exit 1 ;; esac
 	rm -rf target $(DIST)
 
 shell: ## Interactive shell in the toolchain container

@@ -15,7 +15,7 @@ use rust_microsip::ui::{Backend, UiSettings, UiState};
 use rust_microsip_audio::OnDemandMedia;
 use rust_microsip_config::{self as config, CliCommand, ResolveContext};
 use rust_microsip_control::OwnerMode;
-use rust_microsip_core::{CallPhase, Command, Event, MediaIo, Notice};
+use rust_microsip_core::{Command, Event, MediaIo, Notice};
 use rust_microsip_platform::{ControlServer, acquire_owner, default_runtime_dir};
 use rust_microsip_telephony::engine::{EngineHandle, TrustAnchors};
 use std::io::Write;
@@ -158,10 +158,20 @@ pub fn run(raw: &[String]) -> ExitCode {
     }
     // No capture before an authorized call: devices open only while a call's
     // media runs and are released when it ends.
-    let media: Box<dyn MediaIo> = Box::new(OnDemandMedia::new(
-        stored.audio.input_device.clone(),
-        stored.audio.output_device.clone(),
-    ));
+    let media: Box<dyn MediaIo> = Box::new(
+        OnDemandMedia::new(
+            stored.audio.input_device.clone(),
+            stored.audio.output_device.clone(),
+        )
+        // Reported from the devices themselves, not from the call phase.
+        .with_observer(Arc::new(|open| {
+            log(if open {
+                "microphone active (audio devices opened for a call)"
+            } else {
+                "microphone released"
+            });
+        })),
+    );
     let Ok(engine) = EngineHandle::spawn(media, Arc::new(|| {})) else {
         return fail("rust-microsip: cannot start the telephony engine", 1);
     };
@@ -208,21 +218,9 @@ pub fn run(raw: &[String]) -> ExitCode {
     watch_termination(Arc::clone(&terminating));
     log(&format!("service ready (epoch {epoch})"));
     let backend = EngineOnly(&engine);
-    let mut microphone = false;
     while !terminating.load(Ordering::SeqCst) {
         let now = Instant::now();
         for event in engine.try_events() {
-            if let Event::Call(call) = &event {
-                let active = matches!(call.phase, CallPhase::Established | CallPhase::Held);
-                if active != microphone {
-                    microphone = active;
-                    log(if active {
-                        "call connected; microphone active"
-                    } else {
-                        "call ended; microphone released"
-                    });
-                }
-            }
             state.apply_event(event, now);
         }
         while let Some(incoming) = server.recv_timeout(Duration::from_millis(20)) {

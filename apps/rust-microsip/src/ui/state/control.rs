@@ -247,6 +247,17 @@ impl UiState {
         if let Some(call) = operation.call_ref() {
             self.check_call(call)?;
         }
+        // "Deny all and pause" stops grants too, not only prompts.
+        if self
+            .control
+            .as_ref()
+            .is_some_and(|o| o.paused_until.is_some_and(|until| now < until))
+        {
+            return Err(error(
+                ErrorCode::Busy,
+                "control requests are paused in the window; try again later",
+            ));
+        }
         // A grant that covers this exact request runs it without a prompt.
         if let Some(grant) = self.request_grant(request)? {
             match self.grant_allows(&grant, operation) {
@@ -279,12 +290,6 @@ impl UiState {
             .control
             .as_ref()
             .ok_or_else(|| error(ErrorCode::Internal, "control is not active"))?;
-        if owner.paused_until.is_some_and(|until| now < until) {
-            return Err(error(
-                ErrorCode::Busy,
-                "control requests are paused in the window; try again later",
-            ));
-        }
         if owner.pending.len() >= MAX_PENDING {
             return Err(error(
                 ErrorCode::Busy,
@@ -373,6 +378,21 @@ impl UiState {
             .collect();
         for id in ids {
             self.control_decide(&id, false, backend, now);
+        }
+        // Granted operations not yet run are cancelled as well.
+        let queued: Vec<(String, Operation)> = self
+            .control
+            .as_mut()
+            .map(|o| o.granted.drain(..).collect())
+            .unwrap_or_default();
+        for (operation_id, operation) in queued {
+            let outcome = json!({"reason": "cancelled by the owner"});
+            self.finish(
+                &operation_id,
+                operation.name(),
+                OperationState::Failed,
+                &outcome,
+            );
         }
         if let Some(owner) = self.control.as_mut() {
             owner.paused_until = Some(now + crate::owner::PAUSE_AFTER_DENY_ALL);
@@ -1133,6 +1153,52 @@ mod tests {
         assert!(rows(&st) >= 1, "nothing deleted before confirming");
         st.dispatch(super::super::Action::Confirm, &engine, &mut save, now);
         assert_eq!(rows(&st), 0);
+        Ok(())
+    }
+
+    #[test]
+    fn deny_all_also_stops_grants_and_their_queue() -> TestResult {
+        let mut st = owner_state(OwnerMode::Gui, true)?;
+        let engine = Engine::default();
+        let now = Instant::now();
+        let mut spec = grant_spec(&["control:dial", "control:dnd"], &["1002"]);
+        spec.quota = 5;
+        let issued = st.issue_grant(&spec, false)?;
+        let queued = st.control_response(
+            &with_capability(request(Some("q-1"), dial("1002")), &issued.capability),
+            None,
+            now,
+        );
+        assert_eq!(queued.status, Status::Accepted);
+        st.control_deny_all(&engine, now);
+        st.control_tick(&engine, now);
+        assert!(
+            engine.0.borrow().is_empty(),
+            "the queued granted dial never ran"
+        );
+        let id = queued.operation_id.ok_or("id")?;
+        let record = st
+            .store
+            .as_ref()
+            .ok_or("store")?
+            .control_get(&id)?
+            .ok_or("record")?;
+        assert_eq!(record.state, OperationState::Failed);
+        let paused = st.control_response(
+            &with_capability(
+                request(Some("q-2"), Operation::DndSet { enabled: true }),
+                &issued.capability,
+            ),
+            None,
+            now,
+        );
+        assert_eq!(code(&paused), Some(ErrorCode::Busy));
+        // Debug output never shows the capability.
+        let debug = format!(
+            "{:?} {issued:?}",
+            with_capability(request(None, Operation::StatusGet), &issued.capability)
+        );
+        assert!(!debug.contains(&issued.capability));
         Ok(())
     }
 }

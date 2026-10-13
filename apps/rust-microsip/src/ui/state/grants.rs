@@ -225,7 +225,7 @@ pub struct GrantSpec {
 }
 
 /// A grant as issued: the capability is shown or written once, never stored.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct IssuedGrant {
     /// Public id.
     pub id: String,
@@ -233,6 +233,16 @@ pub struct IssuedGrant {
     pub capability: String,
     /// Single-use id when exported for the headless service.
     pub bootstrap_id: Option<String>,
+}
+
+impl std::fmt::Debug for IssuedGrant {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("IssuedGrant")
+            .field("id", &self.id)
+            .field("capability", &"[REDACTED]")
+            .field("bootstrap_id", &self.bootstrap_id)
+            .finish()
+    }
 }
 
 impl UiState {

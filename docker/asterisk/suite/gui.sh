@@ -234,10 +234,17 @@ case "$scenario" in
         kill -TERM "$svc"; wait "$svc"; result service_exit $?
         grep -q "service stopped" /capture/service.log && result service_stopped 1
         grep -q "microphone active" /capture/service.log && result microphone_reported 1
+        grep -q "microphone released" /capture/service.log && result microphone_released 1
         # Single use: the same bootstrap never starts another session.
         DISPLAY= "$app_bin" service --grant-file "$boot" --config /cfg/config.toml > /capture/service2.log 2>&1
         result reuse_exit $?
-        grep -q bootstrap_consumed /capture/service2.log && result reuse_consumed 1 ;;
+        grep -q bootstrap_consumed /capture/service2.log && result reuse_consumed 1
+        # The capabilities never appear in logs, outputs or the database.
+        leaks=0
+        for cap in "$(tr -d '\n' < "$grant")" "$(python3 -I -c 'import json,sys; print(json.load(open(sys.argv[1]))["capability"])' "$boot")"; do
+            grep -rlF "$cap" /capture /tmp/home/.local/share 2>/dev/null && leaks=$((leaks + 1))
+        done
+        result capability_leaks "$leaks" ;;
     *) echo "unknown scenario $scenario" > /capture/failure ;;
 esac
 phase exited

@@ -310,8 +310,8 @@ pub fn token(value: &str, max: usize) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"._:-".contains(&b))
 }
 
-/// A client request.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// A client request. `Debug` redacts the capability.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Request {
     /// [`SCHEMA_VERSION`].
@@ -327,6 +327,20 @@ pub struct Request {
     /// private file (never from arguments). The owner stores only its hash.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub capability: Option<String>,
+}
+impl std::fmt::Debug for Request {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Request")
+            .field("schema_version", &self.schema_version)
+            .field("request_id", &self.request_id)
+            .field("idempotency_key", &self.idempotency_key)
+            .field("operation", &self.operation)
+            .field(
+                "capability",
+                &self.capability.as_ref().map(|_| "[REDACTED]"),
+            )
+            .finish()
+    }
 }
 impl Request {
     /// Validate the envelope and the operation.

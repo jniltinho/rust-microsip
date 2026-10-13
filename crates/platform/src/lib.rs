@@ -1,6 +1,6 @@
 //! Linux desktop integration: single instance with protected local IPC, the
 //! authenticated control socket for the CLI and MCP server,
-//! strict `sip:`/`tel:` link parsing, incoming-call notifications and
+//! strict `sip:`/`tel:` link parsing, incoming-call notifications, the tray icon and
 //! Secret Service password storage.
 //!
 //! Nothing here executes shell commands or installs files: the desktop entry
@@ -9,7 +9,9 @@
 mod control;
 mod instance;
 mod notify;
+mod private_file;
 mod secrets;
+mod tray;
 mod uri;
 
 pub use control::{
@@ -23,7 +25,9 @@ pub use instance::{
 pub use notify::{
     CallAction, Delivery, NotificationAction, Notifier, NotifierStatus, sanitize_caller,
 };
+pub use private_file::{PrivateFileError, read_private_file};
 pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};
+pub use tray::{Tray, TrayAction, TrayStatus};
 pub use uri::{MAX_URI_LEN, UriError, parse_dial_uri};
 
 /// Callback run after a request or action is queued, e.g. to wake the UI loop.

@@ -152,6 +152,8 @@ pub enum External {
     Dial(rust_microsip_core::DialTarget),
     /// SIGTERM/SIGINT: shut down now, without asking.
     Quit,
+    /// "Quit" from the tray: like the close button (asks during a call).
+    QuitRequest,
 }
 
 /// Persists secret-free settings; returns a user-safe message on failure.
@@ -161,6 +163,9 @@ pub type SaveSettings = Box<SaveFn>;
 pub const APP_NAME: &str = "rust-microsip";
 const FONT_KEY: &str = "noto-sans-regular";
 const FONT: &[u8] = include_bytes!("../../assets/NotoSans-Regular.ttf");
+/// Window icon, rasterized from `assets/icons/rust-microsip.svg` with
+/// `rsvg-convert --width 256 --height 256`.
+const ICON: &[u8] = include_bytes!("../../assets/icons/rust-microsip-256.png");
 const FONT_NOTICE: &str =
     "Noto Sans Regular 2.008. Copyright 2015-2021 Google LLC. All Rights Reserved.";
 const FONT_LICENSE: &str = include_str!("../../assets/OFL.txt");
@@ -258,6 +263,12 @@ fn install_font(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+/// The embedded app icon; an empty icon (the platform default) if it cannot be
+/// decoded, which the unit test rules out.
+pub fn window_icon() -> Arc<egui::IconData> {
+    Arc::new(eframe::icon_data::from_png_bytes(ICON).unwrap_or_default())
+}
+
 /// Window options: 300x460 compact window, resizable, wgpu renderer.
 pub fn native_options() -> eframe::NativeOptions {
     eframe::NativeOptions {
@@ -268,7 +279,8 @@ pub fn native_options() -> eframe::NativeOptions {
             // Smaller than the default size so 200% scaling still fits
             // 1024x768; the content scrolls.
             .with_min_inner_size([260.0, 360.0])
-            .with_resizable(true),
+            .with_resizable(true)
+            .with_icon(window_icon()),
         renderer: eframe::Renderer::Wgpu,
         persist_window: false,
         ..Default::default()
@@ -404,6 +416,9 @@ impl SoftphoneApp {
             if request == External::Quit {
                 self.dispatch(ctx, Action::QuitNow);
                 continue;
+            }
+            if request == External::QuitRequest {
+                self.dispatch(ctx, Action::Quit);
             }
             if let External::Dial(target) = request
                 && self.state.call.is_none()
@@ -1462,7 +1477,9 @@ fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
         .labelled_by(label.id);
     });
     ui.horizontal(|ui| {
-        let label = ui.label("May answer");
+        let label = ui
+            .label("May answer")
+            .on_hover_text("Trusts the caller ID the PBX passes on, which callers can fake");
         ui.add(
             egui::TextEdit::singleline(&mut form.incoming)
                 .hint_text("1002")
@@ -1551,6 +1568,13 @@ mod tests {
     use rust_microsip_core::{CallId, CallSnapshot};
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    #[test]
+    fn window_icon_decodes() {
+        let icon = window_icon();
+        assert_eq!((icon.width, icon.height), (256, 256));
+        assert_eq!(icon.rgba.len(), 256 * 256 * 4);
+    }
 
     /// WCAG 2.x contrast ratio between two opaque colors.
     fn contrast(a: egui::Color32, b: egui::Color32) -> f32 {

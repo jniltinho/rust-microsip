@@ -32,6 +32,8 @@ jobs:
         run: sh packaging/release/scan-publication.sh
       - name: Scanner negative controls
         run: sh packaging/release/ci-selftest.sh --no-docker
+      - name: Release gate check controls
+        run: sh packaging/release/check-gates-selftest.sh
 
   supply-chain:
     name: RustSec advisories and sources (cargo-deny)
