@@ -26,11 +26,11 @@ project=com.docker.compose.project=rust-microsip-lab
 export LAB_UID="$(id -u)" LAB_GID="$(id -g)"
 B="docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.calls-g0.yaml"
 commit=$(git rev-parse HEAD)
-# Changes (tracked or untracked) in the Docker build context and in the suite
-# scripts. A run with changes fails unless ALLOW_DIRTY=1 (development only).
+# Changes (tracked or untracked) in the Docker build context and in the lab
+# (PBX configuration and suite scripts). A run with changes fails unless ALLOW_DIRTY=1 (development only).
 context_changes=$(git status --porcelain --untracked-files=all -- Dockerfile .dockerignore \
     Cargo.toml Cargo.lock rust-toolchain.toml .cargo apps crates packaging \
-    docker/rust-components.sha256 docker/asterisk/suite.sh docker/asterisk/suite | wc -l)
+    docker/rust-components.sha256 docker/asterisk | wc -l)
 
 if [ "${SKIP_BUILD:-}" = 1 ]; then
     built=$(docker image inspect -f '{{index .Config.Labels "rust-microsip.commit"}}' "$image" 2>/dev/null)
@@ -125,7 +125,7 @@ engine_lab() {
     out=$run/engine-lab; mkdir -p "$out"; pbx_up
     # engine_lab prints a scenario's row only after that scenario passed and
     # exits non-zero on the first failure.
-    timeout 900 docker run --rm --name rust-microsip-suite-engine --label "$project" \
+    timeout -k 30 900 docker run --rm --init --name rust-microsip-suite-engine --label "$project" \
         --network "$net" --user "$LAB_UID:$LAB_GID" --read-only --cap-drop ALL \
         --security-opt no-new-privileges --memory 2g --pids-limit 512 --tmpfs /tmp:rw,mode=1777 \
         --mount "type=bind,source=$PWD/$clients,target=/lab,readonly" \
