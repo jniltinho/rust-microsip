@@ -18,16 +18,18 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod control;
 mod csv;
+mod grants;
 mod settings;
 #[cfg(test)]
 mod tests;
 
 pub use control::{AUDIT_RETENTION_DAYS, LEDGER_RETENTION_SECS, OperationRecord, OperationState};
 pub use csv::{CSV_MAX_BYTES, CSV_MAX_RECORDS, CsvIssue, CsvIssueKind, CsvPreview, preview_csv};
+pub use grants::{Grant, MAX_GRANT_SECS};
 pub use settings::{CONFIG_KEYS, MAX_CONFIG_VALUE_LEN};
 
 /// Newest schema version this release can read and write.
-pub const SCHEMA_VERSION: i64 = 4;
+pub const SCHEMA_VERSION: i64 = 5;
 /// Default call-history retention, in days.
 pub const DEFAULT_RETENTION_DAYS: u32 = 90;
 /// Maximum numbers stored for one contact.
@@ -43,7 +45,7 @@ pub const MAX_SESSION_KEY_LEN: usize = 128;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
 
-const MIGRATIONS: [&str; 4] = [
+const MIGRATIONS: [&str; 5] = [
     r"
 CREATE TABLE calls (
     id INTEGER PRIMARY KEY,
@@ -138,6 +140,24 @@ CREATE TABLE control_audit (
     detail TEXT NOT NULL
 );
 CREATE INDEX control_audit_at ON control_audit (at_utc);
+",
+    // v5: control grants. Only the SHA-256 of a capability is stored.
+    r"
+CREATE TABLE control_grants (
+    id TEXT PRIMARY KEY,
+    capability_hash BLOB NOT NULL UNIQUE CHECK (length(capability_hash) = 32),
+    scopes TEXT NOT NULL,
+    destinations TEXT NOT NULL,
+    incoming TEXT NOT NULL,
+    expires_utc INTEGER NOT NULL,
+    quota INTEGER NOT NULL CHECK (quota >= 0),
+    used INTEGER NOT NULL DEFAULT 0 CHECK (used >= 0),
+    epoch INTEGER,
+    bootstrap_id TEXT UNIQUE,
+    bootstrap_consumed INTEGER NOT NULL DEFAULT 0 CHECK (bootstrap_consumed IN (0, 1)),
+    revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)),
+    created_utc INTEGER NOT NULL
+);
 ",
 ];
 

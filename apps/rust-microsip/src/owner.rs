@@ -46,6 +46,52 @@ pub(crate) struct DtmfJob {
     pub next: Instant,
 }
 
+/// SHA-256 of a grant capability; the only form in which it is stored.
+#[must_use]
+pub fn capability_hash(capability: &str) -> Vec<u8> {
+    ring::digest::digest(&ring::digest::SHA256, capability.as_bytes())
+        .as_ref()
+        .to_vec()
+}
+
+/// Scope a grant needs for an operation (`None`: no grant needed).
+#[must_use]
+pub const fn scope_for(operation: &Operation) -> Option<&'static str> {
+    Some(match operation {
+        Operation::StatusGet | Operation::OperationGet { .. } => return None,
+        Operation::ContactsSearch { .. } => "read:contacts",
+        Operation::HistoryList { .. } => "read:history",
+        Operation::DevicesList => "read:devices",
+        Operation::ConfigShow => "read:config",
+        Operation::CallDial { .. } => "control:dial",
+        Operation::CallAnswer(_) => "control:answer",
+        Operation::CallReject(_) => "control:reject",
+        Operation::CallHangup(_) => "control:hangup",
+        Operation::CallDtmf { .. } => "control:dtmf",
+        Operation::CallMute { .. } => "control:mute",
+        Operation::CallHold { .. } => "control:hold",
+        Operation::CallTransfer { .. } => "control:transfer",
+        Operation::DndSet { .. } => "control:dnd",
+    })
+}
+
+/// Every scope a grant may carry.
+pub const SCOPES: [&str; 13] = [
+    "read:contacts",
+    "read:history",
+    "read:devices",
+    "read:config",
+    "control:dial",
+    "control:answer",
+    "control:reject",
+    "control:hangup",
+    "control:dtmf",
+    "control:mute",
+    "control:hold",
+    "control:transfer",
+    "control:dnd",
+];
+
 /// Per-start state of the profile owner.
 pub struct ControlOwner {
     /// Window or headless service.
@@ -60,6 +106,8 @@ pub struct ControlOwner {
     pub(crate) dtmf: VecDeque<DtmfJob>,
     /// Set by "Deny all and pause": new mutations answer `busy` until then.
     pub(crate) paused_until: Option<Instant>,
+    /// Grant-authorized operations recorded as `executing`, run on the next tick.
+    pub(crate) granted: VecDeque<(String, Operation)>,
 }
 impl std::fmt::Debug for ControlOwner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -90,6 +138,7 @@ impl ControlOwner {
             pending: Vec::new(),
             dtmf: VecDeque::new(),
             paused_until: None,
+            granted: VecDeque::new(),
         })
     }
 
@@ -111,6 +160,18 @@ impl ControlOwner {
             .map_err(|_| "no system randomness")?;
         let hex: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
         Ok(format!("op-{}-{hex}", self.epoch))
+    }
+
+    /// A new random capability (64 hex characters) for a grant.
+    ///
+    /// # Errors
+    /// When the system random generator fails.
+    pub fn new_capability(&self) -> Result<String, &'static str> {
+        let mut bytes = [0u8; 32];
+        self.rng
+            .fill(&mut bytes)
+            .map_err(|_| "no system randomness")?;
+        Ok(bytes.iter().map(|b| format!("{b:02x}")).collect())
     }
 
     /// Requests waiting for a decision, oldest first.

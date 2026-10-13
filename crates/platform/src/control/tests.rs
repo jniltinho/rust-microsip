@@ -41,6 +41,7 @@ fn status(id: &str) -> Request {
         request_id: id.into(),
         idempotency_key: None,
         operation: Operation::StatusGet,
+        capability: None,
     }
 }
 

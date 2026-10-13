@@ -943,3 +943,85 @@ fn control_rows_expire_and_audit_is_sanitized_and_clearable() -> TestResult {
     assert!(store.control_audit_rows(10)?.is_empty());
     Ok(())
 }
+
+fn grant(id: &str, epoch: Option<i64>, bootstrap: Option<&str>) -> Grant {
+    Grant {
+        id: id.into(),
+        scopes: vec!["read:history".into(), "control:dial".into()],
+        destinations: vec!["1002".into()],
+        incoming: Vec::new(),
+        expires_utc: now_utc() + 600,
+        quota: 2,
+        used: 0,
+        epoch,
+        bootstrap_id: bootstrap.map(Into::into),
+        revoked: false,
+    }
+}
+
+#[test]
+fn grants_are_epoch_bound_quota_limited_and_revocable() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    let epoch = store.control_begin_epoch()?;
+    store.grant_insert(&grant("g1", Some(epoch), None), &[1; 32])?;
+    let active = store.grant_active(&[1; 32], epoch)?.ok_or("active")?;
+    assert_eq!(active.destinations, ["1002"]);
+    assert!(
+        store.grant_active(&[1; 32], epoch + 1)?.is_none(),
+        "other epoch"
+    );
+    assert!(
+        store.grant_active(&[2; 32], epoch)?.is_none(),
+        "other capability"
+    );
+    assert!(store.grant_use_call("g1")? && store.grant_use_call("g1")?);
+    assert!(!store.grant_use_call("g1")?, "quota of two");
+    store.grant_revoke("g1")?;
+    assert!(store.grant_active(&[1; 32], epoch)?.is_none());
+    // Validity is capped and the hash must be a SHA-256.
+    let mut long = grant("g2", Some(epoch), None);
+    long.expires_utc = now_utc() + MAX_GRANT_SECS + 60;
+    assert!(store.grant_insert(&long, &[3; 32]).is_err());
+    assert!(
+        store
+            .grant_insert(&grant("g3", Some(epoch), None), &[4; 8])
+            .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn bootstraps_are_consumed_once_into_the_service_epoch() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    let gui = store.control_begin_epoch()?;
+    store.grant_insert(&grant("b1", None, Some("boot-1")), &[5; 32])?;
+    assert_eq!(store.grants_listed(gui)?.len(), 1, "listed until consumed");
+    assert!(
+        store.grant_active(&[5; 32], gui)?.is_none(),
+        "not usable before consumption"
+    );
+    let service = store.control_begin_epoch()?;
+    assert!(
+        store
+            .bootstrap_consume("boot-1", &[6; 32], service)?
+            .is_none(),
+        "wrong capability"
+    );
+    let bound = store
+        .bootstrap_consume("boot-1", &[5; 32], service)?
+        .ok_or("consumed")?;
+    assert_eq!(bound.epoch, Some(service));
+    assert!(store.bootstrap_consumed("boot-1")?);
+    let again = store.control_begin_epoch()?;
+    assert!(
+        store
+            .bootstrap_consume("boot-1", &[5; 32], again)?
+            .is_none(),
+        "single use"
+    );
+    assert!(
+        store.grant_active(&[5; 32], again)?.is_none(),
+        "a new session needs a new bootstrap"
+    );
+    Ok(())
+}

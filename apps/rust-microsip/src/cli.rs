@@ -25,6 +25,7 @@ Control commands (talk to the running rust-microsip; never start it):
   rust-microsip call mute|unmute|hold|resume CALL_ID VERSION [--key KEY] [--json]
   rust-microsip call transfer CALL_ID VERSION TARGET|- [--key KEY] [--json]
   rust-microsip dnd on|off [--key KEY] [--json]
+  Any command: --grant-file FILE uses a grant created in Settings → Agent access.
   rust-microsip devices list | contacts search [TEXT] | history list [--filter F]
       | config show   (need a read grant)   [--limit N] [--cursor C] [--json]
   rust-microsip mcp --stdio   (MCP server for agents; same rules as the CLI)
@@ -45,6 +46,68 @@ pub struct ControlCommand {
     /// Read DTMF digits or the dial/transfer target from standard input
     /// (`-`), keeping them out of the process list.
     pub from_stdin: bool,
+    /// `--grant-file PATH`: private file holding a grant capability.
+    pub grant_file: Option<std::path::PathBuf>,
+}
+
+fn read_private(path: &std::path::Path) -> Result<String, String> {
+    use std::io::Read;
+    use std::os::unix::fs::MetadataExt;
+    let meta =
+        std::fs::symlink_metadata(path).map_err(|_| "the grant file cannot be read".to_owned())?;
+    let uid = std::fs::metadata("/proc/self").map_or(u32::MAX, |m| m.uid());
+    if !meta.is_file() || meta.uid() != uid || meta.mode() & 0o077 != 0 || meta.len() > 512 {
+        return Err(
+            "the grant file must be a private regular file (mode 0600) of this user".into(),
+        );
+    }
+    let mut text = String::new();
+    std::fs::File::open(path)
+        .and_then(|f| f.take(513).read_to_string(&mut text))
+        .map_err(|_| "the grant file cannot be read".to_owned())?;
+    Ok(text)
+}
+
+/// Read the `(bootstrap_id, capability)` of a headless bootstrap file
+/// exported from the window (same file rules as [`read_capability`]).
+///
+/// # Errors
+/// A user-safe reason.
+pub fn read_bootstrap(path: &std::path::Path) -> Result<(String, String), String> {
+    let text = read_private(path)?;
+    let parsed: serde_json::Value = serde_json::from_str(text.trim())
+        .map_err(|_| "the file is not a bootstrap grant".to_owned())?;
+    let fields = parsed.as_object().filter(|o| o.len() == 2);
+    let field = |name: &str| {
+        fields
+            .and_then(|o| o.get(name))
+            .and_then(serde_json::Value::as_str)
+            .filter(|v| rust_microsip_control::token(v, 128))
+            .map(str::to_owned)
+    };
+    let (Some(bootstrap_id), Some(capability)) = (field("bootstrap_id"), field("capability"))
+    else {
+        return Err("the file is not a bootstrap grant".into());
+    };
+    Ok((bootstrap_id, capability))
+}
+
+/// Read a grant capability from a private file: a regular file owned by
+/// this user, mode 0600 (no group/other bits), at most 512 bytes, holding one
+/// token, or a bootstrap file. The token is never printed.
+///
+/// # Errors
+/// A user-safe reason.
+pub fn read_capability(path: &std::path::Path) -> Result<String, String> {
+    let text = read_private(path)?;
+    if text.trim_start().starts_with('{') {
+        return read_bootstrap(path).map(|(_, capability)| capability);
+    }
+    let token = text.trim();
+    if !rust_microsip_control::token(token, 128) {
+        return Err("the grant file does not hold a grant".into());
+    }
+    Ok(token.to_owned())
 }
 
 /// Whether `first` starts a control command.
@@ -71,6 +134,7 @@ fn number<T: std::str::FromStr>(value: Option<&String>, name: &str) -> Result<T,
 pub fn parse(args: &[String]) -> Result<ControlCommand, String> {
     let mut words = Vec::new();
     let (mut key, mut json, mut limit, mut cursor, mut filter) = (None, false, None, None, None);
+    let mut grant_file = None;
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
         let mut value = |name: &str| {
@@ -89,6 +153,7 @@ pub fn parse(args: &[String]) -> Result<ControlCommand, String> {
                 )
             }
             "--cursor" => cursor = Some(value("--cursor")?),
+            "--grant-file" => grant_file = Some(std::path::PathBuf::from(value("--grant-file")?)),
             "--filter" => {
                 filter = Some(match value("--filter")?.as_str() {
                     "all" => HistoryFilter::All,
@@ -217,6 +282,7 @@ pub fn parse(args: &[String]) -> Result<ControlCommand, String> {
         key,
         json,
         from_stdin,
+        grant_file,
     })
 }
 
@@ -227,6 +293,7 @@ pub fn request(command: &ControlCommand, request_id: &str, key: &str) -> Request
         schema_version: SCHEMA_VERSION,
         request_id: request_id.to_owned(),
         idempotency_key: command.operation.is_mutation().then(|| key.to_owned()),
+        capability: None,
         operation: command.operation.clone(),
     }
 }
@@ -365,6 +432,39 @@ mod tests {
             &rust_microsip_control::ControlError::new(ErrorCode::EngineUnavailable, "no owner"),
         );
         assert!(render(&error, None).contains("(engine_unavailable)"));
+        Ok(())
+    }
+
+    #[test]
+    fn grant_files_must_be_private_and_hold_one_token() -> Result<(), Box<dyn std::error::Error>> {
+        use std::os::unix::fs::PermissionsExt;
+        let dir =
+            std::env::temp_dir().join(format!("rust-microsip-grantfile-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir)?;
+        let token = "a".repeat(64);
+        let good = dir.join("good.grant");
+        std::fs::write(&good, format!("{token}\n"))?;
+        std::fs::set_permissions(&good, std::fs::Permissions::from_mode(0o600))?;
+        assert_eq!(read_capability(&good)?, token);
+        assert!(
+            parse(&args("status --grant-file /x/y.grant"))?
+                .grant_file
+                .is_some()
+        );
+        let open = dir.join("open.grant");
+        std::fs::write(&open, &token)?;
+        std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o644))?;
+        assert!(read_capability(&open).is_err(), "readable by others");
+        let link = dir.join("link.grant");
+        std::os::unix::fs::symlink(&good, &link)?;
+        assert!(read_capability(&link).is_err(), "symlink");
+        let junk = dir.join("junk.grant");
+        std::fs::write(&junk, "not a token; rm -rf")?;
+        std::fs::set_permissions(&junk, std::fs::Permissions::from_mode(0o600))?;
+        let error = read_capability(&junk).err().unwrap_or_default();
+        assert!(!error.contains("rm -rf"), "never echoes the file");
+        std::fs::remove_dir_all(dir)?;
         Ok(())
     }
 }

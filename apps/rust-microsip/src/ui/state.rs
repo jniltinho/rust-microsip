@@ -31,6 +31,8 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 mod control;
+mod grants;
+pub use grants::{GrantForm, GrantSpec, IssuedGrant, write_private};
 /// Maximum characters accepted in the number and transfer entries.
 pub const MAX_NUMBER_CHARS: usize = 64;
 /// How long a transient notice stays visible.
@@ -144,6 +146,10 @@ pub struct UiSettings {
     /// (`$XDG_DATA_HOME/applications/rust-microsip.desktop`); `None` when no
     /// data directory is known.
     pub desktop_entry: Option<PathBuf>,
+    /// Private directory for session grant files (`$XDG_RUNTIME_DIR/rust-microsip/grants`).
+    pub grant_dir: Option<PathBuf>,
+    /// Private directory for headless bootstrap files (`$XDG_CONFIG_HOME/rust-microsip/bootstrap`).
+    pub bootstrap_dir: Option<PathBuf>,
 }
 
 /// Which content replaces the tab body.
@@ -173,6 +179,8 @@ pub enum Confirm {
     DeleteContact(i64),
     /// Hang up the active call and quit.
     Quit,
+    /// Delete the agent control audit log.
+    ClearAudit,
 }
 impl Confirm {
     /// Question shown to the user.
@@ -182,6 +190,7 @@ impl Confirm {
             Self::ClearHistory => "Delete the whole call history?",
             Self::DeleteContact(_) => "Delete this contact?",
             Self::Quit => "Hang up and quit?",
+            Self::ClearAudit => "Delete the agent access audit log?",
         }
     }
     /// Label of the confirming button.
@@ -408,6 +417,15 @@ pub enum Action {
     DenyControl(String),
     /// Deny every pending control request and pause new ones.
     DenyAllControl,
+    /// Issue a grant from the form: for this session, or as a bootstrap for the headless service.
+    CreateGrant {
+        /// Export for the headless service.
+        bootstrap: bool,
+    },
+    /// Revoke a grant by id.
+    RevokeGrant(String),
+    /// Ask to delete the agent access audit log.
+    ClearAudit,
     /// Switch tab (also returns to the main view).
     SelectTab(Tab),
     /// Keypad or keyboard key: DTMF while established, else appended.
@@ -575,6 +593,10 @@ pub struct UiState {
     pub approval_shown: Option<(String, Instant)>,
     /// Last frame that drew the approval prompt.
     pub approval_frame: Option<Instant>,
+    /// "Agent access" form in Settings.
+    pub grant_form: GrantForm,
+    grant_dir: Option<PathBuf>,
+    bootstrap_dir: Option<PathBuf>,
 }
 
 impl UiState {
@@ -625,6 +647,9 @@ impl UiState {
             control: None,
             approval_shown: None,
             approval_frame: None,
+            grant_form: GrantForm::default(),
+            grant_dir: settings.grant_dir,
+            bootstrap_dir: settings.bootstrap_dir,
             // Unique per process start, so session keys never collide.
             session: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -677,6 +702,8 @@ impl UiState {
             audio_output: self.audio_output.clone(),
             overridden: self.overridden.clone(),
             desktop_entry: self.desktop_entry.clone(),
+            grant_dir: self.grant_dir.clone(),
+            bootstrap_dir: self.bootstrap_dir.clone(),
         }
     }
 
@@ -927,6 +954,7 @@ impl UiState {
             Action::SearchHistory => self.refresh_history(now),
             Action::DeleteCall(id) => self.confirm = Some(Confirm::DeleteCall(id)),
             Action::ClearHistory => self.confirm = Some(Confirm::ClearHistory),
+            Action::ClearAudit => self.confirm = Some(Confirm::ClearAudit),
             Action::SearchContacts => self.refresh_contacts(now),
             Action::NewContact => {
                 self.close_view();
@@ -1018,6 +1046,8 @@ impl UiState {
             Action::ApproveControl(id) => self.control_decide(&id, true, backend, now),
             Action::DenyControl(id) => self.control_decide(&id, false, backend, now),
             Action::DenyAllControl => self.control_deny_all(backend, now),
+            Action::CreateGrant { bootstrap } => self.create_grant_file(bootstrap, now),
+            Action::RevokeGrant(id) => self.revoke_grant(&id),
             Action::TestAudio => {
                 if let Err(reason) = self.can_test_audio() {
                     return self.set_notice(reason, now);
@@ -1278,6 +1308,7 @@ impl UiState {
             Confirm::DeleteCall(id) => store.delete_call(id),
             Confirm::ClearHistory => store.clear_history().map(|_| ()),
             Confirm::DeleteContact(id) => store.delete_contact(id),
+            Confirm::ClearAudit => store.control_audit_clear().map(|_| ()),
             Confirm::Quit => Ok(()),
         };
         if let Err(error) = result {

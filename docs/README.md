@@ -3,7 +3,8 @@
 This directory holds the project's design records, evidence and guides. Start with:
 
 - [Architecture](architecture.md): layers, runtime model, security boundaries and porting.
-- [Development guide](development.md): pinned toolchain, Docker build and tests.
+- [Developer guide](DEVELOPMENT.md): Makefile, Docker workflow, tests, lab suite and coding rules.
+- [Release process](release.md): tag-triggered release workflow and its gates.
 - [Architecture decision records](adr/): one file per accepted decision.
 - [Receipts](receipts/): evidence of each verified milestone (commands, hashes, measurements and limits).
 - [Reviews](reviews/): independent static reviews and their verdicts.

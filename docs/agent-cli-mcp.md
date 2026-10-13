@@ -3,8 +3,7 @@
 The same `rust-microsip` executable is also a small CLI and a stdio MCP server.
 Both talk to the **running** window over a private local socket; they never start
 the softphone, open its database or register SIP themselves. Status: preview of the
-[agent CLI/MCP change](../openspec/changes/add-agent-cli-mcp/tasks.md) — grants and
-the headless service are not available yet.
+[agent CLI/MCP change](../openspec/changes/add-agent-cli-mcp/tasks.md).
 
 ## Rules that always apply
 
@@ -15,7 +14,7 @@ the headless service are not available yet.
   `approve` command, no `--yes`, and no MCP tool that can approve anything.
 - **Personal data stays private.** `status` shows registration, DND and the current
   call's id, version, direction and phase, never names or numbers. Contacts,
-  history, devices and configuration need a read grant (not offered yet) and answer
+  history, devices and configuration need a read grant and otherwise answer
   `grant_required`.
 - **Retries are safe only with the same key.** Each change carries an idempotency
   key. Repeating a request with the same key reports the earlier result and never
@@ -27,6 +26,39 @@ the headless service are not available yet.
   accessibility bus; this is a consent boundary for agents limited to the MCP
   tools, not a sandbox. Never put personal data into idempotency keys: they are
   kept in the local ledger for 24 hours.
+
+## Grants: letting an agent act without asking each time
+
+In **Settings → Agent access** tick what a program may do (`read:history`,
+`control:dial`, ...), list the exact numbers it may call (**May call**) and the
+callers it may answer (**May answer**), its validity (at most 60 minutes) and how
+many calls it may place or answer. **Create grant file** writes a secret to a
+private file (mode 0600) under `$XDG_RUNTIME_DIR/rust-microsip/grants/`; pass it with
+`--grant-file FILE`. Requests the grant covers run without a prompt; anything else
+(another number, a used-up call limit, another operation) still asks you. Grants end
+when they expire, when you press **Revoke**, or when the window restarts. The secret
+is never stored, only its hash. **Clear audit log** deletes the record of requests
+and decisions after confirmation.
+
+## Headless service
+
+For a machine without a desktop session, **Export for headless service** writes a
+single-use bootstrap file under `$XDG_CONFIG_HOME/rust-microsip/bootstrap/`. Quit the
+window, then start:
+
+```sh
+rust-microsip service --grant-file ~/.config/rust-microsip/bootstrap/grant-….json
+```
+
+The service registers with the configured account (it needs `password_env` or
+`password_file`; it never prompts or reads the keyring), serves only what the
+bootstrap grants, answers everything else with `grant_required`, logs when the
+microphone becomes active and stops on SIGTERM. Clients use the same file:
+`rust-microsip status --grant-file FILE`. A bootstrap starts one service session
+only; a new session needs a new export from the window. While the service runs, the
+window refuses to open (`engine_owned_by_service`) and `sip:` links are not dialed.
+The service needs a working audio device for real calls; without one it warns and
+calls carry no local audio.
 
 ## CLI
 

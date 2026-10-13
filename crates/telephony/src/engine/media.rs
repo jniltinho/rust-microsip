@@ -191,6 +191,26 @@ impl Sender {
     }
 }
 
+/// Open the devices for a call's media (blocking work off the workers).
+/// Returns `false` when no device could be opened.
+pub(super) async fn open_devices(media: &SharedMedia) -> bool {
+    let media = Arc::clone(media);
+    tokio::task::spawn_blocking(move || media.lock().is_ok_and(|mut io| io.start()))
+        .await
+        .unwrap_or(false)
+}
+
+/// Release the devices after a call's media ended.
+pub(super) async fn close_devices(media: &SharedMedia) {
+    let media = Arc::clone(media);
+    let _ = tokio::task::spawn_blocking(move || {
+        if let Ok(mut io) = media.lock() {
+            io.stop();
+        }
+    })
+    .await;
+}
+
 /// Run until `control` closes. The device bridge is used only on the tick.
 pub(super) async fn run(
     params: MediaParams,
@@ -586,5 +606,46 @@ mod tests {
             assert!(stats.failure.is_none());
         }
         Ok(())
+    }
+
+    #[tokio::test]
+    async fn devices_open_only_for_a_call_and_are_released_after() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        struct Counted(Arc<(AtomicU32, AtomicU32)>, bool);
+        impl MediaIo for Counted {
+            fn capture(&mut self, _: &mut [i16; FRAME_SAMPLES]) -> bool {
+                false
+            }
+            fn play(&mut self, _: &[i16; FRAME_SAMPLES]) {}
+            fn start(&mut self) -> bool {
+                self.0.0.fetch_add(1, Ordering::SeqCst);
+                self.1
+            }
+            fn stop(&mut self) {
+                self.0.1.fetch_add(1, Ordering::SeqCst);
+            }
+        }
+        let counts = Arc::new((AtomicU32::new(0), AtomicU32::new(0)));
+        let media: SharedMedia = Arc::new(Mutex::new(Box::new(Counted(Arc::clone(&counts), true))));
+        assert_eq!(
+            counts.0.load(Ordering::SeqCst),
+            0,
+            "nothing opened at creation"
+        );
+        assert!(open_devices(&media).await);
+        close_devices(&media).await;
+        assert_eq!(
+            (
+                counts.0.load(Ordering::SeqCst),
+                counts.1.load(Ordering::SeqCst)
+            ),
+            (1, 1)
+        );
+        let missing: SharedMedia =
+            Arc::new(Mutex::new(Box::new(Counted(Arc::clone(&counts), false))));
+        assert!(
+            !open_devices(&missing).await,
+            "a missing device is reported"
+        );
     }
 }

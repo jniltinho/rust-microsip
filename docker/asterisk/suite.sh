@@ -6,14 +6,14 @@
 #
 # Usage: sh docker/asterisk/suite.sh [SCENARIO...]
 #   Scenarios: engine-lab engine-network gui-link gui-frozen-exit gui-theme
-#   gui-a11y gui-a11y-call gui-control (default: all). SKIP_BUILD=1 reuses the image,
+#   gui-a11y gui-a11y-call gui-control gui-grants (default: all). SKIP_BUILD=1 reuses the image,
 #   which must carry the current commit in its label.
 # Exit status 0 only when every requested scenario wrote a passing report
 # and no lab container, network or volume is left.
 set -u
 cd "$(dirname "$0")/../.."
 [ "$(id -u)" -ne 0 ] || { echo "ERROR: run the suite as a non-root user." >&2; exit 1; }
-all="engine-lab engine-network gui-link gui-frozen-exit gui-theme gui-a11y gui-a11y-call gui-control"
+all="engine-lab engine-network gui-link gui-frozen-exit gui-theme gui-a11y gui-a11y-call gui-control gui-grants"
 scenarios=${*:-$all}
 for scenario in $scenarios; do
     case " $all " in *" $scenario "*) ;; *) echo "unknown scenario: $scenario" >&2; exit 2 ;; esac
@@ -308,6 +308,27 @@ gui_control() {
     report gui-control "$result" "{\"channels_while_awaiting_approval\": $(j "$requested"), \"channels_after_denied_dial\": $(j "$denied"), \"channels_before_hangup_approval\": $(j "$before_hangup"), \"prompt_initial_focus\": \"$(v prompt_focus)\", \"channels_while_mcp_awaits_approval\": $(j "$mcp_requested"), \"channels_after_approved_dial\": $(j "$dialed"), \"channels_after_replay\": $(j "$replayed"), \"channels_after_approved_hangup\": $(j "$hung_up"), \"dial_exit\": $(j "$(v dial_exit)"), \"operation_state\": \"$(v op_state)\", \"replay_exit\": $(j "$(v replay_exit)"), \"reused_key_other_payload\": \"$(v conflict)\", \"stale_version\": \"$(v stale)\", \"denied_dnd_state\": \"$(v dnd_state)\", \"dnd_after_denial\": \"$(v dnd_after)\", \"history_without_grant_exit\": $(j "$(v history_exit)"), \"no_owner_exit\": $(j "$(v no_owner_exit)"), \"mcp_tools\": $(j "$(v mcp_tools)"), \"mcp_dial\": \"$(v mcp_dial)\", \"mcp_state_after_approval\": \"$(v mcp_state)\", \"mcp_replay\": \"$(v mcp_replay)\", \"mcp_replay_same_operation\": \"$(v mcp_same)\", \"channels_after_mcp_disconnect\": $(j "$after_mcp"), \"channels_after_cleanup\": $(j "$mcp_ended")}"
 }
 
+gui_grants() {
+    pbx_up; gui grants
+    wait_phase "$out" denied-602 180; denied=$(channels); ack denied-602
+    wait_phase "$out" granted-dial 60; granted=$(channels); ack granted-dial
+    wait_phase "$out" granted-hangup 60; granted_end=$(channels); ack granted-hangup
+    wait_phase "$out" service-dial 120; service_call=$(channels); ack service-dial
+    wait_phase "$out" service-hangup 60; service_end=$(channels); ack service-hangup
+    gui_finish; pbx_down
+    v() { value "$1"; }
+    result=fail
+    [ "$(v grant_mode)" = 600 ] && [ "$(v history_exit)" = 0 ] && [ "$(v d602)" = approval_required ] \
+        && [ "$denied" = 0 ] && [ "$(v d600)" = accepted ] && [ "$granted" = 1 ] && [ "$(v hangup)" = accepted ] \
+        && [ "$granted_end" = 0 ] && [ "$(v quota)" = approval_required ] && [ "$(v revoked_exit)" = 3 ] \
+        && [ "$(v boot_mode)" = 600 ] && [ "$(v gui_vs_service)" = 4 ] && [ "$(v svc_mode)" = service ] \
+        && [ "$(v svc_registration)" = registered ] && [ "$(v sv602)" = grant_required ] && [ "$(v sv600)" = accepted ] \
+        && [ "$service_call" = 1 ] && [ "$(v sv_hangup)" = accepted ] && [ "$service_end" = 0 ] \
+        && [ "$(v service_exit)" = 0 ] && [ "$(v service_stopped)" = 1 ] && [ "$(v microphone_reported)" = 1 ] \
+        && [ "$(v reuse_exit)" = 3 ] && [ "$(v reuse_consumed)" = 1 ] && result=pass
+    report gui-grants "$result" "{\"grant_file_mode\": \"$(v grant_mode)\", \"history_with_grant_exit\": $(j "$(v history_exit)"), \"dial_outside_grant\": \"$(v d602)\", \"channels_after_denied\": $(j "$denied"), \"dial_inside_grant\": \"$(v d600)\", \"channels_after_granted_dial\": $(j "$granted"), \"granted_hangup\": \"$(v hangup)\", \"channels_after_granted_hangup\": $(j "$granted_end"), \"second_dial_over_quota\": \"$(v quota)\", \"after_revoke_exit\": $(j "$(v revoked_exit)"), \"bootstrap_file_mode\": \"$(v boot_mode)\", \"window_while_service_exit\": $(j "$(v gui_vs_service)"), \"service_mode\": \"$(v svc_mode)\", \"service_registration\": \"$(v svc_registration)\", \"service_dial_outside_grant\": \"$(v sv602)\", \"service_dial_inside_grant\": \"$(v sv600)\", \"channels_service_call\": $(j "$service_call"), \"channels_after_service_hangup\": $(j "$service_end"), \"service_exit\": $(j "$(v service_exit)"), \"bootstrap_reuse_exit\": $(j "$(v reuse_exit)")}"
+}
+
 for scenario in $scenarios; do
     case $scenario in
         engine-lab) engine_lab ;;
@@ -318,6 +339,7 @@ for scenario in $scenarios; do
         gui-a11y) gui_a11y ;;
         gui-a11y-call) gui_a11y_call ;;
         gui-control) gui_control ;;
+        gui-grants) gui_grants ;;
     esac
 done
 cleanup

@@ -15,7 +15,8 @@
 //! no API for them; that check is deferred to the CLI/MCP IPC v1 work.
 //!
 //! Wire protocol, one line each way (at most [`MAX_LINE`] bytes):
-//! `v1 activate` | `v1 dial <target>` answered by `v1 ok` | `v1 busy` | `v1 invalid`.
+//! `v1 activate` | `v1 dial <target>` answered by `v1 ok` | `v1 busy` | `v1 invalid`,
+//! or `v1 service` when the headless service owns the profile.
 
 use crate::Waker;
 use rust_microsip_core::DialTarget;
@@ -79,6 +80,9 @@ pub enum Ack {
     Busy,
     /// The owner rejected the request as malformed.
     Invalid,
+    /// The headless service owns the profile: no window opens and links are
+    /// not dialed (`engine_owned_by_service`, `uri_confirmation_unavailable`).
+    Service,
 }
 
 /// Single-instance or IPC failure. Paths are included; request data never is.
@@ -199,6 +203,7 @@ pub struct Listener {
     requests: Receiver<Request>,
     waker: Arc<Mutex<Option<Waker>>>,
     stop: Arc<AtomicBool>,
+    service: Arc<AtomicBool>,
     socket: PathBuf,
     _lock: File,
 }
@@ -225,19 +230,29 @@ impl Listener {
         let (tx, requests) = mpsc::sync_channel(QUEUE);
         let waker: Arc<Mutex<Option<Waker>>> = Arc::default();
         let stop = Arc::new(AtomicBool::new(false));
-        let (thread_waker, thread_stop) = (Arc::clone(&waker), Arc::clone(&stop));
+        let service = Arc::new(AtomicBool::new(false));
+        let (thread_waker, thread_stop, thread_service) =
+            (Arc::clone(&waker), Arc::clone(&stop), Arc::clone(&service));
         thread::Builder::new()
             .name("instance-ipc".into())
-            .spawn(move || accept_loop(&listener, &tx, &thread_waker, &thread_stop))
+            .spawn(move || {
+                accept_loop(&listener, &tx, &thread_waker, &thread_stop, &thread_service)
+            })
             .map_err(io_err(&socket))?;
         Ok(Self {
             dir: dir.to_owned(),
             requests,
             waker,
             stop,
+            service,
             socket,
             _lock: lock,
         })
+    }
+
+    /// Answer every later launch with [`Ack::Service`] instead of queueing it.
+    pub fn set_service_mode(&self) {
+        self.service.store(true, Ordering::SeqCst);
     }
 
     /// The private runtime directory this process owns.
@@ -275,6 +290,7 @@ fn accept_loop(
     tx: &SyncSender<Request>,
     waker: &Mutex<Option<Waker>>,
     stop: &AtomicBool,
+    service: &AtomicBool,
 ) {
     for stream in listener.incoming() {
         if stop.load(Ordering::SeqCst) {
@@ -284,7 +300,7 @@ fn accept_loop(
         // IO_TIMEOUT deadline, so a slow client cannot hold the thread longer.
         match stream {
             Ok(stream) => {
-                let _ = serve(stream, tx, waker);
+                let _ = serve(stream, tx, waker, service.load(Ordering::SeqCst));
             }
             // Persistent accept errors (EMFILE, ...) must not spin a core.
             Err(_) => std::thread::sleep(std::time::Duration::from_millis(100)),
@@ -296,11 +312,13 @@ fn serve(
     mut stream: UnixStream,
     tx: &SyncSender<Request>,
     waker: &Mutex<Option<Waker>>,
+    service: bool,
 ) -> io::Result<()> {
     stream.set_read_timeout(Some(IO_TIMEOUT))?;
     stream.set_write_timeout(Some(IO_TIMEOUT))?;
     let ack = match read_line(&stream)?.as_deref().and_then(Request::decode) {
         None => Ack::Invalid,
+        Some(_) if service => Ack::Service,
         Some(request) => match tx.try_send(request) {
             Ok(()) => {
                 if let Some(wake) = waker
@@ -319,6 +337,7 @@ fn serve(
         Ack::Ok => b"v1 ok\n",
         Ack::Busy => b"v1 busy\n",
         Ack::Invalid => b"v1 invalid\n",
+        Ack::Service => b"v1 service\n",
     };
     stream.write_all(reply)
 }
@@ -391,6 +410,7 @@ fn forward(socket: &Path, uid: u32, request: &Request) -> Result<Ack, InstanceEr
         Some("v1 ok") => Ok(Ack::Ok),
         Some("v1 busy") => Ok(Ack::Busy),
         Some("v1 invalid") => Ok(Ack::Invalid),
+        Some("v1 service") => Ok(Ack::Service),
         _ => Err(InstanceError::Protocol),
     }
 }
@@ -633,5 +653,22 @@ mod tests {
                 Err(InstanceError::NoRuntimeDir)
             )),
         }
+    }
+
+    #[test]
+    fn a_service_owner_turns_later_launches_away() -> Result<(), InstanceError> {
+        let tmp = TempDir::new("service");
+        let listener = owner(&tmp.run());
+        listener.set_service_mode();
+        let target = DialTarget::parse("1002").map_err(|_| InstanceError::Protocol)?;
+        for request in [Request::Activate, Request::Dial(target)] {
+            assert!(matches!(
+                acquire(&tmp.run(), &request)?,
+                Acquired::Forwarded(Ack::Service)
+            ));
+        }
+        assert!(listener.try_recv().is_none(), "nothing reaches the service");
+        assert!(acquire_owner(&tmp.run())?.is_none(), "still owned");
+        Ok(())
     }
 }

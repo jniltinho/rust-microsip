@@ -429,6 +429,50 @@ impl MediaIo for DeviceMedia {
     }
 }
 
+/// Devices opened only while a call's media runs ([`MediaIo::start`] /
+/// [`MediaIo::stop`]): no capture before or between calls, and the devices
+/// are released when a call ends.
+pub struct OnDemandMedia {
+    input: Option<String>,
+    output: Option<String>,
+    open: Option<DeviceMedia>,
+}
+impl OnDemandMedia {
+    /// Remember the selection; nothing is opened yet.
+    #[must_use]
+    pub fn new(input: Option<String>, output: Option<String>) -> Self {
+        Self {
+            input,
+            output,
+            open: None,
+        }
+    }
+    /// Whether the devices are open now.
+    #[must_use]
+    pub const fn is_open(&self) -> bool {
+        self.open.is_some()
+    }
+}
+impl MediaIo for OnDemandMedia {
+    fn capture(&mut self, frame: &mut [i16; FRAME_SAMPLES]) -> bool {
+        self.open.as_mut().is_some_and(|media| media.capture(frame))
+    }
+    fn play(&mut self, frame: &[i16; FRAME_SAMPLES]) {
+        if let Some(media) = self.open.as_mut() {
+            media.play(frame);
+        }
+    }
+    fn start(&mut self) -> bool {
+        if self.open.is_none() {
+            self.open = DeviceMedia::open(self.input.as_deref(), self.output.as_deref()).ok();
+        }
+        self.open.is_some()
+    }
+    fn stop(&mut self) {
+        self.open = None;
+    }
+}
+
 fn matches(device: &Device, selection: &str) -> bool {
     device.id().is_ok_and(|id| id.to_string() == selection) || device.to_string() == selection
 }
@@ -634,5 +678,19 @@ mod tests {
             Ok(media) => assert!(!media.monitor().status().stream_failed),
             Err(error) => panic!("open failed: {error}"),
         }
+    }
+
+    #[test]
+    fn on_demand_media_opens_nothing_until_a_call_starts() {
+        use rust_microsip_core::MediaIo as _;
+        let mut media = super::OnDemandMedia::new(Some("no-such-device".into()), None);
+        assert!(!media.is_open());
+        let mut frame = [0i16; rust_microsip_core::FRAME_SAMPLES];
+        assert!(!media.capture(&mut frame), "silent while closed");
+        // The named device does not exist: start reports it and stays closed.
+        assert!(!media.start());
+        assert!(!media.is_open());
+        media.stop();
+        assert!(!media.is_open());
     }
 }

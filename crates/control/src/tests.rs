@@ -51,6 +51,7 @@ fn validation_bounds_inputs_without_echoing_them() {
         request_id: "r1".into(),
         idempotency_key: key.map(Into::into),
         operation,
+        capability: None,
     };
     let dial = |target: &str| Operation::CallDial {
         target: target.into(),

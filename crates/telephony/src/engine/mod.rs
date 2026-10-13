@@ -83,6 +83,8 @@ enum Internal {
     Reinvite(CallId, Flow, Option<Response>),
     Referred(CallId, Option<u16>),
     MediaFailed(CallId, media::MediaFailure),
+    /// No audio device could be opened for a call's media.
+    AudioUnavailable,
     /// A CANCEL that never completed; end the call locally.
     CancelDeadline(CallId),
     TransferDeadline(CallId, u64),
@@ -858,7 +860,12 @@ impl Actor {
         let internal = self.internal.clone();
         let id = call.id;
         let task = tokio::spawn(async move {
-            let stats = media::run(params, media, rx).await;
+            // Devices are opened only for the call's media and released after it.
+            if !media::open_devices(&media).await {
+                let _ = internal.send(Internal::AudioUnavailable).await;
+            }
+            let stats = media::run(params, Arc::clone(&media), rx).await;
+            media::close_devices(&media).await;
             if let Some(failure) = stats.failure {
                 let _ = internal.send(Internal::MediaFailed(id, failure)).await;
             }
@@ -1054,6 +1061,7 @@ impl Actor {
             }
             Internal::Outgoing(id, result) => self.outgoing(id, result),
             Internal::Reinvite(id, flow, response) => self.reinvited(id, flow, response),
+            Internal::AudioUnavailable => self.notice(Notice::AudioUnavailable),
             Internal::MediaFailed(id, failure) => {
                 if let Some(call) = self.call_mut(id)
                     && !call.phase.is_final()

@@ -1,6 +1,6 @@
 """Drive and inspect the rust-microsip window over AT-SPI (AccessKit).
 
-Usage: atspi.py press NAME... | sweep LABEL [MARKER] | screens | focused
+Usage: atspi.py press NAME... | focus NAME | sweep LABEL [MARKER] | screens | focused
 Runs inside the suite container's private D-Bus session; fictional data only.
 """
 
@@ -58,6 +58,34 @@ def press(name):
             if action is not None and action.get_n_actions() > 0 and action.do_action(0):
                 time.sleep(1.5)
                 return True
+    print(f"NOT_FOUND {name!r}")
+    return False
+
+
+def focus(name):
+    """Click the centre of a named control (real pointer input), so the
+    toolkit gives it keyboard focus."""
+    import subprocess
+    for node in nodes(wait_for_window(), []):
+        # A labelled field shares its label's name: pick the editable one.
+        if node.get_name() == name and node.get_state_set().contains(Atspi.StateType.EDITABLE):
+            component = node.get_component_iface()
+            if component is None:
+                continue
+            # Bring it on screen first (scrollable settings), then click.
+            try:
+                component.scroll_to(Atspi.ScrollType.ANYWHERE)
+                time.sleep(0.5)
+            except Exception:  # older AT-SPI without ScrollTo
+                pass
+            box = component.get_extents(Atspi.CoordType.SCREEN)
+            print(f"EXTENTS {name!r} {box.x} {box.y} {box.width} {box.height}")
+            if box.width <= 0 or box.height <= 0:
+                continue
+            x, y = box.x + box.width // 2, box.y + box.height // 2
+            subprocess.run(["xdotool", "mousemove", str(x), str(y), "click", "1"], check=False)
+            time.sleep(0.5)
+            return True
     print(f"NOT_FOUND {name!r}")
     return False
 
@@ -126,6 +154,8 @@ def main(argv):
         bad = screens()
         print("SCREENS", len(SCREENS), "PROBLEMS", bad)
         return 1 if bad else 0
+    if command == "focus":
+        return 0 if focus(args[0]) else 1
     if command == "focused":
         print(focused())
         return 0

@@ -15,7 +15,7 @@ docker buildx build --platform linux/amd64 --target artifacts --output type=loca
 ./dist/rust-microsip --help
 ```
 
-After fetching, the build runs fmt, clippy, tests, rustdoc and the dependency/notice policy without network access, then exports the ELF, `SHA256SUMS`, licenses, a build manifest and an SBOM. The ELF needs the host's glibc and `libasound.so.2` (ALSA, present on standard desktops). See the [development guide](docs/development.md) and [ADR 0012](docs/adr/0012-production-dependency-graph.md).
+After fetching, the build runs fmt, clippy, tests, rustdoc and the dependency/notice policy without network access, then exports the ELF, `SHA256SUMS`, licenses, a build manifest and an SBOM. The ELF needs the host's glibc and `libasound.so.2` (ALSA, present on standard desktops). See the [development guide](docs/DEVELOPMENT.md) and [ADR 0012](docs/adr/0012-production-dependency-graph.md).
 
 ## Run
 
@@ -62,7 +62,7 @@ openspec validate create-native-rust-linux-release --strict --no-interactive
 
 [Implementation approval](docs/implementation-approval.md) was given on 2026-10-12. In Codex, use `$openspec-apply-change`; in Claude, use the installed OpenSpec workflow or request change application. Check tasks only after obtaining evidence. G0 remains pending until the complete vertical proof passes. A [pre-adoption license/asset/native inventory](docs/adr/0003-g0-license-and-native-boundaries.md) and tested dependency boundary now precede candidate incorporation.
 
-Earlier isolated G0 experiments and their receipts are listed in the [development guide](docs/development.md) and [`docs/receipts/`](docs/receipts/).
+Earlier isolated G0 experiments and their receipts are listed in the [development guide](docs/DEVELOPMENT.md) and [`docs/receipts/`](docs/receipts/).
 
 ## Local references and skills
 

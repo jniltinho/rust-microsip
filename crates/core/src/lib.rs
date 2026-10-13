@@ -433,6 +433,14 @@ pub trait MediaIo: Send {
     fn capture(&mut self, frame: &mut [i16; FRAME_SAMPLES]) -> bool;
     /// Queue one decoded 8 kHz mono frame for playback; drops on overflow.
     fn play(&mut self, frame: &[i16; FRAME_SAMPLES]);
+    /// A call's media starts: open the devices if they are not open. Returns
+    /// `false` when no device could be opened (the call continues silent).
+    /// Called off the async workers; may block briefly.
+    fn start(&mut self) -> bool {
+        true
+    }
+    /// The call's media ended: release the devices (microphone off).
+    fn stop(&mut self) {}
 }
 
 /// Silent [`MediaIo`] used when no audio device is available, and in tests.

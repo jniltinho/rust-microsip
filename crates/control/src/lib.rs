@@ -323,6 +323,10 @@ pub struct Request {
     pub idempotency_key: Option<String>,
     /// What to do.
     pub operation: Operation,
+    /// Secret of a grant issued in the window, read by the client from a
+    /// private file (never from arguments). The owner stores only its hash.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capability: Option<String>,
 }
 impl Request {
     /// Validate the envelope and the operation.
@@ -340,6 +344,12 @@ impl Request {
             return Err(ControlError::new(
                 ErrorCode::Validation,
                 "request_id must be 1 to 64 of A-Z a-z 0-9 . _ : -",
+            ));
+        }
+        if self.capability.as_ref().is_some_and(|c| !token(c, 128)) {
+            return Err(ControlError::new(
+                ErrorCode::Validation,
+                "capability is not valid",
             ));
         }
         match (&self.idempotency_key, self.operation.is_mutation()) {

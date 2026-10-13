@@ -12,20 +12,22 @@
 //! in-memory store keeps the session usable with a visible warning, but the
 //! account is not registered automatically and settings cannot be saved.
 
+mod service;
+
 use rust_microsip::cli;
 use rust_microsip::owner::ControlOwner;
 use rust_microsip::ui::{
     self, AUDIO_TEST_SECONDS, Backend, DESKTOP_FILE, External, Job, JobResult, Storage, Theme,
     UiSettings, keyring_reference,
 };
-use rust_microsip_audio::{AudioDevices, DeviceMedia};
+use rust_microsip_audio::{AudioDevices, DeviceMedia, OnDemandMedia};
 use rust_microsip_config::{
     self as config, CliArgs, CliCommand, ConfigError, DoctorReport, Field, ResolveContext, Source,
     StoredConfig,
 };
 use rust_microsip_control::{ControlError, ErrorCode, Operation, OwnerMode, Response};
 use rust_microsip_core::{
-    CallId, CallPhase, Command, Direction, Event, FRAME_SAMPLES, MediaIo, Notice, NullMedia,
+    CallId, CallPhase, Command, Direction, Event, FRAME_SAMPLES, MediaIo, Notice,
 };
 use rust_microsip_platform::{
     Ack, Acquired, CallAction, ControlClient, ControlServer, ControlSocketError, Incoming,
@@ -390,6 +392,11 @@ fn config_theme(theme: Theme) -> config::Theme {
 
 /// `$XDG_DATA_HOME`, falling back to `$HOME/.local/share`; only absolute
 /// paths from the environment snapshot, never the working directory.
+fn config_home(env: &BTreeMap<String, String>) -> Option<PathBuf> {
+    let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
+    abs("XDG_CONFIG_HOME").or_else(|| abs("HOME").map(|h| h.join(".config")))
+}
+
 fn data_home(env: &BTreeMap<String, String>) -> Option<PathBuf> {
     let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
     abs("XDG_DATA_HOME").or_else(|| abs("HOME").map(|h| h.join(".local/share")))
@@ -629,6 +636,17 @@ fn desktop(args: &CliArgs) -> ExitCode {
     let listener = match default_runtime_dir().and_then(|dir| acquire(&dir, &request)) {
         Ok(Acquired::Owner(listener)) => Some(listener),
         Ok(Acquired::Forwarded(Ack::Ok)) => return ExitCode::SUCCESS,
+        Ok(Acquired::Forwarded(Ack::Service)) => {
+            let message = match request {
+                Request::Dial(_) => {
+                    "rust-microsip: uri_confirmation_unavailable: the headless service owns the profile; the link was not dialed"
+                }
+                Request::Activate => {
+                    "rust-microsip: engine_owned_by_service: stop the headless service before opening the window"
+                }
+            };
+            return fail(message, 4);
+        }
         Ok(Acquired::Forwarded(ack)) => {
             return fail(
                 &format!("rust-microsip: the running instance answered {ack:?}"),
@@ -698,16 +716,12 @@ fn desktop(args: &CliArgs) -> ExitCode {
         }
     };
     let audio_prefs = stored.as_ref().map(|s| s.audio.clone()).unwrap_or_default();
-    let media: Box<dyn MediaIo> = match DeviceMedia::open(
-        audio_prefs.input_device.as_deref(),
-        audio_prefs.output_device.as_deref(),
-    ) {
-        Ok(device) => Box::new(device),
-        Err(_) => {
-            notices.push(Event::Notice(Notice::AudioUnavailable));
-            Box::new(NullMedia)
-        }
-    };
+    // Devices open only while a call's media runs; a missing device is
+    // reported when a call starts.
+    let media: Box<dyn MediaIo> = Box::new(OnDemandMedia::new(
+        audio_prefs.input_device.clone(),
+        audio_prefs.output_device.clone(),
+    ));
     let repaint: Arc<OnceLock<eframe::egui::Context>> = Arc::new(OnceLock::new());
     let wake = repaint.clone();
     let engine = match EngineHandle::spawn(
@@ -791,6 +805,8 @@ fn desktop(args: &CliArgs) -> ExitCode {
         audio_output: audio_prefs.output_device.clone(),
         overridden: sources.as_ref().map(overridden).unwrap_or_default(),
         desktop_entry: data_home(&ctx.env).map(|d| d.join("applications").join(DESKTOP_FILE)),
+        grant_dir: listener.as_ref().map(|l| l.runtime_dir().join("grants")),
+        bootstrap_dir: config_home(&ctx.env).map(|d| d.join("rust-microsip").join("bootstrap")),
     };
     let save = settings_saver(durable, sources, stored);
     let (results_tx, results) = mpsc::channel();
@@ -944,7 +960,13 @@ fn control_cli(raw: &[String]) -> ExitCode {
             .unwrap_or_else(|_| format!("{prefix}-{}", std::process::id()))
     };
     let key = command.key.clone().unwrap_or_else(|| random("cli"));
-    let request = cli::request(&command, &random("req"), &key);
+    let mut request = cli::request(&command, &random("req"), &key);
+    if let Some(path) = &command.grant_file {
+        match cli::read_capability(path) {
+            Ok(capability) => request.capability = Some(capability),
+            Err(message) => return fail(&format!("rust-microsip: {message}"), 2),
+        }
+    }
     let shown_key = request.idempotency_key.clone();
     let response = match request.validate() {
         Err(error) => Response::error(&request.request_id, &error),
@@ -1005,12 +1027,27 @@ fn main() -> ExitCode {
     if control {
         return control_cli(&raw);
     }
+    if raw.first().map(String::as_str) == Some("service") {
+        return service::run(&raw);
+    }
     if raw.first().map(String::as_str) == Some("mcp") {
         // stdout belongs to the protocol; diagnostics go to stderr only.
-        if raw.get(1..) != Some(&["--stdio".to_owned()][..]) {
-            return fail("rust-microsip: usage: rust-microsip mcp --stdio", 2);
-        }
-        return match rust_microsip::mcp::run_stdio(default_runtime_dir().ok()) {
+        let capability = match raw.get(1..).unwrap_or_default() {
+            [stdio] if stdio == "--stdio" => None,
+            [stdio, flag, path] if stdio == "--stdio" && flag == "--grant-file" => {
+                match cli::read_capability(std::path::Path::new(path)) {
+                    Ok(capability) => Some(capability),
+                    Err(message) => return fail(&format!("rust-microsip: {message}"), 2),
+                }
+            }
+            _ => {
+                return fail(
+                    "rust-microsip: usage: rust-microsip mcp --stdio [--grant-file FILE]",
+                    2,
+                );
+            }
+        };
+        return match rust_microsip::mcp::run_stdio(default_runtime_dir().ok(), capability) {
             Ok(()) => ExitCode::SUCCESS,
             Err(message) => fail(&format!("rust-microsip: {message}"), 1),
         };

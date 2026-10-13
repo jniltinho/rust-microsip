@@ -8,7 +8,8 @@
 mod state;
 
 pub use state::{
-    AUDIO_TEST_SECONDS, DESKTOP_FILE, Theme, UiSettings, install_desktop_entry, keyring_reference,
+    AUDIO_TEST_SECONDS, DESKTOP_FILE, GrantForm, GrantSpec, IssuedGrant, Theme, UiSettings,
+    UiState, View, install_desktop_entry, keyring_reference, write_private,
 };
 
 use rust_microsip_audio::AudioDevices;
@@ -20,8 +21,8 @@ use rust_microsip_core::{
 };
 use secrecy::SecretString;
 use state::{
-    Action, ContactForm, ImportForm, MAX_NUMBER_CHARS, SaveFn, Tab, UiState, View, format_duration,
-    outcome_text, phase_text, registration_text, transfer_text,
+    Action, ContactForm, ImportForm, MAX_NUMBER_CHARS, SaveFn, Tab, format_duration, outcome_text,
+    phase_text, registration_text, transfer_text,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -1418,6 +1419,8 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
     });
     ui.label(egui::RichText::new(LINK_NOTE).small());
     ui.separator();
+    agent_access(ui, st, out);
+    ui.separator();
     ui.horizontal(|ui| {
         if ui.button("Save and register").clicked() {
             out.push(Action::SaveSettings);
@@ -1426,6 +1429,107 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
             out.push(Action::CloseView);
         }
     });
+}
+
+/// Grants for the CLI/MCP: what an agent may do without asking each time.
+fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
+    ui.label("Agent access (CLI/MCP)");
+    ui.label(
+        egui::RichText::new(
+            "Without a grant every change waits for Allow here. A grant lets a local program \
+             do only what you tick, for the numbers you list, for at most an hour.",
+        )
+        .small(),
+    );
+    let form = &mut st.grant_form;
+    egui::Grid::new("rust_microsip_grant_scopes")
+        .num_columns(2)
+        .show(ui, |ui| {
+            for (index, scope) in crate::owner::SCOPES.iter().enumerate() {
+                ui.checkbox(&mut form.scopes[index], *scope);
+                if index % 2 == 1 {
+                    ui.end_row();
+                }
+            }
+        });
+    ui.horizontal(|ui| {
+        let label = ui.label("May call");
+        ui.add(
+            egui::TextEdit::singleline(&mut form.destinations)
+                .hint_text("1002, 1003")
+                .desired_width(140.0),
+        )
+        .labelled_by(label.id);
+    });
+    ui.horizontal(|ui| {
+        let label = ui.label("May answer");
+        ui.add(
+            egui::TextEdit::singleline(&mut form.incoming)
+                .hint_text("1002")
+                .desired_width(140.0),
+        )
+        .labelled_by(label.id);
+    });
+    ui.horizontal(|ui| {
+        let label = ui.label("Minutes");
+        named(
+            ui.add(egui::DragValue::new(&mut form.minutes).range(1..=60)),
+            "Grant minutes",
+        )
+        .labelled_by(label.id);
+        let label = ui.label("Calls");
+        named(
+            ui.add(egui::DragValue::new(&mut form.quota).range(0..=100)),
+            "Grant calls",
+        )
+        .labelled_by(label.id);
+    });
+    ui.horizontal(|ui| {
+        if ui.button("Create grant file").clicked() {
+            out.push(Action::CreateGrant { bootstrap: false });
+        }
+        if ui
+            .button("Export for headless service")
+            .on_hover_text(
+                "Single use: rust-microsip service --grant-file FILE (quit the window first)",
+            )
+            .clicked()
+        {
+            out.push(Action::CreateGrant { bootstrap: true });
+        }
+    });
+    if ui
+        .small_button("Clear audit log")
+        .on_hover_text("Delete the record of agent requests and decisions (asks first)")
+        .clicked()
+    {
+        out.push(Action::ClearAudit);
+    }
+    if let Some(path) = &st.grant_form.written {
+        ui.label(egui::RichText::new(format!("Written to {path}")).small());
+    }
+    for grant in st.listed_grants() {
+        ui.horizontal(|ui| {
+            let kind = if grant.bootstrap_id.is_some() {
+                "service"
+            } else {
+                "session"
+            };
+            ui.label(
+                egui::RichText::new(format!(
+                    "{} ({kind}): {} · calls {}/{}",
+                    grant.id,
+                    grant.scopes.join(", "),
+                    grant.used,
+                    grant.quota
+                ))
+                .small(),
+            );
+            if named(ui.small_button("Revoke"), "Revoke grant").clicked() {
+                out.push(Action::RevokeGrant(grant.id.clone()));
+            }
+        });
+    }
 }
 
 fn about(ui: &mut egui::Ui, out: &mut Vec<Action>) {

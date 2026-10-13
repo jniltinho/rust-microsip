@@ -1,0 +1,88 @@
+# The only workflow that builds and publishes binaries: runs on version tags
+# (v0.1.0, v0.1.0-rc.1). Checks run in ci.yml on main; tag only a commit whose
+# CI is green. A final version also needs docs/release/vX.Y.Z.md with every gate
+# checked (owner decision included); -rc tags are published as pre-releases.
+name: release
+
+on:
+  push:
+    tags: ['v*.*.*']
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          # Full history: the publication scan checks every reachable blob.
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Require a green CI run for this commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          conclusion=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --commit "$GITHUB_SHA" \
+            --status success --json conclusion -q '.[0].conclusion')
+          if [ "$conclusion" != success ]; then
+            echo "no successful ci.yml run for $GITHUB_SHA; release only commits whose CI is green" >&2
+            exit 1
+          fi
+      - name: Tag matches the workspace version
+        id: version
+        run: |
+          version=${GITHUB_REF_NAME#v}
+          workspace=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+          if [ "$version" != "$workspace" ]; then
+            echo "tag $GITHUB_REF_NAME does not match workspace version $workspace" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - name: Every release gate is checked (final versions)
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          case "$VERSION" in *-*) echo "pre-release: gates are not required"; exit 0 ;; esac
+          notes="docs/release/v$VERSION.md"
+          [ -f "$notes" ] || { echo "missing $notes (gate checklist and release notes)" >&2; exit 1; }
+          if grep -n -- '- \[ \]' "$notes"; then
+            echo "open release gates in $notes" >&2
+            exit 1
+          fi
+      - name: Build artifacts
+        run: docker buildx build --progress plain --platform linux/amd64 --target artifacts --output type=local,dest=dist .
+      - name: Check artifacts
+        run: |
+          (cd dist && sha256sum --check --strict SHA256SUMS)
+          sh packaging/appimage/verify.sh dist/rust-microsip-*-x86_64.AppImage dist/rust-microsip
+          command -v unsquashfs || { sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools; }
+          sh packaging/release/scan-publication.sh dist
+      - name: Assemble release assets
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          mkdir -p release
+          cp dist/rust-microsip "release/rust-microsip-$VERSION-x86_64"
+          cp dist/rust-microsip-*-x86_64.AppImage "release/rust-microsip-$VERSION-x86_64.AppImage"
+          cp dist/scaffold-sbom.cdx.json "release/rust-microsip-$VERSION-sbom.cdx.json"
+          tar -C dist -czf "release/rust-microsip-$VERSION-licenses.tar.gz" \
+            LICENSE NOTICE cargo-licenses toolchain-licenses build-manifest.json toolchain.txt
+          (cd release && sha256sum -- * > SHA256SUMS)
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          prerelease=
+          case "$VERSION" in *-*) prerelease=--prerelease ;; esac
+          notes=--generate-notes
+          [ -f "docs/release/v$VERSION.md" ] && notes="--notes-file docs/release/v$VERSION.md"
+          gh release create "$GITHUB_REF_NAME" release/* --verify-tag $notes \
+            --title "rust-microsip $VERSION" $prerelease

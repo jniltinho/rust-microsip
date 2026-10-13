@@ -253,6 +253,7 @@ pub fn to_request(
         request_id: request_id.to_owned(),
         idempotency_key: key,
         operation,
+        capability: None,
     };
     request.validate()?;
     Ok(request)
@@ -273,15 +274,18 @@ pub fn to_result(response: &Response) -> CallToolResult {
 /// The MCP server state.
 pub struct Server {
     runtime_dir: Option<PathBuf>,
+    capability: Option<String>,
     window: Mutex<(Instant, u32)>,
     next: Mutex<u64>,
 }
 impl Server {
-    /// Serve the owner of `runtime_dir` (`None`: no runtime directory).
+    /// Serve the owner of `runtime_dir` (`None`: no runtime directory),
+    /// presenting `capability` (from `--grant-file`) with every request.
     #[must_use]
-    pub fn new(runtime_dir: Option<PathBuf>) -> Self {
+    pub fn new(runtime_dir: Option<PathBuf>, capability: Option<String>) -> Self {
         Self {
             runtime_dir,
+            capability,
             window: Mutex::new((Instant::now(), 0)),
             next: Mutex::new(0),
         }
@@ -356,7 +360,10 @@ impl Server {
             ));
         }
         match to_request(&params.name, params.arguments, &id) {
-            Ok(request) => to_result(&self.execute(&request)),
+            Ok(mut request) => {
+                request.capability.clone_from(&self.capability);
+                to_result(&self.execute(&request))
+            }
             Err(error) => to_result(&Response::error(&id, &error)),
         }
     }
@@ -437,7 +444,7 @@ impl<R: AsyncRead + Unpin> AsyncRead for BoundedLines<R> {
 ///
 /// # Errors
 /// A user-safe message when the transport fails to start.
-pub fn run_stdio(runtime_dir: Option<PathBuf>) -> Result<(), String> {
+pub fn run_stdio(runtime_dir: Option<PathBuf>, capability: Option<String>) -> Result<(), String> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(2)
         .enable_all()
@@ -445,7 +452,7 @@ pub fn run_stdio(runtime_dir: Option<PathBuf>) -> Result<(), String> {
         .map_err(|_| "cannot start the MCP runtime".to_owned())?;
     runtime.block_on(async move {
         let transport = (BoundedLines::new(tokio::io::stdin()), tokio::io::stdout());
-        let service = Server::new(runtime_dir)
+        let service = Server::new(runtime_dir, capability)
             .serve(transport)
             .await
             .map_err(|_| "the MCP client did not initialize".to_owned())?;

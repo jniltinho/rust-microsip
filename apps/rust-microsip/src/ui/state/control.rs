@@ -80,10 +80,9 @@ impl UiState {
             Operation::DevicesList
             | Operation::ContactsSearch { .. }
             | Operation::HistoryList { .. }
-            | Operation::ConfigShow => Err(error(
-                ErrorCode::GrantRequired,
-                "this read needs a read grant issued in the window",
-            )),
+            | Operation::ConfigShow => self
+                .granted_read(request)
+                .map(|data| Response::ok(id, data)),
             _ => self.control_mutation(request, pid, now),
         };
         result.unwrap_or_else(|e| Response::error(id, &e))
@@ -248,10 +247,32 @@ impl UiState {
         if let Some(call) = operation.call_ref() {
             self.check_call(call)?;
         }
+        // A grant that covers this exact request runs it without a prompt.
+        if let Some(grant) = self.request_grant(request)? {
+            match self.grant_allows(&grant, operation) {
+                Ok(()) => {
+                    let operation_id =
+                        self.record(key, operation, mac, epoch, OperationState::Executing)?;
+                    if let Some(store) = self.store.as_mut() {
+                        let detail = format!("{} by grant {}", audit_detail(operation), grant.id);
+                        let _ = store.control_audit(operation.name(), "granted", &detail);
+                    }
+                    if let Some(owner) = self.control.as_mut() {
+                        owner
+                            .granted
+                            .push_back((operation_id.clone(), operation.clone()));
+                    }
+                    return Ok(Response::pending(id, Status::Accepted, &operation_id));
+                }
+                Err(denial) if mode == OwnerMode::Service => return Err(denial),
+                // In the window, anything the grant does not cover asks a person.
+                Err(_) => {}
+            }
+        }
         if mode == OwnerMode::Service {
             return Err(error(
                 ErrorCode::GrantRequired,
-                "the service needs a grant issued in the window before it starts",
+                "the service runs only what its grant allows",
             ));
         }
         let owner = self
@@ -270,24 +291,9 @@ impl UiState {
                 "too many requests are waiting for approval",
             ));
         }
-        let operation_id = owner
-            .operation_id()
-            .map_err(|e| error(ErrorCode::Internal, e))?;
+        let operation_id =
+            self.record(key, operation, mac, epoch, OperationState::AwaitingApproval)?;
         let store = self.store.as_mut().ok_or_else(unavailable)?;
-        store
-            .control_insert(&OperationRecord {
-                operation_id: operation_id.clone(),
-                epoch,
-                idempotency_key: key.to_owned(),
-                operation: operation.name().to_owned(),
-                payload_mac: mac,
-                state: OperationState::AwaitingApproval,
-                outcome: None,
-                created_utc: SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX)),
-            })
-            .map_err(|_| unavailable())?;
         let _ = store.control_audit(operation.name(), "requested", &audit_detail(operation));
         let requester = pid.map_or_else(
             || "A local program".to_owned(),
@@ -307,6 +313,46 @@ impl UiState {
             Status::ApprovalRequired,
             &operation_id,
         ))
+    }
+
+    /// Write a new ledger row before anything happens; returns its id.
+    fn record(
+        &mut self,
+        key: &str,
+        operation: &Operation,
+        mac: Vec<u8>,
+        epoch: i64,
+        state: OperationState,
+    ) -> Result<String, ControlError> {
+        let unavailable = || {
+            error(
+                ErrorCode::StorageUnavailable,
+                "the ledger is unavailable; nothing was done",
+            )
+        };
+        let operation_id = self
+            .control
+            .as_ref()
+            .ok_or_else(|| error(ErrorCode::Internal, "control is not active"))?
+            .operation_id()
+            .map_err(|e| error(ErrorCode::Internal, e))?;
+        self.store
+            .as_mut()
+            .ok_or_else(unavailable)?
+            .control_insert(&OperationRecord {
+                operation_id: operation_id.clone(),
+                epoch,
+                idempotency_key: key.to_owned(),
+                operation: operation.name().to_owned(),
+                payload_mac: mac,
+                state,
+                outcome: None,
+                created_utc: SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX)),
+            })
+            .map_err(|_| unavailable())?;
+        Ok(operation_id)
     }
 
     /// Record the final state; the audit row names the operation only.
@@ -488,8 +534,14 @@ impl UiState {
         }
     }
 
-    /// Expire undecided requests and pace queued DTMF digits.
+    /// Expire undecided requests, run granted operations and pace queued
+    /// DTMF digits.
     pub fn control_tick(&mut self, backend: &dyn Backend, now: Instant) {
+        while let Some((operation_id, operation)) =
+            self.control.as_mut().and_then(|o| o.granted.pop_front())
+        {
+            self.execute(&operation_id, &operation, backend, now);
+        }
         let expired: Vec<PendingApproval> = self.control.as_mut().map_or_else(Vec::new, |owner| {
             let (gone, kept): (Vec<_>, Vec<_>) =
                 owner.pending.drain(..).partition(|p| now > p.deadline);
@@ -610,6 +662,7 @@ mod tests {
             request_id: "r1".into(),
             idempotency_key: key.map(Into::into),
             operation,
+            capability: None,
         }
     }
 
@@ -907,6 +960,179 @@ mod tests {
         }
         let orphan = st.control_response(&request(Some("k-d"), dial("1002")), None, later);
         assert_eq!(code(&orphan), Some(ErrorCode::StorageUnavailable));
+        Ok(())
+    }
+
+    fn grant_spec(scopes: &[&str], destinations: &[&str]) -> super::super::grants::GrantSpec {
+        super::super::grants::GrantSpec {
+            scopes: scopes.iter().map(|s| (*s).to_owned()).collect(),
+            destinations: destinations.iter().map(|s| (*s).to_owned()).collect(),
+            incoming: Vec::new(),
+            minutes: 10,
+            quota: 1,
+        }
+    }
+
+    fn with_capability(mut request: Request, capability: &str) -> Request {
+        request.capability = Some(capability.to_owned());
+        request
+    }
+
+    #[test]
+    fn grants_run_only_what_they_cover_and_never_prompt() -> TestResult {
+        let mut st = owner_state(OwnerMode::Gui, true)?;
+        let engine = Engine::default();
+        let now = Instant::now();
+        let issued = st.issue_grant(
+            &grant_spec(&["control:dial", "read:history"], &["1002"]),
+            false,
+        )?;
+        let cap = issued.capability.as_str();
+        // Covered: runs on the next tick without a prompt.
+        let ok = st.control_response(
+            &with_capability(request(Some("g-1"), dial("1002")), cap),
+            None,
+            now,
+        );
+        assert_eq!(ok.status, Status::Accepted);
+        assert!(st.pending_approvals().is_empty());
+        st.control_tick(&engine, now);
+        assert_eq!(engine.0.take(), ["Dial(1002)"]);
+        // Quota of one call: the next dial falls back to a person in the window.
+        let again = st.control_response(
+            &with_capability(request(Some("g-2"), dial("1002")), cap),
+            None,
+            now,
+        );
+        assert_eq!(again.status, Status::ApprovalRequired);
+        // Destination outside the grant: a prompt, never a silent call.
+        let other = st.control_response(
+            &with_capability(request(Some("g-3"), dial("1003")), cap),
+            None,
+            now,
+        );
+        assert_eq!(other.status, Status::ApprovalRequired);
+        assert!(engine.0.borrow().is_empty());
+        // Reads within scope work; others do not.
+        let history = st.control_response(
+            &with_capability(
+                request(
+                    None,
+                    Operation::HistoryList {
+                        filter: None,
+                        cursor: None,
+                        limit: Some(5),
+                    },
+                ),
+                cap,
+            ),
+            None,
+            now,
+        );
+        assert_eq!(history.status, Status::Ok);
+        let contacts = st.control_response(
+            &with_capability(
+                request(
+                    None,
+                    Operation::ContactsSearch {
+                        query: String::new(),
+                        cursor: None,
+                        limit: None,
+                    },
+                ),
+                cap,
+            ),
+            None,
+            now,
+        );
+        assert_eq!(code(&contacts), Some(ErrorCode::GrantRequired));
+        // Unknown and revoked capabilities are refused outright.
+        let fake = st.control_response(
+            &with_capability(request(None, Operation::ConfigShow), &"0".repeat(64)),
+            None,
+            now,
+        );
+        assert_eq!(code(&fake), Some(ErrorCode::GrantRequired));
+        st.revoke_grant(&issued.id);
+        let revoked = st.control_response(
+            &with_capability(
+                request(
+                    None,
+                    Operation::HistoryList {
+                        filter: None,
+                        cursor: None,
+                        limit: None,
+                    },
+                ),
+                cap,
+            ),
+            None,
+            now,
+        );
+        assert_eq!(code(&revoked), Some(ErrorCode::GrantRequired));
+        Ok(())
+    }
+
+    #[test]
+    fn the_service_runs_only_granted_requests() -> TestResult {
+        let mut st = owner_state(OwnerMode::Service, true)?;
+        let engine = Engine::default();
+        let now = Instant::now();
+        let issued = st.issue_grant(&grant_spec(&["control:dnd"], &[]), false)?;
+        let on = st.control_response(
+            &with_capability(
+                request(Some("s-1"), Operation::DndSet { enabled: true }),
+                &issued.capability,
+            ),
+            None,
+            now,
+        );
+        assert_eq!(on.status, Status::Accepted);
+        st.control_tick(&engine, now);
+        assert_eq!(engine.0.take(), ["SetDnd(true)"]);
+        let dial = st.control_response(
+            &with_capability(request(Some("s-2"), dial("1002")), &issued.capability),
+            None,
+            now,
+        );
+        assert_eq!(code(&dial), Some(ErrorCode::GrantRequired));
+        assert!(
+            st.pending_approvals().is_empty(),
+            "the service never prompts"
+        );
+        // Bad grant specs are refused without storing anything.
+        assert!(
+            st.issue_grant(&grant_spec(&["control:shell"], &[]), false)
+                .is_err()
+        );
+        let mut long = grant_spec(&["control:dnd"], &[]);
+        long.minutes = 61;
+        assert!(st.issue_grant(&long, false).is_err());
+        assert!(
+            st.issue_grant(&grant_spec(&["control:dial"], &["10 02"]), false)
+                .is_err()
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn the_audit_log_is_cleared_only_after_confirmation() -> TestResult {
+        let mut st = owner_state(OwnerMode::Gui, true)?;
+        let engine = Engine::default();
+        let now = Instant::now();
+        st.control_response(&request(Some("k-a"), dial("1002")), None, now);
+        let rows = |st: &UiState| {
+            st.store
+                .as_ref()
+                .map_or(0, |s| s.control_audit_rows(10).map_or(0, |r| r.len()))
+        };
+        assert!(rows(&st) >= 1);
+        let mut save =
+            |_: &crate::ui::UiSettings, _: Option<&mut rust_microsip_storage::Store>| Ok(());
+        st.dispatch(super::super::Action::ClearAudit, &engine, &mut save, now);
+        assert!(rows(&st) >= 1, "nothing deleted before confirming");
+        st.dispatch(super::super::Action::Confirm, &engine, &mut save, now);
+        assert_eq!(rows(&st), 0);
         Ok(())
     }
 }

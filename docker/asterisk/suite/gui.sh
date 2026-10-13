@@ -176,6 +176,68 @@ case "$scenario" in
         # No owner: unavailable, nothing started.
         cli status > /capture/status-none.json; echo "no_owner_exit=$?" >> /capture/results.txt
         pgrep -x rust-microsip > /dev/null && echo "spawned=1" >> /capture/results.txt ;;
+    grants) # AG-04: grants issued in the window, then the headless service.
+        start_app app
+        cli() { "$app_bin" "$@" --json 2>>/capture/cli-stderr.log; }
+        field() { python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1], {"d": d}))' "$1"; }
+        decide() { sleep 1.5; $tool press "$1" >> /capture/atspi-steps.txt; }
+        result() { echo "$1=$2" >> /capture/results.txt; }
+        call_ref() { cli status $1 > /capture/st.json; echo "$(field 'd["data"]["call"]["call_id"]' < /capture/st.json) $(field 'd["data"]["call"]["version"]' < /capture/st.json)"; }
+        # A person issues a grant in Settings → Agent access.
+        $tool press Menu "Settings…" >> /capture/atspi-steps.txt
+        for scope in control:dial control:hangup read:history; do $tool press "$scope" >> /capture/atspi-steps.txt; done
+        $tool focus "May call" >> /capture/atspi-steps.txt; xdotool type --delay 60 600; sleep 1
+        $tool press "Create grant file" >> /capture/atspi-steps.txt; sleep 1
+        grant=$(ls /tmp/xdg/rust-microsip/grants/*.grant 2>/dev/null | head -1)
+        result grant_mode "$(stat -c %a "$grant" 2>/dev/null)"
+        $tool press Cancel >> /capture/atspi-steps.txt
+        G="--grant-file $grant"
+        cli history list $G > /capture/history.json; result history_exit $?
+        # Outside the grant (another number): a person decides; denied.
+        cli call dial 602 --key gr-602 $G > /capture/d602.json; result d602 "$(field 'd["status"]' < /capture/d602.json)"
+        decide "Deny request"; sleep 1; checkpoint denied-602
+        # Inside the grant: runs without a prompt.
+        cli call dial 600 --key gr-600 $G > /capture/d600.json; result d600 "$(field 'd["status"]' < /capture/d600.json)"
+        sleep 5; result pending_after_grant "$($tool focused | tr -d "' ")"
+        checkpoint granted-dial
+        set -- $(call_ref "$G")
+        cli call hangup "$1" "$2" --key gr-hangup $G > /capture/hangup.json; result hangup "$(field 'd["status"]' < /capture/hangup.json)"
+        sleep 3; checkpoint granted-hangup
+        # Quota of one call: the next dial needs a person again.
+        cli call dial 600 --key gr-600b $G > /capture/d600b.json; result quota "$(field 'd["status"]' < /capture/d600b.json)"
+        decide "Deny request"
+        # Revoked: nothing works any more.
+        $tool press Menu "Settings…" "Revoke grant" >> /capture/atspi-steps.txt
+        cli history list $G > /capture/history2.json; result revoked_exit $?
+        # Export a single-use bootstrap (same ticks and number) for the service.
+        $tool press "Export for headless service" >> /capture/atspi-steps.txt; sleep 1
+        boot=$(ls /tmp/home/.config/rust-microsip/bootstrap/*.json 2>/dev/null | head -1)
+        result boot_mode "$(stat -c %a "$boot" 2>/dev/null)"
+        $tool press Cancel >> /capture/atspi-steps.txt
+        stop_app app
+        # The headless service: no display needed, only what was granted.
+        DISPLAY= "$app_bin" service --grant-file "$boot" --config /cfg/config.toml > /capture/service.log 2>&1 &
+        svc=$!
+        timeout 30 sh -c 'until grep -q "service ready" /capture/service.log; do sleep 0.3; done'
+        sleep 6
+        "$app_bin" --config /cfg/config.toml > /capture/gui-vs-service.log 2>&1; result gui_vs_service $?
+        B="--grant-file $boot"
+        cli status $B > /capture/svc-status.json
+        result svc_mode "$(field 'd["data"]["mode"]' < /capture/svc-status.json)"
+        result svc_registration "$(field 'd["data"]["registration"]' < /capture/svc-status.json)"
+        cli call dial 602 --key sv-602 $B > /capture/sv602.json; result sv602 "$(field 'd["error"]["code"]' < /capture/sv602.json)"
+        cli call dial 600 --key sv-600 $B > /capture/sv600.json; result sv600 "$(field 'd["status"]' < /capture/sv600.json)"
+        sleep 5; checkpoint service-dial
+        set -- $(call_ref "$B")
+        cli call hangup "$1" "$2" --key sv-hangup $B > /capture/svh.json; result sv_hangup "$(field 'd["status"]' < /capture/svh.json)"
+        sleep 3; checkpoint service-hangup
+        kill -TERM "$svc"; wait "$svc"; result service_exit $?
+        grep -q "service stopped" /capture/service.log && result service_stopped 1
+        grep -q "microphone active" /capture/service.log && result microphone_reported 1
+        # Single use: the same bootstrap never starts another session.
+        DISPLAY= "$app_bin" service --grant-file "$boot" --config /cfg/config.toml > /capture/service2.log 2>&1
+        result reuse_exit $?
+        grep -q bootstrap_consumed /capture/service2.log && result reuse_consumed 1 ;;
     *) echo "unknown scenario $scenario" > /capture/failure ;;
 esac
 phase exited

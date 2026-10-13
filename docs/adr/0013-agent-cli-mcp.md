@@ -1,7 +1,7 @@
 # ADR 0013: Local control socket, CLI and stdio MCP server
 
 Date: 2026-10-13. Status: **accepted for the `add-agent-cli-mcp` change; the human
-G4 acceptance (AG-06 with headsets) and the grants/headless service are still open.**
+G4 acceptance (AG-06 with headsets) is still open.**
 
 ## Context
 
@@ -29,8 +29,17 @@ and without any way for the agent to authorize itself.
 
 ### Authorization
 
-Personal reads (contacts, history, devices, configuration) need read grants, not
-offered yet: they answer `grant_required`. `status_get` hides names and numbers.
+Personal reads (contacts, history, devices, configuration) need read grants and
+otherwise answer `grant_required`. Grants are issued only in the window (Settings →
+Agent access): scopes, exact destinations and incoming callers, a call quota and at
+most one hour of validity, bound to the owner epoch, revocable. The client presents
+the secret capability from a private file; the database keeps its SHA-256 only
+(schema v5). A mutation the grant covers runs without a prompt; anything else falls
+back to the prompt in the window. The headless service (`rust-microsip service
+--grant-file FILE`) consumes a single-use bootstrap exported from the window into its
+own epoch, never prompts and answers `grant_required` for everything else; a window
+or link launched meanwhile is answered `service` over the instance socket and exits
+(`engine_owned_by_service`, `uri_confirmation_unavailable`). `status_get` hides names and numbers.
 Every mutation is first written to the durable ledger and then waits up to 60 s for
 a person to press **Allow** or **Deny** in a modal prompt that blocks the rest of
 the window, shows one request at a time (who asked, by process id, what would
@@ -39,8 +48,7 @@ appears, so a click aimed at the call controls cannot approve it. A mutation the
 client already timed out on is dropped unrecorded, so a retry with a new key cannot
 produce a second identical prompt. There is no `approve` command,
 no `--yes`/`--confirm`, and no MCP tool that changes authorization; tool
-annotations are hints only. The headless service answers `grant_required` until
-grants exist.
+annotations are hints only. 
 
 ### Ledger
 

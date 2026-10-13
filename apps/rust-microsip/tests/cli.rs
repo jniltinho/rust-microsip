@@ -288,3 +288,40 @@ fn control_commands_never_start_an_owner() -> std::io::Result<()> {
     }
     std::fs::remove_dir_all(dir)
 }
+
+#[test]
+fn the_service_refuses_to_start_without_a_valid_private_bootstrap() -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = temp_dir("service")?;
+    let runtime = dir.to_string_lossy().into_owned();
+    let output = run(&["service"], &[("XDG_RUNTIME_DIR", &runtime)])?;
+    assert_eq!(output.status.code(), Some(2), "{}", text(&output));
+    let missing = dir.join("missing.json");
+    let output = run(
+        &["service", "--grant-file", &missing.to_string_lossy()],
+        &[("XDG_RUNTIME_DIR", &runtime)],
+    )?;
+    assert_eq!(output.status.code(), Some(2));
+    // Readable by others: refused before anything else.
+    let open = dir.join("open.json");
+    std::fs::write(
+        &open,
+        format!("{{\"bootstrap_id\":\"boot-1\",\"capability\":\"{MARKER}\"}}"),
+    )?;
+    std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o644))?;
+    let output = run(
+        &["service", "--grant-file", &open.to_string_lossy()],
+        &[("XDG_RUNTIME_DIR", &runtime)],
+    )?;
+    assert_eq!(output.status.code(), Some(2));
+    assert!(
+        !text(&output).contains(MARKER),
+        "the capability is never printed"
+    );
+    // A private, well-formed bootstrap without a runtime directory: unavailable.
+    std::fs::set_permissions(&open, std::fs::Permissions::from_mode(0o600))?;
+    let output = run(&["service", "--grant-file", &open.to_string_lossy()], &[])?;
+    assert_eq!(output.status.code(), Some(4), "{}", text(&output));
+    assert!(!text(&output).contains(MARKER));
+    std::fs::remove_dir_all(dir)
+}
