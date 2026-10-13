@@ -33,3 +33,20 @@ class CallsComposeTests(unittest.TestCase):
             candidate["services"][service][field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
                 verify_compose.verify(candidate, "calls")
+
+
+class ControlsComposeTests(unittest.TestCase):
+    def test_controls_profile_accepts_only_its_own_runner(self):
+        config = fixture()
+        config["services"]["test-runner"].update({"image": "rust-microsip-g0-controls:0.1.0-lab.1", "build": {"target": "g0-controls-runner"}})
+        verify_compose.verify(config, "controls")
+        with self.assertRaises(ValueError):
+            verify_compose.verify(config, "calls")
+
+    def test_controls_profile_rejects_other_runner_or_wrong_build_target(self):
+        with self.assertRaises(ValueError):
+            verify_compose.verify(fixture(), "controls")
+        config=fixture()
+        config["services"]["test-runner"]["image"]="rust-microsip-g0-controls:0.1.0-lab.1"
+        with self.assertRaises(ValueError):
+            verify_compose.verify(config, "controls")

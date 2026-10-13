@@ -124,3 +124,14 @@ COPY --from=g0-calls-build /opt/rust-licenses /usr/share/rust-microsip-g0/toolch
 COPY --from=g0-calls-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
 USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/g0-calls"]
+
+# RFC 4733 IVR proof only; no desktop/audio device access or release claim.
+FROM verify AS g0-controls-build
+RUN --network=none cargo build -p rust-microsip-telephony --example g0_controls --release --frozen --target x86_64-unknown-linux-gnu
+FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS g0-controls-runner
+COPY --from=g0-controls-build /work/target/x86_64-unknown-linux-gnu/release/examples/g0_controls /usr/local/bin/g0-controls
+COPY --from=g0-controls-build /tmp/g0-cargo-notices /usr/share/rust-microsip-g0/cargo-licenses
+COPY --from=g0-controls-build /opt/rust-licenses /usr/share/rust-microsip-g0/toolchain-licenses
+COPY --from=g0-controls-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/g0-controls"]

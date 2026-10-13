@@ -1,0 +1,273 @@
+{
+  "schema_version": 1,
+  "receipt_kind": "curated-rfc4733-ivr-evidence-not-release",
+  "baseline_commit": "ca43366a5adb943e58f0d1ec97f68ea12cf1ec23",
+  "source_manifest_sha256": "d24b5e8cd09d272e0ca88acd75e4ecb82be50f6d893659c39cd5e072c47dcd2d",
+  "application_build_input_count": 30,
+  "selected_cargo_inventory_sha256": "815e71745bd2170de871dc0a2304a0350fd2a5dd8c4f078579674bc1ba22ff4a",
+  "own_source_files_sha256": {
+    "Cargo.lock": "0935dabb58e0d6246fca3c9fe71f5d9b473ce82e7fea7ede24004e2bf5b3e0a7",
+    "Dockerfile": "e716dfff652c2bcd0970154346464823c7df3c6f1fc0e404595b7af134254719",
+    "packaging/check-context.sh": "8c93b38c59857e310ea399845fd65d2843f4443e0b6139ead59bbcd811e5682c",
+    "crates/media/src/lib.rs": "44a88ad282e1564c78c4715565106f0e63637abf8e727692d0e442f09a5655c4",
+    "crates/media/src/dtmf.rs": "ae5ab40f793790b1274e248e4f16cc188cfb65200e8e7107958e9bdf568e56b6",
+    "crates/media/tests/media.rs": "668479cf732ce3b509bad00a0d91e514d88413d36565cf4004159baacdb76e8f",
+    "crates/telephony/src/g0_calls.rs": "8aed0afacc42dcf410e022b13d7259ed25ef08b7d526a9279245fd18b8c23669",
+    "crates/telephony/src/g0_controls.rs": "65aa6ea1471cd36c2b33978a3ff38969e6218fb507f83256b2f0467944dfaefb",
+    "crates/telephony/examples/g0_controls.rs": "829b64caa3104a3191b1e7ca3756b6e193ff5eee29c6855f066fc7dd38c5ef71",
+    "docker/asterisk/Dockerfile": "b7b929d507750edb64e10c1d17474ca3883edafdc406b23d4fad4584ecec866b",
+    "docker/asterisk/.dockerignore": "043833d02979c18f60cf50bd5edcf4b8454ec4e4a192e5be5dcbf1df25fc9d64",
+    "docker/asterisk/lab.py": "b48941b9cff43794d11310eeab4721210492b00a4b616eae2083d3ba39434ca8",
+    "docker/asterisk/sip_probe.py": "ff60317b4015be807c644d1d0b2e405636c0c8641bc47847ae9aa8ca83c249f6",
+    "docker/asterisk/compose.yaml": "ba4522214d2549c16ea07ae552d53df4fca5c25cd9ecd69dace302512e878a68",
+    "docker/asterisk/compose.controls-g0.yaml": "93843366c2a053d2fa5e743086e2c9920c74cb4b170bc401a46deb962d49d32d",
+    "docker/asterisk/lab.sh": "4c0ea95590ef1f44c2b9229d5d6e3b5b0d6b23a69bd24036301f1733ba7cd6fb",
+    "docker/asterisk/verify_compose.py": "ab523456827427e5a790e79315776c2d91fae48f5d3de8fb2250f6ea411c58ec",
+    "docker/asterisk/tests/test_calls_compose.py": "d8d325453d522942c7b81fddd75903a0abd85076b03827ce2e6e7de619eb00c8"
+  },
+  "controls_runner_local_image_sha256": "3d3bc1f6ee6ec0481c38bf8638ddd38978fa1c3348e1d338232b7cfbe583b49b",
+  "controls_runner_elf_sha256": "4eb86c2f3618d569015c113e0ffd8158de4b2ad762fb5c4a16391a66cc9afc87",
+  "controls_runner_elf_bytes": 4171168,
+  "pbx_wrapper_local_image_sha256": "8bb41399fdf6fdc72ba81e5fc8c2482d5df18e740a923bcde34b19ab4534f62f",
+  "ivr_measurements": {
+    "cases": [
+      {
+        "codec": "PCMA",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 1000,
+        "expected_to_other_tone_ratio": 24230795.627921667,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5103.048662907302,
+        "signaling_completed": true,
+        "transport": "udp"
+      },
+      {
+        "codec": "PCMA",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 400,
+        "expected_to_other_tone_ratio": 5187743.434114477,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5077.349547155484,
+        "signaling_completed": true,
+        "transport": "udp"
+      },
+      {
+        "codec": "PCMU",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 1000,
+        "expected_to_other_tone_ratio": 19102319.056644298,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5099.151688663517,
+        "signaling_completed": true,
+        "transport": "udp"
+      },
+      {
+        "codec": "PCMU",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 400,
+        "expected_to_other_tone_ratio": 8223432.193152638,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5073.167486886275,
+        "signaling_completed": true,
+        "transport": "udp"
+      },
+      {
+        "codec": "PCMA",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 1000,
+        "expected_to_other_tone_ratio": 24199789.71844918,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5103.394132535718,
+        "signaling_completed": true,
+        "transport": "tcp"
+      },
+      {
+        "codec": "PCMA",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 400,
+        "expected_to_other_tone_ratio": 5534381.043851792,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5077.912896456574,
+        "signaling_completed": true,
+        "transport": "tcp"
+      },
+      {
+        "codec": "PCMU",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 1000,
+        "expected_to_other_tone_ratio": 19102319.056644298,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5099.151688663517,
+        "signaling_completed": true,
+        "transport": "tcp"
+      },
+      {
+        "codec": "PCMU",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 400,
+        "expected_to_other_tone_ratio": 8223432.193152638,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5073.167486886275,
+        "signaling_completed": true,
+        "transport": "tcp"
+      },
+      {
+        "codec": "PCMA",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 1000,
+        "expected_to_other_tone_ratio": 24199789.71844918,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5103.394132535718,
+        "signaling_completed": true,
+        "transport": "tls"
+      },
+      {
+        "codec": "PCMA",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 400,
+        "expected_to_other_tone_ratio": 5534381.043851792,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5077.912896456574,
+        "signaling_completed": true,
+        "transport": "tls"
+      },
+      {
+        "codec": "PCMU",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 1000,
+        "expected_to_other_tone_ratio": 19102319.056644298,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5099.151688663517,
+        "signaling_completed": true,
+        "transport": "tls"
+      },
+      {
+        "codec": "PCMU",
+        "event_packets_sent": 24,
+        "expected_ivr_hz": 400,
+        "expected_to_other_tone_ratio": 8223432.193152638,
+        "negotiated_event_pt": 101,
+        "received_audio_packets": 100,
+        "rms": 5073.167486886275,
+        "signaling_completed": true,
+        "transport": "tls"
+      }
+    ],
+    "fixture": "rust-rfc4733-ivr",
+    "g0_passed": false,
+    "hold_tested": false,
+    "human_voice_tested": false,
+    "plaintext_rtp_explicit": true,
+    "positive_and_negative_ivr_cases": true,
+    "refer_tested": false,
+    "release_artifact_tested": false,
+    "schema_version": 1,
+    "srtp_tested": false,
+    "tone_measurement_seconds": 2
+  },
+  "independent_pbx_runtime_checks": {
+    "schema_version": 1,
+    "count_parser_positive_and_negative_controls": true,
+    "one_active_pbx_channel_and_call_observed": true,
+    "both_runtime_containers_hardened": true,
+    "running_controls_container_image_matches_receipt": true,
+    "running_pbx_container_image_matches_receipt": true,
+    "running_controls_elf_matches_receipt": true,
+    "three_caller_contact_rewrite_disabled": true,
+    "no_contacts_after_success": true,
+    "zero_active_channels_and_calls_after_success": true,
+    "zero_project_containers_after_teardown": true,
+    "zero_project_networks_after_teardown": true
+  },
+  "independent_observer_sha256": "4399a7c8b68f448e0b92051c97e410c1e59d97fe3669efb3aa18ad0b108faff2",
+  "saved_active_counts_sha256": "2e8543afab79350243c18e3e46733b4d1e757aae8bfd64ec92c20eb8516a2411",
+  "saved_final_counts_sha256": "3b2f3f7effb8451c4732c87401c191d1a139aeb5562c0243f6322e0f9787df5b",
+  "tests": {
+    "cli_process": 10,
+    "media": 12,
+    "telephony_unit": 9,
+    "registration_integration": 6,
+    "doctests": 1,
+    "packaging_python": 17,
+    "pbx_compose_python": 16
+  },
+  "g0_passed": false,
+  "task_1_7_completed": false,
+  "hold_tested": false,
+  "refer_tested": false,
+  "srtp_tested": false,
+  "human_voice_tested": false,
+  "release_artifact_tested": false,
+  "current_source_pair_call_regression": {
+    "completed_calls": 12,
+    "seconds_per_call": 5,
+    "sip_transports": [
+      "udp",
+      "tcp",
+      "tls"
+    ],
+    "codecs": [
+      "PCMA",
+      "PCMU"
+    ],
+    "both_origination_directions": true,
+    "sent_and_received_packets_per_endpoint": 250,
+    "observed_lost_and_late_packets": 0,
+    "runner_local_image_sha256": "3ef793d81238b79244d8607cc63e416a39bc85ad8113eb210dfd679a31db2b6f",
+    "runner_elf_sha256": "a6e4f329ddebdb038d0033128bc9b0071baa36edc134d5d0042448e5e51923af",
+    "sanitized_matrix_sha256": "9eb24ade96b46ffc6dcb343c01a1281b5772bfda889ebf2fa9178511e1f0b486",
+    "g0_passed": false,
+    "independent_runtime_checks": {
+      "schema_version": 1,
+      "active_pbx_call_observed": true,
+      "both_runtime_containers_hardened": true,
+      "running_calls_container_image_matches_receipt": true,
+      "running_pbx_container_image_matches_receipt": true,
+      "running_calls_elf_matches_receipt": true,
+      "all_six_contact_rewrite_disabled": true,
+      "no_contacts_after_success": true,
+      "zero_active_channels_and_calls_after_success": true,
+      "zero_project_containers_after_teardown": true,
+      "zero_project_networks_after_teardown": true
+    },
+    "independent_observer_sha256": "a4887cc3ceb2acdc35bfd9b742a860080b22c53a2ada334940b69d6825158774"
+  },
+  "original_python_fixture_regression": {
+    "schema_version": 1,
+    "fixture": "registration-only-not-rust-adapter",
+    "transports": [
+      {
+        "transport": "udp",
+        "challenge": 401,
+        "registration": 200
+      },
+      {
+        "transport": "tcp",
+        "challenge": 401,
+        "registration": 200
+      },
+      {
+        "transport": "tls",
+        "challenge": 401,
+        "registration": 200
+      }
+    ],
+    "wrong_password_rejected": true,
+    "unknown_ca_rejected": true,
+    "calls_tested": false,
+    "g0_passed": false
+  },
+  "validated_ivr_matrix_sha256": "aba73da2c0e0aaaa0a2c3616fb8d109752b89d91b37a98c4db2b4fa3359e7f6a",
+  "ivr_measurements_matches_validated_matrix": true
+}

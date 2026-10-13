@@ -2,6 +2,8 @@
 //!
 //! No device I/O, network, codec dependency or cryptography is installed here.
 //! This does not yet provide SRTP, RTCP, resampling or production playout/jitter.
+pub mod dtmf;
+
 use std::{error::Error, fmt};
 
 /// G.711 mono 8 kHz codec with the static RTP/AVP payload mapping.
@@ -102,6 +104,8 @@ impl Codec {
 /// Sanitized packet validation failure; never contains audio or input bytes.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum MediaError {
+    /// Unsupported or malformed DTMF payload/transmission parameters.
+    InvalidEvent,
     /// Truncated, oversized, malformed or unsupported RTP header/length.
     InvalidPacket,
     /// Caller-provided output buffer is too small.
@@ -110,6 +114,7 @@ pub enum MediaError {
 impl fmt::Display for MediaError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            Self::InvalidEvent => "invalid DTMF event",
             Self::InvalidPacket => "invalid bounded RTP packet",
             Self::BufferTooSmall => "RTP output buffer too small",
         })

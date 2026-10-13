@@ -3,6 +3,9 @@
 //! Two independently bound Rust endpoints exchange different tones through an
 //! explicitly selected disposable PBX. TLS uses only the separate RTP-only lab
 //! accounts; mandatory-SRTP accounts are refused rather than downgraded.
+#[path = "g0_controls.rs"]
+pub mod controls;
+
 use super::{OwnedRegistration, ProbeTasks, RegistrationConfig, Transport};
 use rsipstack::{
     EndpointBuilder,
@@ -51,6 +54,9 @@ pub enum CallProbeError {
     /// Registration, dialog, ACK or BYE exchange failed.
     #[error("synthetic call signaling failed")]
     Signaling,
+    /// The SDP answer does not negotiate the offered 8 kHz telephone-event.
+    #[error("negotiated RTP telephone-event DTMF unavailable")]
+    UnsupportedDtmf,
     /// Bounded SDP does not offer the required anchored plain G.711 profile.
     #[error("unsupported isolated G.711 SDP")]
     UnsupportedSdp,
@@ -221,6 +227,9 @@ impl CallWire {
 struct CallInspector(Arc<CallWire>);
 impl MessageInspector for CallInspector {
     fn before_send(&self, msg: SipMessage, _: Option<&SipAddr>) -> SipMessage {
+        if matches!(&msg, SipMessage::Request(r) if r.method == Method::Ack) {
+            self.0.mark(8);
+        }
         msg
     }
     fn after_received(&self, msg: SipMessage, _: Option<&SipAddr>) -> SipMessage {

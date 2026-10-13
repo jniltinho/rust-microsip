@@ -132,3 +132,70 @@ fn rtp_parser_never_panics_on_bounded_deterministic_noise() {
         let _ = RtpPacket::parse(&bytes[..length]);
     }
 }
+
+#[test]
+fn dtmf_digits_map_to_all_sixteen_standard_event_numbers() -> Result<(), MediaError> {
+    use rust_microsip_media::dtmf::Digit;
+    for (event, symbol) in "0123456789*#ABCD".chars().enumerate() {
+        let digit = Digit::try_from(symbol)?;
+        assert_eq!(digit.event_number(), event as u8);
+        assert_eq!(Digit::from_event(event as u8)?, digit);
+    }
+    for symbol in ['e', '\n', ' ', 'é'] {
+        assert!(Digit::try_from(symbol).is_err());
+    }
+    assert!(Digit::from_event(16).is_err());
+    Ok(())
+}
+
+#[test]
+fn dtmf_payload_uses_network_order_and_ignores_the_received_reserved_bit() -> Result<(), MediaError>
+{
+    use rust_microsip_media::dtmf::{Digit, TelephoneEvent};
+    let event = TelephoneEvent::new(Digit::try_from('5')?, true, 10, 960)?;
+    assert_eq!(event.to_bytes(), [5, 0x8a, 0x03, 0xc0]);
+    assert_eq!(TelephoneEvent::parse(&[5, 0xca, 0x03, 0xc0])?, event);
+    for bytes in [
+        &[][..],
+        &[1, 2, 3][..],
+        &[16, 10, 0, 160][..],
+        &[1, 10, 0, 0][..],
+    ] {
+        assert!(TelephoneEvent::parse(bytes).is_err());
+    }
+    assert!(TelephoneEvent::new(Digit::try_from('1')?, false, 64, 160).is_err());
+    Ok(())
+}
+
+#[test]
+fn dtmf_transmission_marks_first_packet_and_repeats_final_duration_three_times()
+-> Result<(), MediaError> {
+    use rust_microsip_media::dtmf::{Digit, Transmission};
+    let mut packets = Transmission::new(Digit::try_from('1')?, 10, 960, 160)?;
+    let frames: Vec<_> = packets.by_ref().collect();
+    assert_eq!(frames.len(), 8);
+    for (i, frame) in frames.iter().enumerate() {
+        assert_eq!(frame.marker, i == 0);
+        assert_eq!(frame.event.duration(), ((i + 1).min(6) * 160) as u16);
+        assert_eq!(frame.event.is_end(), i >= 5);
+    }
+    assert!(packets.next().is_none());
+    assert!(packets.next().is_none());
+    Ok(())
+}
+
+#[test]
+fn dtmf_transmission_rejects_invalid_durations_and_never_wraps() -> Result<(), MediaError> {
+    use rust_microsip_media::dtmf::{Digit, Transmission};
+    let digit = Digit::try_from('#')?;
+    for (volume, total, step) in [(64, 160, 160), (10, 0, 160), (10, 160, 0), (10, 160, 161)] {
+        assert!(Transmission::new(digit, volume, total, step).is_err());
+    }
+    let frames: Vec<_> = Transmission::new(digit, 10, u16::MAX, 10000)?.collect();
+    assert_eq!(frames.len(), 9);
+    assert_eq!(
+        frames.last().map(|frame| frame.event.duration()),
+        Some(u16::MAX)
+    );
+    Ok(())
+}
