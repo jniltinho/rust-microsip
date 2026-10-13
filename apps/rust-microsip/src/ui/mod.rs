@@ -214,8 +214,8 @@ mod tokens {
     }
 }
 
-/// Give a widget without a visible label (placeholder-only fields,
-/// sliders) an accessible name for screen readers.
+/// Supply or override a widget's accessible name: placeholder-only fields,
+/// sliders, combo boxes, and one-glyph buttons named by their purpose.
 fn named(response: egui::Response, name: &str) -> egui::Response {
     response
         .ctx
@@ -522,7 +522,7 @@ impl eframe::App for SoftphoneApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         ui.ctx()
             .accesskit_node_builder(egui::accesskit_root_id(), |node| {
-                node.set_label("rust-microsip");
+                node.set_label(APP_NAME);
             });
         self.draw(ui);
     }
