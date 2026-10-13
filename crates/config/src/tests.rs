@@ -70,7 +70,7 @@ fn err(ctx: &ResolveContext) -> ConfigError {
 #[test]
 fn every_precedence_combination_picks_the_highest_source() {
     let dir = TempDir::new();
-    for mask in 0..16u8 {
+    for mask in 0..32u8 {
         let has = |bit: u8| mask & (1 << bit) != 0;
         let mut c = ctx();
         let mut toml = BASE_TOML.to_owned();
@@ -92,6 +92,13 @@ fn every_precedence_combination_picks_the_highest_source() {
             c.flags.insert(Field::Server, "flag.invalid".into());
             c.flags.insert(Field::Theme, "light".into());
         }
+        if has(4) {
+            c.sqlite = sqlite_layer(&env(&[
+                ("account.server", "sqlite.invalid"),
+                ("ui.theme", "dark"),
+                ("not.a_key", "ignored"),
+            ]));
+        }
         let cfg = ok(&c);
         let (server, theme, source) = if has(3) {
             ("flag.invalid", Theme::Light, Source::Flag)
@@ -101,6 +108,8 @@ fn every_precedence_combination_picks_the_highest_source() {
             ("dotenv.invalid", Theme::Dark, Source::DotEnv)
         } else if has(0) {
             ("toml.invalid", Theme::Light, Source::Toml)
+        } else if has(4) {
+            ("sqlite.invalid", Theme::Dark, Source::Sqlite)
         } else {
             ("pbx.invalid", Theme::System, Source::Default)
         };
@@ -563,6 +572,7 @@ fn cli_arguments() {
             config: Some("/x/password.toml".into()),
             env_file: Some("/y.env".into()),
             uri: None,
+            import: None,
         })
     );
     // One sip:/tel: link in run mode; never together with another command.
@@ -608,8 +618,266 @@ fn cli_arguments() {
     );
     assert_eq!(parse(&["--json"]), Err(CliError::Conflict));
     assert_eq!(parse(&["--help", "--doctor"]), Err(CliError::Conflict));
-    assert_eq!(parse(&["config", "import"]), Err(CliError::UnknownArgument));
+    assert_eq!(
+        parse(&["config", "import"]),
+        Err(CliError::MissingValue("config import"))
+    );
+    let import = parse(&["--apply", "config", "import", "/x/a.toml"]);
+    assert_eq!(
+        import.as_ref().map(|a| (a.command, a.import.clone())),
+        Ok((
+            CliCommand::ConfigImport { apply: true },
+            Some("/x/a.toml".into())
+        ))
+    );
+    assert_eq!(
+        parse(&["config", "import", "/a.toml"]).map(|a| a.command),
+        Ok(CliCommand::ConfigImport { apply: false })
+    );
+    assert_eq!(parse(&["--doctor", "--apply"]), Err(CliError::Conflict));
+    assert_eq!(
+        parse(&["config", "import", "/a", "--apply", "--apply"]),
+        Err(CliError::Duplicate("--apply"))
+    );
     assert_eq!(parse(&["--doctor=1"]), Err(CliError::UnknownArgument));
     // Error variants carry no argument text, so nothing can be echoed.
     assert_eq!(parse(&[SECRET]), Err(CliError::UnknownArgument));
+}
+
+fn stored(pairs: &[(&str, &str)]) -> BTreeMap<Field, String> {
+    sqlite_layer(&env(pairs))
+}
+
+#[test]
+fn sqlite_layer_alone_resolves_and_invalid_values_name_the_origin() {
+    let mut c = ctx();
+    c.sqlite = stored(&[
+        ("account.username", "1001"),
+        ("account.domain", "pbx.invalid"),
+        ("account.port", "5070"),
+        ("ui.dnd", "true"),
+    ]);
+    let cfg = ok(&c);
+    assert_eq!(cfg.config.account.port, 5070);
+    assert!(cfg.config.ui.dnd);
+    assert_eq!(cfg.source(Field::Domain), Source::Sqlite);
+    assert_eq!(cfg.source(Field::Expires), Source::Default);
+    let report = DoctorReport::new(&Ok(cfg));
+    assert!(
+        report
+            .to_json()
+            .contains(r#""key":"account.domain","value":"pbx.invalid","source":"sqlite""#)
+    );
+    assert!(report.to_string().contains("account.port = 5070 [sqlite]"));
+
+    for (key, value, field) in [
+        ("account.port", "70000x", Field::Port),
+        ("account.transport", "carrier-pigeon", Field::Transport),
+        ("ui.theme", "neon", Field::Theme),
+        (
+            "account.password_file",
+            "relative/path",
+            Field::PasswordFile,
+        ),
+    ] {
+        c.sqlite.insert(field, value.into());
+        let e = err(&c);
+        assert!(
+            matches!(e, ConfigError::Invalid { field: f, origin: Source::Sqlite } if f == field),
+            "{key}: {e}"
+        );
+        let text = e.to_string();
+        assert!(text.contains(key) && text.contains("sqlite") && !text.contains(value));
+        c.sqlite.remove(&field);
+    }
+    // A valid higher source hides an invalid stored value.
+    c.sqlite.insert(Field::Theme, "neon".into());
+    c.flags.insert(Field::Theme, "dark".into());
+    assert_eq!(ok(&c).source(Field::Theme), Source::Flag);
+}
+
+#[test]
+fn edits_skip_unchanged_and_refuse_overridden_fields() {
+    let mut c = ctx();
+    c.sqlite = stored(&[
+        ("account.username", "1001"),
+        ("account.domain", "pbx.invalid"),
+    ]);
+    c.env = env(&[("RUST_MICROSIP_ACCOUNT_SERVER", "env.invalid")]);
+    let cfg = ok(&c);
+    let before = cfg.config.clone();
+
+    // Unchanged: nothing to write, the env override is never written back.
+    assert_eq!(
+        sqlite_edits(cfg.provenance(), Some(&before), &before).ok(),
+        Some(BTreeMap::new())
+    );
+
+    let mut after = before.clone();
+    after.ui.theme = Theme::Dark;
+    after.account.port = 5070;
+    after.audio.input_device = Some("Mic".into());
+    let edits = sqlite_edits(cfg.provenance(), Some(&before), &after)
+        .unwrap_or_else(|e| unreachable!("{e}"));
+    let expected: BTreeMap<String, Option<String>> = [
+        ("account.port", Some("5070")),
+        ("audio.input_device", Some("Mic")),
+        ("ui.theme", Some("dark")),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_owned(), v.map(str::to_owned)))
+    .collect();
+    assert_eq!(edits, expected);
+
+    // Clearing an optional stored value yields `None`.
+    let mut cleared = after.clone();
+    cleared.audio.input_device = None;
+    assert_eq!(
+        sqlite_edits(cfg.provenance(), Some(&after), &cleared).ok(),
+        Some(
+            [("audio.input_device".to_owned(), None)]
+                .into_iter()
+                .collect()
+        )
+    );
+
+    // Changing a field fixed by the environment is refused, naming the source.
+    after.account.server = "ui.invalid".into();
+    let e = sqlite_edits(cfg.provenance(), Some(&before), &after).err();
+    assert!(matches!(
+        e,
+        Some(ConfigError::Overridden {
+            field: Field::Server,
+            origin: Source::Env
+        })
+    ));
+    assert!(e.is_some_and(
+        |e| e.to_string().contains("set by env") && !e.to_string().contains("ui.invalid")
+    ));
+
+    // Round trip: stored edits reappear after a "restart" (new resolution).
+    after.account.server = before.account.server.clone();
+    let edits = sqlite_edits(cfg.provenance(), Some(&before), &after)
+        .unwrap_or_else(|e| unreachable!("{e}"));
+    let mut db: BTreeMap<String, String> = env(&[
+        ("account.username", "1001"),
+        ("account.domain", "pbx.invalid"),
+    ]);
+    for (k, v) in edits {
+        match v {
+            Some(v) => db.insert(k, v),
+            None => db.remove(&k),
+        };
+    }
+    c.sqlite = sqlite_layer(&db);
+    let restarted = ok(&c);
+    assert_eq!(restarted.config.ui.theme, Theme::Dark);
+    assert_eq!(restarted.config.account.port, 5070);
+    assert_eq!(restarted.source(Field::Theme), Source::Sqlite);
+    assert_eq!(restarted.source(Field::Server), Source::Env);
+}
+
+#[test]
+fn first_run_edits_use_layer_sources_and_skip_overrides() {
+    let mut c = ctx();
+    c.env = env(&[("RUST_MICROSIP_ACCOUNT_SERVER", "env.invalid")]);
+    assert!(matches!(err(&c), ConfigError::Missing(_)));
+    let sources = layer_sources(&c).unwrap_or_else(|e| unreachable!("{e}"));
+    assert_eq!(sources.get(&Field::Server), Some(&Source::Env));
+    let mut c2 = ctx();
+    c2.sqlite = stored(&[
+        ("account.username", "1001"),
+        ("account.domain", "pbx.invalid"),
+    ]);
+    let form = ok(&c2).config;
+    let edits = sqlite_edits(&sources, None, &form).unwrap_or_else(|e| unreachable!("{e}"));
+    assert!(
+        !edits.contains_key("account.server"),
+        "env value never stored"
+    );
+    assert_eq!(
+        edits.get("account.username"),
+        Some(&Some("1001".to_owned()))
+    );
+    assert_eq!(edits.get("ui.theme"), Some(&Some("system".to_owned())));
+    assert!(
+        !edits.contains_key("account.auth_username"),
+        "unset optional"
+    );
+    // Without a starting point nothing is ever removed: unset paths in the
+    // form must not delete stored `ca_file`/`password_file` values.
+    assert!(edits.values().all(Option::is_some), "{edits:?}");
+    assert!(!edits.contains_key("account.ca_file") && !edits.contains_key("account.password_file"));
+}
+
+#[test]
+fn import_preview_is_validated_sanitized_and_read_only() {
+    let dir = TempDir::new();
+    let text = format!(
+        "schema = 1\n[account]\nusername = \"1001\"\ndomain = \"pbx.invalid\"\nport = 5070\npassword = \"{SECRET}\"\n[ui]\ndnd = true\n"
+    );
+    let path = dir.file("import.toml", &text, 0o600);
+    let preview = preview_import(&path, uid()).unwrap_or_else(|e| unreachable!("{e}"));
+    assert!(preview.literal_password_ignored);
+    let values = preview.sqlite_values();
+    assert_eq!(
+        values.keys().map(String::as_str).collect::<Vec<_>>(),
+        [
+            "account.domain",
+            "account.port",
+            "account.username",
+            "ui.dnd"
+        ]
+    );
+    assert_eq!(values.get("account.port").map(String::as_str), Some("5070"));
+    let shown = preview.to_string();
+    assert!(shown.contains("account.domain = pbx.invalid") && shown.contains("--apply"));
+    assert!(!shown.contains(SECRET) && !format!("{preview:?}").contains(SECRET));
+    assert!(values.values().all(|v| !v.contains(SECRET)));
+    assert_eq!(
+        fs::read_to_string(&path).ok(),
+        Some(text.clone()),
+        "file untouched"
+    );
+
+    // A literal password in a group-readable file is refused (CFG-06).
+    let loose = dir.file("loose.toml", &text, 0o640);
+    assert!(matches!(
+        preview_import(&loose, uid()),
+        Err(ConfigError::InsecureFile {
+            problem: FileProblem::NotPrivate,
+            ..
+        })
+    ));
+    // Invalid or incomplete files fail before anything could be written.
+    let bad = dir.file(
+        "bad.toml",
+        "schema = 1\n[account]\nusername = \"1001\"\ndomain = \"pbx.invalid\"\ntransport = \"x\"\n",
+        0o600,
+    );
+    assert!(matches!(
+        preview_import(&bad, uid()),
+        Err(ConfigError::Invalid {
+            field: Field::Transport,
+            origin: Source::Toml
+        })
+    ));
+    let partial = dir.file(
+        "partial.toml",
+        "schema = 1\n[ui]\ntheme = \"dark\"\n",
+        0o600,
+    );
+    assert!(matches!(
+        preview_import(&partial, uid()),
+        Err(ConfigError::Missing(_))
+    ));
+    let unknown = dir.file("unknown.toml", "schema = 1\n[account]\nfoo = 1\n", 0o600);
+    assert!(matches!(
+        preview_import(&unknown, uid()),
+        Err(ConfigError::UnknownKey { .. })
+    ));
+    assert!(matches!(
+        preview_import(&dir.0.join("absent.toml"), uid()),
+        Err(ConfigError::FileMissing(_))
+    ));
 }

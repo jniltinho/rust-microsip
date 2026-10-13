@@ -48,14 +48,22 @@ enum Internal {
     Incoming(Box<Transaction>),
     Dialog(Box<DialogState>),
     Registered(
-        Result<(Box<rsipstack::dialog::registration::Registration>, u32), RegistrationFailure>,
+        Result<
+            (
+                Box<rsipstack::dialog::registration::Registration>,
+                u32,
+                bool,
+            ),
+            RegistrationFailure,
+        >,
         u64,
     ),
-    RefreshRegistration(u64),
+    /// Generation and refresh sequence: only the latest timer acts.
+    RefreshRegistration(u64, u64),
     Outgoing(CallId, Result<(InviteDialog, Option<Response>), ()>),
     Reinvite(CallId, Flow, Option<Response>),
     Referred(CallId, Option<u16>),
-    MediaFailed(CallId),
+    MediaFailed(CallId, media::MediaFailure),
     /// A CANCEL that never completed; end the call locally.
     CancelDeadline(CallId),
     TransferDeadline(CallId, u64),
@@ -134,6 +142,8 @@ impl EngineHandle {
                         call: None,
                         next_call: 1,
                         dnd: false,
+                        pending_byes: Vec::new(),
+                        refresh_seq: 0,
                     };
                     actor.run(command_rx, internal_rx).await;
                 });
@@ -256,6 +266,10 @@ struct Account {
     stack: sip::Stack,
     registration: Option<rsipstack::dialog::registration::Registration>,
     attempts: u32,
+    /// A REGISTER is outstanding; never run two concurrently.
+    in_flight: bool,
+    /// The previous refresh was the fast follow-up of a slow REGISTER.
+    fast_refreshed: bool,
 }
 
 struct Transfer {
@@ -397,6 +411,10 @@ struct Actor {
     call: Option<Call>,
     next_call: u64,
     dnd: bool,
+    /// Dialogs whose BYE waits for proof of connectivity (bounded).
+    pending_byes: Vec<InviteDialog>,
+    /// Sequence of the only live refresh timer.
+    refresh_seq: u64,
 }
 
 impl Actor {
@@ -546,6 +564,8 @@ impl Actor {
                     stack,
                     registration: None,
                     attempts: 0,
+                    in_flight: false,
+                    fast_refreshed: false,
                 });
                 self.send_register(self.generation);
             }
@@ -557,22 +577,33 @@ impl Actor {
         let Some(account) = self.account.as_mut() else {
             return;
         };
-        let (mut registration, registrar) = match account.registration.take() {
+        if account.in_flight {
+            return;
+        }
+        let pair = match account.registration.take() {
             Some(existing) => match account.stack.registration() {
-                Ok((_, registrar)) => (existing, registrar),
-                Err(_) => return,
-            },
-            None => match account.stack.registration() {
-                Ok(pair) => pair,
+                Ok((_, registrar)) => Ok((existing, registrar)),
                 Err(failure) => {
-                    self.set_registration(RegistrationState::Failed(failure));
-                    return;
+                    account.registration = Some(existing);
+                    Err(failure)
                 }
             },
+            None => account.stack.registration(),
+        };
+        let (mut registration, registrar) = match pair {
+            Ok(pair) => pair,
+            Err(failure) => {
+                // Never let the refresh chain die silently.
+                self.set_registration(RegistrationState::Failed(failure));
+                self.schedule(Duration::from_secs(30), generation);
+                return;
+            }
         };
         let expires = account.stack.settings.expires.clamp(60, 3600);
+        account.in_flight = true;
         let internal = self.internal.clone();
         tokio::spawn(async move {
+            let started = tokio::time::Instant::now();
             let result = tokio::time::timeout(
                 Duration::from_secs(32),
                 registration.register(registrar, Some(expires)),
@@ -588,7 +619,10 @@ impl Actor {
                             .and_then(|h| h.value().trim().parse::<u32>().ok())
                             .filter(|e| *e > 0)
                             .unwrap_or(expires);
-                        Ok((Box::new(registration), granted))
+                        // A slow answer came through retransmissions across an
+                        // outage: the binding may have lapsed meanwhile.
+                        let slow = started.elapsed() > Duration::from_secs(5);
+                        Ok((Box::new(registration), granted, slow))
                     }
                     401 | 403 | 407 => Err(RegistrationFailure::Unauthorized),
                     408 => Err(RegistrationFailure::Timeout),
@@ -602,12 +636,27 @@ impl Actor {
     }
 
     async fn unregister(&mut self) {
+        // Deferred BYEs must leave before the stack goes away (bounded).
+        if !self.pending_byes.is_empty() {
+            let mut byes = tokio::task::JoinSet::new();
+            for dialog in self.pending_byes.drain(..) {
+                byes.spawn(async move {
+                    let _ = dialog.hangup().await;
+                });
+            }
+            let _ = tokio::time::timeout(Duration::from_secs(1), async {
+                while byes.join_next().await.is_some() {}
+            })
+            .await;
+        }
         if let Some(mut account) = self.account.take() {
             if let (Some(mut registration), Ok((_, registrar))) =
                 (account.registration.take(), account.stack.registration())
             {
+                // Budget: hangup 1 s + BYEs 1 s + this 1.5 s stays below the
+                // application's 4 s shutdown wait.
                 let _ = tokio::time::timeout(
-                    Duration::from_secs(3),
+                    Duration::from_millis(1500),
                     registration.register(registrar, Some(0)),
                 )
                 .await;
@@ -619,12 +668,15 @@ impl Actor {
         self.set_registration(RegistrationState::Disabled);
     }
 
-    fn schedule(&self, delay: Duration, generation: u64) {
+    /// (Re)arm the single refresh timer; earlier timers become stale.
+    fn schedule(&mut self, delay: Duration, generation: u64) {
+        self.refresh_seq += 1;
+        let seq = self.refresh_seq;
         let internal = self.internal.clone();
         tokio::spawn(async move {
             tokio::time::sleep(delay).await;
             let _ = internal
-                .send(Internal::RefreshRegistration(generation))
+                .send(Internal::RefreshRegistration(generation, seq))
                 .await;
         });
     }
@@ -741,8 +793,8 @@ impl Actor {
         let id = call.id;
         let task = tokio::spawn(async move {
             let stats = media::run(params, media, rx).await;
-            if stats.failure.is_some() {
-                let _ = internal.send(Internal::MediaFailed(id)).await;
+            if let Some(failure) = stats.failure {
+                let _ = internal.send(Internal::MediaFailed(id, failure)).await;
             }
             stats
         });
@@ -908,7 +960,7 @@ impl Actor {
                 if call.direction == Direction::Incoming && call.phase == CallPhase::Ringing {
                     let _ = dialog.reject(Some(StatusCode::BusyHere), None);
                 } else {
-                    let _ = tokio::time::timeout(Duration::from_secs(2), dialog.hangup()).await;
+                    let _ = tokio::time::timeout(Duration::from_secs(1), dialog.hangup()).await;
                 }
             }
             if self.call.as_ref().is_some_and(|c| c.id == id) {
@@ -923,8 +975,11 @@ impl Actor {
             Internal::Incoming(tx) => self.incoming(*tx).await,
             Internal::Dialog(state) => self.dialog_state(*state).await,
             Internal::Registered(result, generation) => self.registered(result, generation),
-            Internal::RefreshRegistration(generation) => {
-                if generation == self.generation && self.account.is_some() {
+            Internal::RefreshRegistration(generation, seq) => {
+                if generation == self.generation
+                    && seq == self.refresh_seq
+                    && self.account.is_some()
+                {
                     if self.registration != RegistrationState::Registered {
                         self.set_registration(RegistrationState::Registering);
                     }
@@ -933,17 +988,34 @@ impl Actor {
             }
             Internal::Outgoing(id, result) => self.outgoing(id, result),
             Internal::Reinvite(id, flow, response) => self.reinvited(id, flow, response),
-            Internal::MediaFailed(id) => {
+            Internal::MediaFailed(id, failure) => {
                 if let Some(call) = self.call_mut(id)
                     && !call.phase.is_final()
                 {
-                    if let Some(dialog) = call.dialog.clone() {
-                        tokio::spawn(async move {
-                            let _ =
-                                tokio::time::timeout(Duration::from_secs(5), dialog.hangup()).await;
-                        });
-                    }
+                    let dialog = call.dialog.clone();
                     self.end(EndReason::Failed);
+                    match (dialog, failure) {
+                        // Silence usually means the network is gone, and a BYE
+                        // sent now would be lost (the SDK marks the dialog
+                        // ended either way). Probe the registrar first and
+                        // send the BYE once it answers.
+                        (Some(dialog), media::MediaFailure::Inactivity) => {
+                            if self.pending_byes.len() >= 8 {
+                                self.pending_byes.remove(0);
+                            }
+                            self.pending_byes.push(dialog);
+                            let generation = self.generation;
+                            self.send_register(generation);
+                        }
+                        (Some(dialog), media::MediaFailure::Crypto) => {
+                            tokio::spawn(async move {
+                                let _ =
+                                    tokio::time::timeout(Duration::from_secs(5), dialog.hangup())
+                                        .await;
+                            });
+                        }
+                        (None, _) => {}
+                    }
                 }
             }
             Internal::CancelDeadline(id) => {
@@ -984,7 +1056,11 @@ impl Actor {
     fn registered(
         &mut self,
         result: Result<
-            (Box<rsipstack::dialog::registration::Registration>, u32),
+            (
+                Box<rsipstack::dialog::registration::Registration>,
+                u32,
+                bool,
+            ),
             RegistrationFailure,
         >,
         generation: u64,
@@ -995,11 +1071,28 @@ impl Actor {
         let Some(account) = self.account.as_mut() else {
             return;
         };
+        account.in_flight = false;
         match result {
-            Ok((registration, granted)) => {
+            Ok((registration, granted, slow)) => {
+                // The registrar answered: deferred BYEs can get through now.
+                for dialog in self.pending_byes.drain(..) {
+                    tokio::spawn(async move {
+                        let _ = tokio::time::timeout(Duration::from_secs(5), dialog.hangup()).await;
+                    });
+                }
                 account.registration = Some(*registration);
                 account.attempts = 0;
-                let refresh = Duration::from_secs(u64::from(granted.max(60)) * 4 / 5);
+                // Only one fast retry per slow answer: a consistently slow
+                // path must not turn into a REGISTER every few seconds.
+                let fast = slow && !account.fast_refreshed;
+                account.fast_refreshed = fast;
+                let refresh = if fast {
+                    // Re-register promptly to replace a binding that may have
+                    // expired while the network was down.
+                    Duration::from_secs(2)
+                } else {
+                    Duration::from_secs(u64::from(granted.max(60)) * 4 / 5)
+                };
                 self.set_registration(RegistrationState::Registered);
                 self.schedule(refresh, generation);
             }

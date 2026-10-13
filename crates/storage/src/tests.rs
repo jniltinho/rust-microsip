@@ -1,6 +1,7 @@
 //! Unit tests with fictional data and private temporary directories.
 
 use super::*;
+use std::collections::BTreeMap;
 use std::os::unix::fs::PermissionsExt;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -506,5 +507,338 @@ fn csv_merge_respects_the_per_contact_number_bound() -> TestResult {
         before,
         "import rolled back"
     );
+    Ok(())
+}
+
+/// A schema-1 database with one call, written the way release 1 did.
+fn v1_database(path: &Path) -> TestResult {
+    let raw = Connection::open(path)?;
+    raw.execute_batch(MIGRATIONS[0])?;
+    raw.pragma_update(None, "user_version", 1)?;
+    raw.execute(
+        "INSERT INTO calls (session_key, started_utc, direction, remote, outcome, secure)
+         VALUES ('v1:1', 1000, 'incoming', '1001', 'missed', 0)",
+        [],
+    )?;
+    Ok(())
+}
+
+fn table_exists(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [name],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|n| n == 1)
+}
+
+fn changes(pairs: &[(&str, Option<&str>)]) -> BTreeMap<String, Option<String>> {
+    pairs
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), v.map(str::to_owned)))
+        .collect()
+}
+
+#[test]
+fn v1_upgrades_with_private_backup_and_keeps_data() -> TestResult {
+    let tmp = TempDir::new()?;
+    let path = tmp.0.join("db.sqlite3");
+    v1_database(&path)?;
+    let store = Store::open(&path)?;
+    assert_eq!(store.schema_version()?, SCHEMA_VERSION);
+    assert_eq!(store.recent_calls(10, HistoryFilter::All, None)?.len(), 1);
+    assert!(store.load_config()?.is_empty());
+    let backup = tmp.0.join("db.sqlite3.v1.bak");
+    assert_eq!(mode(&backup)?, 0o600);
+    let raw = Connection::open(&backup)?;
+    let version: i64 = raw.pragma_query_value(None, "user_version", |r| r.get(0))?;
+    assert_eq!(version, 1);
+    assert!(!table_exists(&raw, "accounts")?);
+    Ok(())
+}
+
+#[test]
+fn interrupted_migration_leaves_v1_intact_and_retries() -> TestResult {
+    let tmp = TempDir::new()?;
+    let path = tmp.0.join("db.sqlite3");
+    v1_database(&path)?;
+    FAIL_AFTER_MIGRATION.set(2);
+    let failed = Store::open(&path);
+    FAIL_AFTER_MIGRATION.set(0);
+    assert!(matches!(failed, Err(StorageError::Io(_))), "{failed:?}");
+    {
+        let raw = Connection::open(&path)?;
+        let version: i64 = raw.pragma_query_value(None, "user_version", |r| r.get(0))?;
+        assert_eq!(version, 1, "no partially applied schema");
+        assert!(!table_exists(&raw, "accounts")?);
+        assert!(!table_exists(&raw, "preferences")?);
+        let calls: i64 = raw.query_row("SELECT count(*) FROM calls", [], |r| r.get(0))?;
+        assert_eq!(calls, 1);
+    }
+    assert!(tmp.0.join("db.sqlite3.v1.bak").is_file());
+    // The next start completes the upgrade and keeps the first backup.
+    let store = Store::open(&path)?;
+    assert_eq!(store.schema_version()?, SCHEMA_VERSION);
+    assert_eq!(store.recent_calls(10, HistoryFilter::All, None)?.len(), 1);
+    assert!(tmp.0.join("db.sqlite3.v1.bak").is_file());
+    assert_eq!(mode(&tmp.0.join("db.sqlite3.v1.1.bak"))?, 0o600);
+    Ok(())
+}
+
+#[test]
+fn locked_database_reports_busy_without_data_loss() -> TestResult {
+    let tmp = TempDir::new()?;
+    let path = tmp.0.join("db.sqlite3");
+    let mut store = Store::open(&path)?;
+    store.save_config(&changes(&[("account.server", Some("pbx.invalid"))]))?;
+    let other = Connection::open(&path)?;
+    other.execute_batch("BEGIN EXCLUSIVE")?;
+    assert!(matches!(
+        store.save_config(&changes(&[("account.server", Some("other.invalid"))])),
+        Err(StorageError::Busy)
+    ));
+    assert!(matches!(Store::open(&path), Err(StorageError::Busy)));
+    other.execute_batch("ROLLBACK")?;
+    assert_eq!(
+        store
+            .load_config()?
+            .get("account.server")
+            .map(String::as_str),
+        Some("pbx.invalid")
+    );
+    Ok(())
+}
+
+#[test]
+fn full_disk_is_reported_and_rolled_back() -> TestResult {
+    let tmp = TempDir::new()?;
+    let mut store = Store::open(&tmp.0.join("db.sqlite3"))?;
+    store.add_contact(&contact("Before Full", false, &["1001"]))?;
+    // Cap the file at its current size: the next growing write hits SQLITE_FULL.
+    let pages: i64 = store
+        .conn
+        .pragma_query_value(None, "page_count", |r| r.get(0))?;
+    store.conn.pragma_update(None, "max_page_count", pages)?;
+    let long = "x".repeat(MAX_CONFIG_VALUE_LEN);
+    let mut result = Ok(());
+    for i in 0..64 {
+        result = store.save_config(&changes(&[
+            (
+                "audio.input_device",
+                Some(&format!("{i}{long}")[..MAX_CONFIG_VALUE_LEN]),
+            ),
+            ("account.display_name", Some(&long)),
+            ("account.domain", Some(&long)),
+            ("account.server", Some(&long)),
+        ]));
+        if result.is_err() {
+            break;
+        }
+    }
+    assert!(matches!(result, Err(StorageError::Full)), "{result:?}");
+    assert_eq!(store.search_contacts("Before", 10)?.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn settings_round_trip_across_restart_without_secrets() -> TestResult {
+    let tmp = TempDir::new()?;
+    let path = tmp.0.join("db.sqlite3");
+    {
+        let mut store = Store::open(&path)?;
+        store.save_config(&changes(&[
+            ("account.username", Some("1001")),
+            ("account.domain", Some("pbx.invalid")),
+            ("account.port", Some("5061")),
+            ("account.transport", Some("tls")),
+            ("ui.theme", Some("dark")),
+            ("ui.dnd", Some("true")),
+        ]))?;
+        store.save_config(&changes(&[("ui.dnd", None), ("account.port", None)]))?;
+        store.set_secret_ref(Some("keyring:rust-microsip/1001"))?;
+    }
+    let store = Store::open(&path)?;
+    let expected: BTreeMap<String, String> = [
+        ("account.username", "1001"),
+        ("account.domain", "pbx.invalid"),
+        ("account.transport", "tls"),
+        ("ui.theme", "dark"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_owned(), v.to_owned()))
+    .collect();
+    assert_eq!(store.load_config()?, expected);
+    assert_eq!(
+        store.secret_ref()?.as_deref(),
+        Some("keyring:rust-microsip/1001")
+    );
+    // No column could hold a password.
+    let columns: Vec<String> = store
+        .conn
+        .prepare("SELECT name FROM pragma_table_info('accounts')")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    assert!(!columns.iter().any(|c| c == "password"));
+    Ok(())
+}
+
+#[test]
+fn settings_validation_is_all_or_nothing() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    store.save_config(&changes(&[("ui.theme", Some("light"))]))?;
+    for (bad, field) in [
+        (
+            changes(&[("ui.theme", Some("dark")), ("account.password", Some("x"))]),
+            InvalidField::ConfigKey,
+        ),
+        (
+            changes(&[("ui.theme", Some("dark")), ("account.port", Some("abc"))]),
+            InvalidField::ConfigValue,
+        ),
+        (
+            changes(&[("ui.theme", Some("dark")), ("account.server", Some("a\nb"))]),
+            InvalidField::ConfigValue,
+        ),
+    ] {
+        let error = store.save_config(&bad).err().ok_or("expected error")?;
+        assert!(matches!(error, StorageError::Invalid(f) if f == field));
+        assert!(!error.to_string().contains("abc"));
+    }
+    // A CHECK constraint failure on a later row rolls back the earlier ones.
+    assert!(
+        store
+            .save_config(&changes(&[
+                ("account.port", Some("70000")),
+                ("ui.theme", Some("dark")),
+            ]))
+            .is_err()
+    );
+    assert_eq!(
+        store.load_config()?.get("ui.theme").map(String::as_str),
+        Some("light")
+    );
+    assert!(matches!(
+        store.set_secret_ref(Some("")),
+        Err(StorageError::Invalid(InvalidField::SecretRef))
+    ));
+    Ok(())
+}
+
+#[test]
+fn only_one_account_can_be_enabled() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    store.save_config(&changes(&[("account.username", Some("1001"))]))?;
+    let second = store.conn.execute(
+        "INSERT INTO accounts (enabled, username, updated_utc) VALUES (1, '1002', 0)",
+        [],
+    );
+    assert!(second.is_err(), "a second enabled account is rejected");
+    store.conn.execute(
+        "INSERT INTO accounts (enabled, username, updated_utc) VALUES (0, '1003', 0)",
+        [],
+    )?;
+    assert_eq!(
+        store
+            .load_config()?
+            .get("account.username")
+            .map(String::as_str),
+        Some("1001")
+    );
+    Ok(())
+}
+
+#[test]
+fn replace_config_is_atomic_and_clears_previous_values() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    store.save_config(&changes(&[
+        ("account.username", Some("1001")),
+        ("account.server", Some("old.invalid")),
+        ("ui.dnd", Some("true")),
+    ]))?;
+    store.set_secret_ref(Some("keyring:old"))?;
+    let before = store.load_config()?;
+    let mut values: BTreeMap<String, String> = [
+        ("account.username", "2001"),
+        ("account.domain", "new.invalid"),
+    ]
+    .into_iter()
+    .map(|(k, v)| (k.to_owned(), v.to_owned()))
+    .collect();
+    values.insert("account.port".into(), "0".into()); // violates CHECK
+    assert!(store.replace_config(&values).is_err());
+    assert_eq!(store.load_config()?, before);
+    assert_eq!(store.secret_ref()?.as_deref(), Some("keyring:old"));
+
+    values.remove("account.port");
+    store.replace_config(&values)?;
+    assert_eq!(store.load_config()?, values);
+    assert_eq!(store.secret_ref()?, None);
+    Ok(())
+}
+
+#[test]
+fn killed_mid_call_is_recovered_once_as_interrupted() -> TestResult {
+    let tmp = TempDir::new()?;
+    let path = tmp.0.join("db.sqlite3");
+    let start = |key: &str| CallStart {
+        session_key: key.into(),
+        started_utc: 1_000,
+        direction: Direction::Outgoing,
+        remote: "1002".into(),
+        secure: true,
+    };
+    {
+        let mut store = Store::open(&path)?;
+        assert!(store.begin_call(&start("p1:1"))?);
+        assert!(!store.begin_call(&start("p1:1"))?, "unique by session key");
+        // Open rows are not listed while the call runs.
+        assert!(store.recent_calls(10, HistoryFilter::All, None)?.is_empty());
+        assert!(store.begin_call(&start("p1:2"))?);
+        let mut done = call(
+            "p1:2",
+            1_000,
+            Direction::Outgoing,
+            "1002",
+            CallOutcome::Answered,
+        );
+        done.answered_utc = Some(1_001);
+        done.duration_ms = Some(4_000);
+        assert!(store.finish_call(&done)?);
+        assert!(
+            !store.finish_call(&done)?,
+            "finishing twice keeps one entry"
+        );
+        // Dropped without finishing p1:1: the process was killed.
+    }
+    let mut store = Store::open(&path)?;
+    assert_eq!(store.recover_interrupted()?, 1);
+    assert_eq!(store.recover_interrupted()?, 0);
+    let list = store.recent_calls(10, HistoryFilter::All, None)?;
+    assert_eq!(list.len(), 2);
+    let lost = list.iter().find(|e| e.call.session_key == "p1:1");
+    let lost = lost.ok_or("recovered row missing")?;
+    assert_eq!(lost.call.outcome, CallOutcome::Interrupted);
+    assert_eq!((lost.call.ended_utc, lost.call.duration_ms), (None, None));
+    let done = list.iter().find(|e| e.call.session_key == "p1:2");
+    assert_eq!(done.map(|e| e.call.duration_ms), Some(Some(4_000)));
+    // A late final record for a recovered key does not duplicate it.
+    let late = call(
+        "p1:1",
+        1_000,
+        Direction::Outgoing,
+        "1002",
+        CallOutcome::Answered,
+    );
+    assert!(!store.finish_call(&late)?);
+    // Finishing a call that was never journaled still records it once.
+    let plain = call(
+        "p2:1",
+        2_000,
+        Direction::Incoming,
+        "1003",
+        CallOutcome::Missed,
+    );
+    assert!(store.finish_call(&plain)?);
+    assert_eq!(count(&store, "calls")?, 3);
     Ok(())
 }

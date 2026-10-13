@@ -4,8 +4,9 @@ rust-microsip is a Cargo workspace split into layers with one-way dependencies. 
 
 ```
 apps/rust-microsip (binary + egui UI)
- ├── crates/config     CLI, environment, .env, TOML -> EffectiveConfig
- ├── crates/storage    SQLite history, contacts, CSV import, backups
+ ├── crates/config     CLI, environment, .env, TOML, SQLite layer -> EffectiveConfig
+ ├── crates/storage    SQLite settings, history, contacts, CSV import, backups
+ ├── crates/platform   single instance/IPC, sip: links, notifications, Secret Service
  ├── crates/audio      cpal device bridge (ALSA today) -> MediaIo
  └── crates/telephony  engine: SIP (rsipstack), SDP, RTP/SRTP media
        └── crates/media    G.711, RTP header, RFC 4733 DTMF, SRTP adapter
@@ -19,8 +20,9 @@ all of the above depend on
 | `rust-microsip-media` | G.711 µ-law/A-law, RTP packets, RFC 4733 events, SRTP/SRTCP AES-CM-128/HMAC-SHA1-80 with replay protection. | none |
 | `rust-microsip-telephony` | `engine::EngineHandle`: one account and one call on a dedicated Tokio thread; registration, calls, hold, DTMF, mute, DND, blind transfer, SDES, jitter buffer. The `g0_*` modules are the earlier isolated lab probes. | none (Tokio and rustls are portable) |
 | `rust-microsip-audio` | `DeviceMedia` implements `MediaIo` with lock-free rings and 8 kHz resampling. | cpal backend: ALSA on Linux; cpal also provides CoreAudio and WASAPI |
-| `rust-microsip-config` | Six-layer resolution with provenance, secret handling, atomic saves, sanitized doctor/export. | XDG paths and Unix permissions |
-| `rust-microsip-storage` | SQLite schema/migrations, call history, contacts, CSV import, online backups. | Unix permissions |
+| `rust-microsip-config` | Six-layer resolution (flags > env > `.env` > TOML > SQLite > defaults) with provenance, secret handling, sanitized doctor/export/import; only user edits are written back. | XDG paths and Unix permissions |
+| `rust-microsip-storage` | SQLite schema/migrations with pre-migration backups, settings, call history with crash recovery, contacts, CSV import, online backups. | Unix permissions |
+| `rust-microsip-platform` | Single instance over a private Unix socket, `sip:`/`tel:` parsing, desktop notifications and Secret Service password storage over D-Bus (zbus with async-io). | Linux desktop services |
 | `rust-microsip` (app) | Command-line front end and the egui/eframe window; wires config, audio and engine. | none beyond eframe/wgpu |
 
 ## Runtime model
@@ -35,7 +37,7 @@ all of the above depend on
 
 - SDES keys travel only over validated TLS; SRTP accounts reject plaintext offers (488) and a TLS account listens on no UDP port.
 - Requests are accepted only from the configured registrar/proxy address over the configured transport.
-- Passwords are never accepted as command-line arguments, never written by the application, and redacted from every `Debug` output; secret-bearing files must be private and owned by the user.
+- Passwords are never accepted as command-line arguments and are redacted from every `Debug` output. The application writes a password only to the system keyring (Secret Service) when the user opts in; files and the database hold at most a non-secret reference. Secret-bearing files must be private and owned by the user.
 - A configured CA bundle replaces the system roots; if it cannot be read safely, the account is not registered.
 
 See [ADR 0012](adr/0012-production-dependency-graph.md) for the dependency graph, licences and native libraries, and the [production engine receipt](receipts/production-engine-2026-10-13.md) for runtime evidence.

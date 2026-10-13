@@ -7,7 +7,9 @@
 
 mod state;
 
-pub use state::{Theme, UiSettings};
+pub use state::{
+    AUDIO_TEST_SECONDS, DESKTOP_FILE, Theme, UiSettings, install_desktop_entry, keyring_reference,
+};
 
 use rust_microsip_audio::AudioDevices;
 use rust_microsip_storage::{HistoryFilter, Store};
@@ -16,6 +18,7 @@ use eframe::egui;
 use rust_microsip_core::{
     CallPhase, Command, Direction, Event, MediaSecurity, Notice, RegistrationState, Transport,
 };
+use secrecy::SecretString;
 use state::{
     Action, ContactForm, ImportForm, MAX_NUMBER_CHARS, SaveFn, Tab, UiState, View, format_duration,
     outcome_text, phase_text, registration_text, transfer_text,
@@ -38,15 +41,100 @@ pub trait Backend {
     fn attach_context(&self, ctx: &egui::Context) {
         let _ = ctx;
     }
-    /// List audio devices for settings; `None` when unavailable. Called on
-    /// opening settings, never per frame.
-    fn audio_devices(&self) -> Option<AudioDevices> {
-        None
-    }
     /// Requests from outside the window (a second instance or a `sip:` link).
     fn external(&self) -> Vec<External> {
         Vec::new()
     }
+    /// Start blocking work (keyring, audio devices) off the UI thread. Keyring
+    /// jobs run one at a time, in order. The result arrives through
+    /// [`Backend::job_results`].
+    ///
+    /// # Errors
+    /// A user-safe reason when the job cannot be started.
+    fn run_job(&self, job: Job) -> Result<(), &'static str> {
+        let _ = job;
+        Err("not available in this session")
+    }
+    /// Results of finished or progressing jobs, in order.
+    fn job_results(&self) -> Vec<JobResult> {
+        Vec::new()
+    }
+}
+
+/// Blocking work the window hands to the backend.
+#[derive(Debug)]
+pub enum Job {
+    /// Store the password in the Secret Service under `reference`.
+    StorePassword {
+        /// See [`keyring_reference`].
+        reference: String,
+        /// The password; `Debug` is redacted.
+        password: SecretString,
+    },
+    /// Delete the keyring item of `reference` (succeeds when there is none).
+    DeletePassword {
+        /// See [`keyring_reference`].
+        reference: String,
+    },
+    /// Read the keyring item of `reference`.
+    LoadPassword {
+        /// See [`keyring_reference`].
+        reference: String,
+    },
+    /// List capture and playback devices (ALSA probing may block).
+    ListAudioDevices,
+    /// Play a short tone and report the microphone level for
+    /// [`AUDIO_TEST_SECONDS`].
+    AudioTest {
+        /// Identifies this test run in its results.
+        generation: u64,
+        /// Capture device selection (`None`: system default).
+        input: Option<String>,
+        /// Playback device selection (`None`: system default).
+        output: Option<String>,
+    },
+}
+
+/// Outcome of a [`Job`]. Error strings are user-safe and never hold secrets.
+#[derive(Debug)]
+pub enum JobResult {
+    /// [`Job::StorePassword`] finished.
+    PasswordStored {
+        /// The reference that was stored.
+        reference: String,
+        /// Why it failed (keyring unavailable, locked, ...).
+        result: Result<(), String>,
+    },
+    /// [`Job::DeletePassword`] finished.
+    PasswordDeleted {
+        /// The reference that was deleted.
+        reference: String,
+        /// Why it failed.
+        result: Result<(), String>,
+    },
+    /// [`Job::LoadPassword`] finished; `None` when no item exists.
+    PasswordLoaded {
+        /// The reference that was read.
+        reference: String,
+        /// The password, or why it could not be read.
+        result: Result<Option<SecretString>, String>,
+    },
+    /// [`Job::ListAudioDevices`] finished; `None` when listing failed.
+    AudioDevices(Option<AudioDevices>),
+    /// Microphone peak (0-32767) during the audio test of `generation`.
+    AudioLevel {
+        /// The [`Job::AudioTest`] run this belongs to.
+        generation: u64,
+        /// Peak sample magnitude.
+        peak: u16,
+    },
+    /// The audio test of `generation` ended.
+    AudioTestDone {
+        /// The [`Job::AudioTest`] run this belongs to.
+        generation: u64,
+        /// Why it failed.
+        result: Result<(), String>,
+    },
 }
 
 /// A request from outside the window. A dial request only fills the number:
@@ -57,6 +145,8 @@ pub enum External {
     Activate,
     /// Bring the window to the front and fill this number.
     Dial(rust_microsip_core::DialTarget),
+    /// SIGTERM/SIGINT: shut down now, without asking.
+    Quit,
 }
 
 /// Persists secret-free settings; returns a user-safe message on failure.
@@ -74,8 +164,16 @@ under the terms of the GNU General Public License as published by the Free Softw
 either version 3 of the License, or (at your option) any later version (GPL-3.0-or-later). It is \
 distributed WITHOUT ANY WARRANTY. The embedded font is licensed separately under the SIL Open \
 Font License 1.1.";
-const PASSWORD_NOTE: &str = "The password is kept in memory for this session only; \
-remembering it is not available in this release.";
+const PASSWORD_NOTE: &str = "Without the keyring option the password is kept in memory for \
+this session only. It is never written to the settings database or to files.";
+const OVERRIDE_NOTE: &str = "Settings are saved in the local database. Values from the \
+command line, environment, .env or the TOML file take precedence and cannot be edited here; \
+change them at their source.";
+const LINK_NOTE: &str = "Installs a desktop entry so sip: and tel: links can open this \
+window (the number is only filled in, never dialed). To make it the default handler, run: \
+xdg-mime default rust-microsip.desktop x-scheme-handler/sip (and the same for \
+x-scheme-handler/tel). The entry starts \"rust-microsip\" from your PATH; with an AppImage, \
+put a link named rust-microsip to it in a PATH directory such as ~/.local/bin.";
 const KEYPAD: [char; 12] = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '*', '0', '#'];
 const KEYPAD_LETTERS: [&str; 12] = [
     "", "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ", "", "", "",
@@ -171,6 +269,10 @@ pub struct Storage {
     pub store: Option<Store>,
     /// User-safe text explaining degraded persistence.
     pub warning: Option<String>,
+    /// Close calls an earlier process left open as interrupted. Only safe
+    /// when this process is known to be the single instance; otherwise
+    /// another window may own those open calls.
+    pub recover_interrupted: bool,
 }
 
 /// Open the window and block until it closes.
@@ -229,7 +331,12 @@ impl SoftphoneApp {
         backend.attach_context(ctx);
         let applied_theme = settings.theme;
         let mut state = UiState::new(settings);
-        state.attach_store(storage.store, storage.warning, Instant::now());
+        state.attach_store(
+            storage.store,
+            storage.warning,
+            storage.recover_interrupted,
+            Instant::now(),
+        );
         Self {
             backend,
             save,
@@ -261,7 +368,17 @@ impl SoftphoneApp {
         for event in self.backend.poll() {
             self.state.apply_event(event, now);
         }
+        for result in self.backend.job_results() {
+            self.state.apply_job(result, &*self.backend, now);
+        }
+        if self.state.audio_test.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(100));
+        }
         for request in self.backend.external() {
+            if request == External::Quit {
+                self.dispatch(ctx, Action::QuitNow);
+                continue;
+            }
             if let External::Dial(target) = request
                 && self.state.call.is_none()
             {
@@ -273,7 +390,11 @@ impl SoftphoneApp {
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
         if ctx.input(|i| i.viewport().close_requested()) && !self.state.quitting {
+            // During a call this asks "Hang up and quit?" instead of closing.
             self.dispatch(ctx, Action::Quit);
+            if !self.state.quitting {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            }
         }
         if self
             .state
@@ -350,7 +471,7 @@ impl SoftphoneApp {
                     ui.group(|ui| {
                         ui.label(egui::RichText::new(confirm.question()).strong());
                         ui.horizontal(|ui| {
-                            if ui.button("Delete").clicked() {
+                            if ui.button(confirm.button()).clicked() {
                                 out.push(Action::Confirm);
                             }
                             if ui.button("Cancel").clicked() {
@@ -986,6 +1107,10 @@ fn import_fields(
 
 fn audio_settings(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
     ui.label("Audio devices (applied on the next start)");
+    if st.audio_devices_loading {
+        ui.label(egui::RichText::new("Loading devices\u{2026}").weak());
+        return;
+    }
     let Some(devices) = &st.audio_devices else {
         ui.label(egui::RichText::new("No audio devices could be listed.").weak());
         return;
@@ -1065,6 +1190,11 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
             .labelled_by(label.id);
             ui.end_row();
         });
+    ui.checkbox(
+        &mut form.remember,
+        "Remember password in the system keyring",
+    )
+    .on_hover_text("Stored in the desktop Secret Service; never in the settings database");
     ui.label(egui::RichText::new(PASSWORD_NOTE).small());
     ui.horizontal(|ui| {
         ui.label("Transport");
@@ -1107,6 +1237,49 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
     });
     ui.separator();
     audio_settings(ui, st, out);
+    ui.horizontal(|ui| {
+        if guarded(ui, egui::Button::new("Test"), st.can_test_audio()) {
+            out.push(Action::TestAudio);
+        }
+        match st.audio_test {
+            Some(peak) => {
+                ui.add(
+                    egui::ProgressBar::new(f32::from(peak) / f32::from(i16::MAX))
+                        .text("Microphone level"),
+                );
+            }
+            None => {
+                ui.label(
+                    egui::RichText::new("Plays a short tone and shows the microphone level")
+                        .small(),
+                );
+            }
+        }
+    });
+    ui.separator();
+    ui.label(egui::RichText::new(OVERRIDE_NOTE).small());
+    if !st.overridden.is_empty() {
+        ui.label(
+            egui::RichText::new(format!("Fixed elsewhere: {}", st.overridden.join(", ")))
+                .small()
+                .color(palette.warn),
+        );
+    }
+    ui.separator();
+    ui.label("Links");
+    ui.horizontal(|ui| {
+        if ui.button("Handle sip:/tel: links").clicked() {
+            out.push(Action::InstallLinkHandler);
+        }
+        if ui
+            .button("Remove")
+            .on_hover_text("Delete the link handler entry")
+            .clicked()
+        {
+            out.push(Action::RemoveLinkHandler);
+        }
+    });
+    ui.label(egui::RichText::new(LINK_NOTE).small());
     ui.separator();
     ui.horizontal(|ui| {
         if ui.button("Save and register").clicked() {
@@ -1177,10 +1350,11 @@ mod tests {
                 audio_input: Some("missing-device".into()),
                 ..UiSettings::default()
             },
-            Box::new(|_| Ok(())),
+            Box::new(|_, _| Ok(())),
             Storage {
                 store: Store::open_in_memory().ok(),
                 warning: Some("Not saved to disk.".into()),
+                recover_interrupted: true,
             },
         );
         app.state.audio_devices = Some(AudioDevices {

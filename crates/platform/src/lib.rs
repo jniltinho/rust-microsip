@@ -1,11 +1,13 @@
 //! Linux desktop integration: single instance with protected local IPC,
-//! strict `sip:`/`tel:` link parsing and incoming-call notifications.
+//! strict `sip:`/`tel:` link parsing, incoming-call notifications and
+//! Secret Service password storage.
 //!
 //! Nothing here executes shell commands or installs files: the desktop entry
 //! is only rendered, and installing it is a user-level opt-in left to the caller.
 
 mod instance;
 mod notify;
+mod secrets;
 mod uri;
 
 pub use instance::{
@@ -14,6 +16,7 @@ pub use instance::{
 pub use notify::{
     CallAction, Delivery, NotificationAction, Notifier, NotifierStatus, sanitize_caller,
 };
+pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};
 pub use uri::{MAX_URI_LEN, UriError, parse_dial_uri};
 
 /// Callback run after a request or action is queued, e.g. to wake the UI loop.

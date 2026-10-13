@@ -1,4 +1,4 @@
-//! Local SQLite persistence for call history and contacts.
+//! Local SQLite persistence for call history, contacts and user-edited settings.
 //!
 //! [`Store`] owns one connection. Writes take `&mut self`, so the application
 //! serializes them through a single owner (the storage worker). Every query is
@@ -17,13 +17,15 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 mod csv;
+mod settings;
 #[cfg(test)]
 mod tests;
 
 pub use csv::{CSV_MAX_BYTES, CSV_MAX_RECORDS, CsvIssue, CsvIssueKind, CsvPreview, preview_csv};
+pub use settings::{CONFIG_KEYS, MAX_CONFIG_VALUE_LEN};
 
 /// Newest schema version this release can read and write.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 3;
 /// Default call-history retention, in days.
 pub const DEFAULT_RETENTION_DAYS: u32 = 90;
 /// Maximum numbers stored for one contact.
@@ -39,7 +41,8 @@ pub const MAX_SESSION_KEY_LEN: usize = 128;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
 
-const MIGRATIONS: [&str; 1] = [r"
+const MIGRATIONS: [&str; 3] = [
+    r"
 CREATE TABLE calls (
     id INTEGER PRIMARY KEY,
     session_key TEXT NOT NULL UNIQUE,
@@ -70,7 +73,47 @@ CREATE TABLE contact_numbers (
     UNIQUE (contact_id, number)
 );
 CREATE INDEX contact_numbers_number ON contact_numbers (number);
-"];
+",
+    // v2: user-edited settings. Columns are nullable: NULL means "not stored",
+    // so the field falls through to the built-in default. Never a password.
+    r"
+CREATE TABLE accounts (
+    id INTEGER PRIMARY KEY,
+    enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
+    display_name TEXT,
+    username TEXT,
+    auth_username TEXT,
+    domain TEXT,
+    server TEXT,
+    port INTEGER CHECK (port BETWEEN 1 AND 65535),
+    transport TEXT CHECK (transport IN ('udp', 'tcp', 'tls')),
+    media TEXT CHECK (media IN ('rtp', 'srtp')),
+    expires INTEGER CHECK (expires BETWEEN 1 AND 86400),
+    password_env TEXT,
+    password_file TEXT,
+    ca_file TEXT,
+    secret_ref TEXT,
+    updated_utc INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX accounts_one_enabled ON accounts (enabled) WHERE enabled = 1;
+CREATE TABLE preferences (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+) WITHOUT ROWID;
+",
+    // v3: call journal. A call is written when it starts with `open = 1` and
+    // the outcome it would have if the process died (`interrupted`); the final
+    // record replaces it. Open rows are hidden from history until recovered.
+    r"
+ALTER TABLE calls ADD COLUMN open INTEGER NOT NULL DEFAULT 0 CHECK (open IN (0, 1));
+",
+];
+
+#[cfg(test)]
+thread_local! {
+    /// Test-only fault injection: fail right after applying this migration.
+    pub(crate) static FAIL_AFTER_MIGRATION: std::cell::Cell<i64> = const { std::cell::Cell::new(0) };
+}
 
 /// Which input field failed validation. Carries no user data.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, thiserror::Error)]
@@ -99,6 +142,16 @@ pub enum InvalidField {
     /// A duration does not fit the database integer range.
     #[error("duration")]
     Duration,
+    /// A settings key outside [`CONFIG_KEYS`].
+    #[error("settings key")]
+    ConfigKey,
+    /// A settings value that is too long, has control characters or is not
+    /// a number where one is required.
+    #[error("settings value")]
+    ConfigValue,
+    /// A secret reference that is empty, too long or has control characters.
+    #[error("secret reference")]
+    SecretRef,
 }
 
 /// Storage failure. `Display` never includes user data or paths.
@@ -270,6 +323,21 @@ pub struct CallRecord {
     pub secure: bool,
 }
 
+/// A call that has just started, journaled so a crash still leaves a trace.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallStart {
+    /// Unique key per call; the same key is later passed to [`Store::finish_call`].
+    pub session_key: String,
+    /// Start time, Unix seconds UTC.
+    pub started_utc: i64,
+    /// Origination side.
+    pub direction: Direction,
+    /// Remote party user part or sanitized display text.
+    pub remote: String,
+    /// Media was SRTP-protected when the call started.
+    pub secure: bool,
+}
+
 /// A stored history entry.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HistoryEntry {
@@ -355,8 +423,11 @@ impl Store {
     ///
     /// Creates a missing parent directory with mode `0700` and the file with
     /// mode `0600` (an existing broader file mode is tightened to `0600`).
-    /// Before upgrading an existing older schema, a consistent backup is
-    /// written next to the file as `<file>.v<old>.bak`.
+    /// Before upgrading an existing older schema, a consistent `0600` backup
+    /// is written next to the file as `<file>.v<old>.bak` (or
+    /// `<file>.v<old>.<n>.bak` when an earlier attempt already left one). The
+    /// upgrade itself is one transaction: an interrupted or failed upgrade
+    /// leaves the previous version intact.
     ///
     /// # Errors
     /// [`StorageError::FutureSchema`] for a newer database (left untouched),
@@ -379,7 +450,7 @@ impl Store {
         store.configure()?;
         let version = store.user_version()?;
         if version > 0 && version < SCHEMA_VERSION {
-            store.backup_to(&backup_path(path, version))?;
+            store.backup_before_migration(path, version)?;
         }
         store.migrate()?;
         Ok(store)
@@ -434,6 +505,10 @@ impl Store {
         for (version, sql) in (1..).zip(MIGRATIONS) {
             if version > current {
                 tx.execute_batch(sql)?;
+                #[cfg(test)]
+                if FAIL_AFTER_MIGRATION.get() == version {
+                    return Err(StorageError::Io(std::io::Error::other("injected")));
+                }
             }
         }
         if current < SCHEMA_VERSION {
@@ -467,6 +542,17 @@ impl Store {
             })
     }
 
+    fn backup_before_migration(&self, path: &Path, version: i64) -> Result<PathBuf> {
+        for attempt in 0..100 {
+            let target = backup_path(path, version, attempt);
+            match self.backup_to(&target) {
+                Err(StorageError::BackupExists) => {}
+                other => return other.map(|()| target),
+            }
+        }
+        Err(StorageError::BackupExists)
+    }
+
     // ---- history ----
 
     /// Record one call. Returns `false` when `session_key` was already
@@ -475,17 +561,8 @@ impl Store {
     /// # Errors
     /// [`StorageError::Invalid`] for bad keys or remote text, or SQLite failures.
     pub fn record_call(&mut self, call: &CallRecord) -> Result<bool> {
-        if !text_ok(&call.session_key, MAX_SESSION_KEY_LEN) {
-            return Err(StorageError::Invalid(InvalidField::SessionKey));
-        }
-        if call.remote.len() > MAX_REMOTE_LEN || call.remote.chars().any(char::is_control) {
-            return Err(StorageError::Invalid(InvalidField::Remote));
-        }
-        let duration = call
-            .duration_ms
-            .map(i64::try_from)
-            .transpose()
-            .map_err(|_| StorageError::Invalid(InvalidField::Duration))?;
+        validate_call_text(&call.session_key, &call.remote)?;
+        let duration = duration_value(call.duration_ms)?;
         let inserted = self.conn.execute(
             "INSERT OR IGNORE INTO calls (session_key, started_utc, answered_utc, ended_utc,
                  direction, remote, outcome, duration_ms, secure)
@@ -503,6 +580,77 @@ impl Store {
             ],
         )?;
         Ok(inserted == 1)
+    }
+
+    /// Journal a call as it starts: an open row with outcome
+    /// [`CallOutcome::Interrupted`] and no end time, hidden from history until
+    /// [`Store::finish_call`] completes it or [`Store::recover_interrupted`]
+    /// runs at the next start. Returns `false` when the key already exists.
+    ///
+    /// # Errors
+    /// [`StorageError::Invalid`] for bad keys or remote text, or SQLite failures.
+    pub fn begin_call(&mut self, call: &CallStart) -> Result<bool> {
+        validate_call_text(&call.session_key, &call.remote)?;
+        let inserted = self.conn.execute(
+            "INSERT OR IGNORE INTO calls (session_key, started_utc, direction, remote, outcome,
+                 secure, open)
+             VALUES (?1, ?2, ?3, ?4, 'interrupted', ?5, 1)",
+            params![
+                call.session_key,
+                call.started_utc,
+                direction_str(call.direction),
+                call.remote,
+                call.secure,
+            ],
+        )?;
+        Ok(inserted == 1)
+    }
+
+    /// Complete a journaled call with its final record (same `session_key`).
+    /// Without an open row it behaves like [`Store::record_call`], so a call
+    /// is still stored exactly once. Returns `false` when the key was already
+    /// final (the existing entry is kept unchanged).
+    ///
+    /// # Errors
+    /// As [`Store::record_call`].
+    pub fn finish_call(&mut self, call: &CallRecord) -> Result<bool> {
+        validate_call_text(&call.session_key, &call.remote)?;
+        let duration = duration_value(call.duration_ms)?;
+        let updated = self.conn.execute(
+            "UPDATE calls SET started_utc = ?2, answered_utc = ?3, ended_utc = ?4, direction = ?5,
+                 remote = ?6, outcome = ?7, duration_ms = ?8, secure = ?9, open = 0
+             WHERE session_key = ?1 AND open = 1",
+            params![
+                call.session_key,
+                call.started_utc,
+                call.answered_utc,
+                call.ended_utc,
+                direction_str(call.direction),
+                call.remote,
+                call.outcome.as_str(),
+                duration,
+                call.secure,
+            ],
+        )?;
+        if updated == 1 {
+            return Ok(true);
+        }
+        self.record_call(call)
+    }
+
+    /// Close every row left open by an earlier process (crash or kill) as
+    /// [`CallOutcome::Interrupted`] without end time or duration; returns the
+    /// count. Call once at startup, before any new call begins.
+    ///
+    /// # Errors
+    /// Returns a SQLite failure.
+    pub fn recover_interrupted(&mut self) -> Result<usize> {
+        Ok(self.conn.execute(
+            "UPDATE calls SET open = 0, outcome = 'interrupted', ended_utc = NULL,
+                 duration_ms = NULL
+             WHERE open = 1",
+            [],
+        )?)
     }
 
     /// Newest calls first, at most `limit`, optionally filtered and searched
@@ -527,7 +675,7 @@ impl Store {
             "SELECT id, session_key, started_utc, answered_utc, ended_utc, direction, remote,
                     outcome, duration_ms, secure
              FROM calls
-             WHERE (?1 IS NULL OR direction = ?1) AND (?2 IS NULL OR outcome = ?2)
+             WHERE open = 0 AND (?1 IS NULL OR direction = ?1) AND (?2 IS NULL OR outcome = ?2)
                AND remote LIKE ?3 ESCAPE '\\'
              ORDER BY started_utc DESC, id DESC LIMIT ?4",
         )?;
@@ -784,6 +932,23 @@ impl Store {
     }
 }
 
+fn validate_call_text(session_key: &str, remote: &str) -> Result<()> {
+    if !text_ok(session_key, MAX_SESSION_KEY_LEN) {
+        return Err(StorageError::Invalid(InvalidField::SessionKey));
+    }
+    if remote.len() > MAX_REMOTE_LEN || remote.chars().any(char::is_control) {
+        return Err(StorageError::Invalid(InvalidField::Remote));
+    }
+    Ok(())
+}
+
+fn duration_value(duration_ms: Option<u64>) -> Result<Option<i64>> {
+    duration_ms
+        .map(i64::try_from)
+        .transpose()
+        .map_err(|_| StorageError::Invalid(InvalidField::Duration))
+}
+
 fn insert_contact(conn: &Connection, contact: &NewContact) -> Result<i64> {
     conn.execute(
         "INSERT INTO contacts (name, favorite, created_utc) VALUES (?1, ?2, ?3)",
@@ -871,9 +1036,13 @@ fn now_utc() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
-fn backup_path(path: &Path, version: i64) -> PathBuf {
+fn backup_path(path: &Path, version: i64, attempt: u32) -> PathBuf {
     let mut name = path.as_os_str().to_owned();
-    name.push(format!(".v{version}.bak"));
+    if attempt == 0 {
+        name.push(format!(".v{version}.bak"));
+    } else {
+        name.push(format!(".v{version}.{attempt}.bak"));
+    }
     PathBuf::from(name)
 }
 

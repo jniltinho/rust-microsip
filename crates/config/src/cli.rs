@@ -17,6 +17,10 @@ Options:
 Commands:
   config validate   Validate the effective configuration and exit
   config export     Print the effective configuration as TOML (without secrets)
+  config import FILE [--apply]
+                    Preview the settings of a TOML file; with --apply, store them
+                    in the local database in one transaction. FILE is not modified
+                    and passwords in it are never imported.
 
 A sip: or tel: link fills the number in the running window; it never dials
 without confirmation. Passwords are never accepted as arguments; use password_env, a private
@@ -42,6 +46,11 @@ pub enum CliCommand {
     ConfigValidate,
     /// Print sanitized TOML.
     ConfigExport,
+    /// Preview [`CliArgs::import`]; store it in SQLite when `apply` is set.
+    ConfigImport {
+        /// `--apply`: write after the preview.
+        apply: bool,
+    },
 }
 
 /// Parsed arguments.
@@ -55,6 +64,8 @@ pub struct CliArgs {
     pub env_file: Option<PathBuf>,
     /// One `sip:`/`tel:` link to hand to the window (validated by the caller).
     pub uri: Option<String>,
+    /// The TOML file of `config import FILE`.
+    pub import: Option<PathBuf>,
 }
 
 /// Argument error. Never includes the offending argument, which may be a secret.
@@ -69,7 +80,8 @@ pub enum CliError {
     /// An option was given twice.
     #[error("option {0} was given more than once")]
     Duplicate(&'static str),
-    /// More than one command, or `--json` without `--doctor`.
+    /// More than one command, `--json` without `--doctor`, or `--apply`
+    /// without `config import`.
     #[error("conflicting commands or options (see --help)")]
     Conflict,
     /// A password-like option was given.
@@ -92,6 +104,7 @@ fn is_link(arg: &str) -> bool {
 pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliArgs, CliError> {
     let mut out = CliArgs::default();
     let mut json = false;
+    let mut apply = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let text = arg.to_str().ok_or(CliError::UnknownArgument)?;
@@ -124,6 +137,8 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliArgs, C
             "--doctor" => set(&mut out, CliCommand::Doctor { json: false })?,
             "--json" if !json => json = true,
             "--json" => return Err(CliError::Duplicate("--json")),
+            "--apply" if !apply => apply = true,
+            "--apply" => return Err(CliError::Duplicate("--apply")),
             "-h" | "--help" => set(&mut out, CliCommand::Help)?,
             "-V" | "--version" => set(&mut out, CliCommand::Version)?,
             "config" => {
@@ -131,6 +146,14 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliArgs, C
                 match sub.to_str() {
                     Some("validate") => set(&mut out, CliCommand::ConfigValidate)?,
                     Some("export") => set(&mut out, CliCommand::ConfigExport)?,
+                    Some("import") => {
+                        let file = args
+                            .next()
+                            .filter(|v| !v.is_empty())
+                            .ok_or(CliError::MissingValue("config import"))?;
+                        set(&mut out, CliCommand::ConfigImport { apply: false })?;
+                        out.import = Some(PathBuf::from(file));
+                    }
                     _ => return Err(CliError::UnknownArgument),
                 }
             }
@@ -149,6 +172,12 @@ pub fn parse_args(args: impl IntoIterator<Item = OsString>) -> Result<CliArgs, C
     if json {
         match &mut out.command {
             CliCommand::Doctor { json } => *json = true,
+            _ => return Err(CliError::Conflict),
+        }
+    }
+    if apply {
+        match &mut out.command {
+            CliCommand::ConfigImport { apply } => *apply = true,
             _ => return Err(CliError::Conflict),
         }
     }

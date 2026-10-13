@@ -150,3 +150,115 @@ fn desktop_opens_the_history_store_without_changing_the_display_error() -> std::
     assert_eq!(std::fs::read(&db)?, junk);
     std::fs::remove_dir_all(dir)
 }
+
+#[test]
+fn config_import_previews_then_applies_into_sqlite_only() -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = temp_dir("import")?;
+    let data = dir.join("data");
+    let data_env = data.to_string_lossy().into_owned();
+    let file = dir.join("import.toml");
+    let content = format!(
+        "schema = 1\n[account]\nusername = \"1009\"\ndomain = \"pbx.invalid\"\npassword = \"{MARKER}\"\n[ui]\ntheme = \"dark\"\n"
+    );
+    std::fs::write(&file, &content)?;
+    std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600))?;
+    let file_arg = file.to_string_lossy().into_owned();
+    let env = [("XDG_DATA_HOME", data_env.as_str())];
+    // Preview: sanitized, nothing written, no database created.
+    let preview = run(&["config", "import", &file_arg], &env)?;
+    assert!(preview.status.success(), "{}", text(&preview));
+    let out = text(&preview);
+    assert!(out.contains("account.username = 1009") && out.contains("--apply"));
+    assert!(out.contains("literal password is not imported") && !out.contains(MARKER));
+    assert!(!data.exists());
+    // Apply: stored in SQLite in one transaction, the file is untouched.
+    let applied = run(&["config", "import", &file_arg, "--apply"], &env)?;
+    assert!(applied.status.success(), "{}", text(&applied));
+    let out = text(&applied);
+    assert!(out.contains("Imported into the local database") && !out.contains(MARKER));
+    assert_eq!(std::fs::read_to_string(&file)?, content);
+    let db = data.join("rust-microsip").join("rust-microsip.sqlite3");
+    assert_eq!(std::fs::metadata(&db)?.permissions().mode() & 0o777, 0o600);
+    assert!(!String::from_utf8_lossy(&std::fs::read(&db)?).contains(MARKER));
+    // The stored settings are now part of the effective configuration.
+    let export = run(&["config", "export"], &env)?;
+    assert!(export.status.success(), "{}", text(&export));
+    let out = text(&export);
+    assert!(out.contains("username = \"1009\"") && out.contains("theme = \"dark\""));
+    assert!(!out.contains(MARKER));
+    // Higher sources still win over the database.
+    let export = run(
+        &["config", "export"],
+        &[
+            ("XDG_DATA_HOME", data_env.as_str()),
+            ("RUST_MICROSIP_UI_THEME", "light"),
+        ],
+    )?;
+    assert!(text(&export).contains("theme = \"light\""));
+    std::fs::remove_dir_all(dir)
+}
+
+#[test]
+fn config_import_rejects_invalid_files_and_stray_apply() -> std::io::Result<()> {
+    let dir = temp_dir("import-bad")?;
+    let data = dir.join("data");
+    let data_env = data.to_string_lossy().into_owned();
+    let file = dir.join("bad.toml");
+    std::fs::write(&file, "schema = 1\n[account]\nbogus = 1\n")?;
+    let file_arg = file.to_string_lossy().into_owned();
+    let env = [("XDG_DATA_HOME", data_env.as_str())];
+    let bad = run(&["config", "import", &file_arg, "--apply"], &env)?;
+    assert_eq!(bad.status.code(), Some(1));
+    assert!(text(&bad).contains("unknown key") && !data.exists());
+    let missing = run(
+        &["config", "import", "/nonexistent/rust-microsip.toml"],
+        &env,
+    )?;
+    assert_eq!(missing.status.code(), Some(1));
+    assert_eq!(
+        run(&["config", "validate", "--apply"], &env)?.status.code(),
+        Some(2)
+    );
+    assert_eq!(run(&["config", "import"], &env)?.status.code(), Some(2));
+    std::fs::remove_dir_all(dir)
+}
+
+#[test]
+fn malformed_files_never_echo_secret_lines() -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = temp_dir("leak")?;
+    let data = dir.join("data").to_string_lossy().into_owned();
+    // Unterminated strings: parser messages would quote these lines.
+    let toml = dir.join("bad.toml");
+    std::fs::write(
+        &toml,
+        format!("schema = 1\n[account]\nusername = \"1001\"\npassword = \"{MARKER}\n"),
+    )?;
+    let dotenv = dir.join("bad.env");
+    std::fs::write(&dotenv, format!("RUST_MICROSIP_SIP_PASSWORD=\"{MARKER}\n"))?;
+    for file in [&toml, &dotenv] {
+        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600))?;
+    }
+    let (toml, dotenv) = (
+        toml.to_string_lossy().into_owned(),
+        dotenv.to_string_lossy().into_owned(),
+    );
+    let env = [("XDG_DATA_HOME", data.as_str())];
+    for args in [
+        vec!["--config", &toml, "config", "validate"],
+        vec!["--config", &toml, "config", "export"],
+        vec!["--config", &toml, "--doctor"],
+        vec!["--config", &toml, "--doctor", "--json"],
+        vec!["config", "import", &toml],
+        vec!["config", "import", &toml, "--apply"],
+        vec!["--env-file", &dotenv, "config", "validate"],
+        vec!["--env-file", &dotenv, "--doctor", "--json"],
+    ] {
+        let output = run(&args, &env)?;
+        let out = text(&output);
+        assert!(!out.contains(MARKER), "{args:?}: {out}");
+        assert!(out.contains("line"), "{args:?}: {out}");
+    }
+    std::fs::remove_dir_all(dir)
+}

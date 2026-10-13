@@ -555,6 +555,56 @@ fn tls_negatives(
     Ok(serde_json::json!({"scenario":"tls-negatives","cases":results}))
 }
 
+/// AUD-05: no downgrade in either direction; the call never establishes.
+fn downgrades(
+    passwords: &BTreeMap<String, String>,
+    ca: &[u8],
+) -> Result<serde_json::Value, String> {
+    let mut cases = Vec::new();
+    for (label, user, media, target) in [
+        // An SDES-mandatory account offering plaintext RTP.
+        (
+            "plaintext_offer_to_sdes_endpoint",
+            "1201",
+            MediaSecurity::PlainRtp,
+            "1202",
+        ),
+        // An SRTP-mandatory client reaching an endpoint without SRTP.
+        (
+            "srtp_offer_to_plain_endpoint",
+            "1301",
+            MediaSecurity::Srtp,
+            "1302",
+        ),
+    ] {
+        let mut side = Side::new(440.0)?;
+        side.engine.set_trust(TrustAnchors::Custom(ca.to_vec()));
+        let password = passwords.get(user).ok_or("password")?;
+        side.send(Command::Register(
+            Box::new(account(user, Transport::Tls, media)),
+            SecretString::from(password.clone()),
+        ))?;
+        wait(&mut [&mut side], 15, |s| {
+            s[0].registration == RegistrationState::Registered
+        })?;
+        side.send(Command::Dial(
+            DialTarget::parse(target).map_err(|_| "target")?,
+        ))?;
+        wait(&mut [&mut side], 15, |s| !s[0].ended.is_empty())?;
+        let end = side.ended.last().map(|c| c.phase);
+        let established = side
+            .events
+            .iter()
+            .any(|e| matches!(e, Event::Call(c) if c.phase == CallPhase::Established));
+        let _ = side.engine.shutdown(Duration::from_secs(5));
+        if established || end != Some(CallPhase::Ended(EndReason::NotAcceptable)) {
+            return Err(format!("{label}: end {end:?} established {established}"));
+        }
+        cases.push(serde_json::json!({"case":label,"ended":"not_acceptable","established":false}));
+    }
+    Ok(serde_json::json!({"scenario":"downgrade-rejection","cases":cases}))
+}
+
 /// A wrong password is a typed `Unauthorized` failure and is never retried.
 fn wrong_password() -> Result<serde_json::Value, String> {
     let mut side = Side::new(440.0)?;
@@ -590,6 +640,7 @@ fn main() {
             serde_json::from_slice(&read("/lab/credentials.json")?).map_err(|_| "credentials")?;
         let ca = read("/lab/ca.crt")?;
         println!("{}", wrong_password()?);
+        println!("{}", downgrades(&passwords, &read("/lab/ca.crt")?)?);
         println!(
             "{}",
             tls_negatives(&passwords, &ca, &read("/lab/untrusted-ca.crt")?)?

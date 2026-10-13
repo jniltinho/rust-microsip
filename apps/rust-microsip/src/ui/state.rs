@@ -6,11 +6,13 @@
 //! mute, hold and transfer toggles reflect the latest [`CallSnapshot`].
 //!
 //! History and contacts live in the SQLite [`Store`]. Its work runs
-//! synchronously on the UI thread, but only on discrete triggers (a final call
-//! snapshot, a click, a search edit), never per frame; each operation is a
-//! small indexed query bounded by a row limit. The lists shown are cached here.
+//! synchronously on the UI thread, but only on discrete triggers (a call
+//! start or final snapshot, a click, a search edit), never per frame; each
+//! operation is a small indexed query bounded by a row limit. The lists shown
+//! are cached here. Keyring and audio-device work never runs here: it goes to
+//! the backend as a [`Job`] and comes back as a [`JobResult`].
 
-use super::Backend;
+use super::{Backend, Job, JobResult};
 use rust_microsip_audio::{AudioDevices, DeviceInfo};
 use rust_microsip_core::{
     AccountSettings, CallId, CallPhase, CallSnapshot, Command, DialTarget, Direction, DtmfKey,
@@ -18,14 +20,14 @@ use rust_microsip_core::{
     Transport, ValidationError,
 };
 use rust_microsip_storage::{
-    CSV_MAX_BYTES, CallOutcome, CallRecord, Contact, ContactNumber, CsvIssueKind, CsvPreview,
-    HistoryEntry, HistoryFilter, MAX_REMOTE_LEN, NewContact, Store, preview_csv,
+    CSV_MAX_BYTES, CallOutcome, CallRecord, CallStart, Contact, ContactNumber, CsvIssueKind,
+    CsvPreview, HistoryEntry, HistoryFilter, MAX_REMOTE_LEN, NewContact, Store, preview_csv,
 };
 use secrecy::SecretString;
 use secrecy::zeroize::Zeroize;
 use std::collections::HashMap;
 use std::io::Read;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 /// Maximum characters accepted in the number and transfer entries.
@@ -38,9 +40,40 @@ pub const HISTORY_LIMIT: u32 = 200;
 pub const CONTACTS_LIMIT: u32 = 500;
 const DEFAULT_EXPIRES: u32 = 300;
 
-/// Settings save callback: persists secret-free settings. The error string
-/// must be a user-safe message without paths or secrets.
-pub type SaveFn = dyn FnMut(&UiSettings) -> Result<(), String>;
+/// Settings save callback: persists secret-free settings into the store
+/// (`None` when no store is open). The error string must be a user-safe
+/// message without paths or secrets.
+pub type SaveFn = dyn FnMut(&UiSettings, Option<&mut Store>) -> Result<(), String>;
+/// [`SaveFn`] borrowed for one dispatch (any lifetime).
+type SaveRef<'a> = dyn FnMut(&UiSettings, Option<&mut Store>) -> Result<(), String> + 'a;
+
+/// How long the local audio test runs.
+pub const AUDIO_TEST_SECONDS: u64 = 3;
+/// File name of the opt-in `sip:`/`tel:` handler entry.
+pub const DESKTOP_FILE: &str = "rust-microsip.desktop";
+/// Longest keyring reference, matching the Secret Service attribute bound.
+const MAX_KEYRING_REF: usize = 256;
+
+/// Keyring reference for `account`:
+/// `user@domain;server=host:port;transport=udp|tcp|tls`.
+///
+/// It names the registrar too, so a password remembered for one server is
+/// never sent to another one. References from older versions
+/// (`user@domain`) simply no longer match and the password is asked again.
+/// `None` when the reference would exceed the keyring bound or hold control
+/// characters.
+pub fn keyring_reference(account: &AccountSettings) -> Option<String> {
+    let reference = format!(
+        "{}@{};server={}:{};transport={}",
+        account.username,
+        account.domain,
+        account.server,
+        account.port,
+        account.transport.as_str()
+    );
+    (reference.len() <= MAX_KEYRING_REF && !reference.chars().any(char::is_control))
+        .then_some(reference)
+}
 
 /// Top-level tab.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
@@ -103,6 +136,13 @@ pub struct UiSettings {
     /// Playback device id (or name); `None` is the system default. Applied on
     /// the next start.
     pub audio_output: Option<String>,
+    /// Fields fixed by a higher source than the settings database, as
+    /// `key (source)`; shown read-only in settings.
+    pub overridden: Vec<String>,
+    /// Where the opt-in link handler entry is installed
+    /// (`$XDG_DATA_HOME/applications/rust-microsip.desktop`); `None` when no
+    /// data directory is known.
+    pub desktop_entry: Option<PathBuf>,
 }
 
 /// Which content replaces the tab body.
@@ -130,6 +170,8 @@ pub enum Confirm {
     ClearHistory,
     /// Delete one contact by row id.
     DeleteContact(i64),
+    /// Hang up the active call and quit.
+    Quit,
 }
 impl Confirm {
     /// Question shown to the user.
@@ -138,6 +180,14 @@ impl Confirm {
             Self::DeleteCall(_) => "Delete this history entry?",
             Self::ClearHistory => "Delete the whole call history?",
             Self::DeleteContact(_) => "Delete this contact?",
+            Self::Quit => "Hang up and quit?",
+        }
+    }
+    /// Label of the confirming button.
+    pub const fn button(self) -> &'static str {
+        match self {
+            Self::Quit => "Hang up and quit",
+            _ => "Delete",
         }
     }
 }
@@ -272,6 +322,8 @@ pub struct SettingsForm {
     pub media: Option<MediaSecurity>,
     /// Masked password edit buffer; empty keeps the session password.
     pub password: String,
+    /// Remember the password in the system keyring.
+    pub remember: bool,
     expires: u32,
 }
 impl SettingsForm {
@@ -288,6 +340,7 @@ impl SettingsForm {
                 transport: Some(a.transport),
                 media: Some(a.media),
                 password: String::new(),
+                remember: false,
                 expires: a.expires,
             },
             None => Self {
@@ -426,8 +479,17 @@ pub enum Action {
     SaveSettings,
     /// Remove the registration binding.
     Unregister,
-    /// Shut the engine down and close the window.
+    /// Quit; asks for confirmation while a call is active.
     Quit,
+    /// Shut the engine down and close the window without asking (confirmed,
+    /// or SIGTERM/SIGINT).
+    QuitNow,
+    /// Play a short tone and show the microphone level, without a call.
+    TestAudio,
+    /// Install the opt-in `sip:`/`tel:` handler desktop entry.
+    InstallLinkHandler,
+    /// Remove the handler desktop entry.
+    RemoveLinkHandler,
 }
 
 /// Whole-window presentation state.
@@ -465,6 +527,8 @@ pub struct UiState {
     pub confirm: Option<Confirm>,
     /// Devices listed when settings opened; `None` when unavailable.
     pub audio_devices: Option<AudioDevices>,
+    /// The device list is being read off the UI thread.
+    pub audio_devices_loading: bool,
     /// Saved capture device selection.
     pub audio_input: Option<String>,
     /// Saved playback device selection.
@@ -481,7 +545,17 @@ pub struct UiState {
     pub quitting: bool,
     /// The engine reported it stopped.
     pub stopped: bool,
+    /// Latest microphone peak (0-32767) while the audio test runs.
+    pub audio_test: Option<u16>,
+    /// Run id of the latest audio test; older results are ignored.
+    audio_test_generation: u64,
+    /// Fields fixed by a higher source, shown read-only in settings.
+    pub overridden: Vec<String>,
+    /// Target path of the link handler entry.
+    pub desktop_entry: Option<PathBuf>,
     password: Option<SecretString>,
+    /// Keyring reference whose store job is in flight.
+    remember_pending: Option<String>,
     notice: Option<(String, Instant)>,
     versions: HashMap<CallId, u64>,
     times: HashMap<CallId, CallTimes>,
@@ -509,8 +583,14 @@ impl UiState {
             import: None,
             confirm: None,
             audio_devices: None,
+            audio_devices_loading: false,
             audio_input: settings.audio_input,
             audio_output: settings.audio_output,
+            audio_test: None,
+            audio_test_generation: 0,
+            overridden: settings.overridden,
+            desktop_entry: settings.desktop_entry,
+            remember_pending: None,
             storage_warning: None,
             dnd: false,
             theme: settings.theme,
@@ -530,16 +610,38 @@ impl UiState {
         }
     }
 
-    /// Attach the history/contacts store and load the lists. `warning`
-    /// stays visible in the Calls and Contacts tabs (for example when the
-    /// store is in memory only). Without a store nothing is recorded.
-    pub fn attach_store(&mut self, store: Option<Store>, warning: Option<String>, now: Instant) {
+    /// Attach the history/contacts store, close calls an earlier process left
+    /// open as interrupted (only with `recover`, see
+    /// [`super::Storage::recover_interrupted`]), and load the lists. `warning`
+    /// stays visible in the Calls and Contacts tabs (for example when the store
+    /// is in memory only). Without a store nothing is recorded. Call once,
+    /// before any call starts.
+    pub fn attach_store(
+        &mut self,
+        store: Option<Store>,
+        warning: Option<String>,
+        recover: bool,
+        now: Instant,
+    ) {
         self.storage_warning = match (&store, warning) {
             (_, Some(text)) => Some(text),
             (None, None) => Some("History and contacts are unavailable.".to_owned()),
             (Some(_), None) => None,
         };
         self.store = store;
+        match self
+            .store
+            .as_mut()
+            .filter(|_| recover)
+            .map(Store::recover_interrupted)
+        {
+            Some(Ok(0)) | None => {}
+            Some(Ok(n)) => self.set_notice(
+                format!("{n} call(s) interrupted by an earlier exit were added to history"),
+                now,
+            ),
+            Some(Err(error)) => self.set_notice(format!("History not recovered: {error}"), now),
+        }
         self.refresh_history(now);
         self.refresh_contacts(now);
     }
@@ -550,6 +652,26 @@ impl UiState {
             theme: self.theme,
             audio_input: self.audio_input.clone(),
             audio_output: self.audio_output.clone(),
+            overridden: self.overridden.clone(),
+            desktop_entry: self.desktop_entry.clone(),
+        }
+    }
+
+    /// Keyring reference stored for the account, if any.
+    pub fn secret_ref(&self) -> Option<String> {
+        self.store
+            .as_ref()
+            .and_then(|s| s.secret_ref().ok().flatten())
+    }
+
+    /// Whether the local audio test can start; the error is the reason.
+    pub fn can_test_audio(&self) -> Result<(), &'static str> {
+        if self.call.is_some() {
+            Err("The call is using the audio devices")
+        } else if self.audio_test.is_some() {
+            Err("The audio test is running")
+        } else {
+            Ok(())
         }
     }
 
@@ -671,7 +793,7 @@ impl UiState {
         &mut self,
         action: Action,
         backend: &dyn Backend,
-        save: &mut dyn FnMut(&UiSettings) -> Result<(), String>,
+        save: &mut SaveRef<'_>,
         now: Instant,
     ) {
         match action {
@@ -832,7 +954,7 @@ impl UiState {
                 }
             }
             Action::ConfirmImport => self.confirm_import(now),
-            Action::Confirm => self.run_confirm(now),
+            Action::Confirm => self.run_confirm(backend, now),
             Action::CancelConfirm => self.confirm = None,
             Action::SetAudioInput(device) => {
                 let old = std::mem::replace(&mut self.audio_input, device);
@@ -845,9 +967,10 @@ impl UiState {
             Action::OpenSettings => {
                 self.close_view();
                 self.form = SettingsForm::from_account(self.account.as_ref());
-                // ponytail: enumerated on the UI thread when settings open;
-                // move to a worker if slow hosts make the click lag.
-                self.audio_devices = backend.audio_devices();
+                self.form.remember = self.secret_ref().is_some() || self.remember_pending.is_some();
+                // ALSA probing may block: listed off the UI thread.
+                self.audio_devices = None;
+                self.audio_devices_loading = backend.run_job(Job::ListAudioDevices).is_ok();
                 self.view = View::Settings;
             }
             Action::OpenAbout => {
@@ -857,7 +980,7 @@ impl UiState {
             Action::CloseView => self.close_view(),
             Action::SetTheme(theme) => {
                 self.theme = theme;
-                if let Err(message) = save(&self.settings()) {
+                if let Err(message) = save(&self.settings(), self.store.as_mut()) {
                     self.set_notice(format!("Theme not saved: {message}"), now);
                 }
             }
@@ -865,11 +988,192 @@ impl UiState {
             Action::Unregister => {
                 self.send(backend, Command::Unregister, now);
             }
-            Action::Quit => {
-                if !self.quitting {
-                    self.quitting = true;
-                    self.send(backend, Command::Shutdown, now);
+            Action::Quit if self.call.is_some() && !self.quitting => {
+                self.confirm = Some(Confirm::Quit);
+            }
+            Action::Quit | Action::QuitNow => self.quit_now(backend, now),
+            Action::TestAudio => {
+                if let Err(reason) = self.can_test_audio() {
+                    return self.set_notice(reason, now);
                 }
+                self.audio_test_generation += 1;
+                let job = Job::AudioTest {
+                    generation: self.audio_test_generation,
+                    input: self.audio_input.clone(),
+                    output: self.audio_output.clone(),
+                };
+                match backend.run_job(job) {
+                    Ok(()) => self.audio_test = Some(0),
+                    Err(reason) => {
+                        self.set_notice(format!("Audio test unavailable: {reason}"), now)
+                    }
+                }
+            }
+            Action::InstallLinkHandler => {
+                let text = match self.desktop_entry.as_deref().map(install_desktop_entry) {
+                    None => "No data directory (XDG_DATA_HOME/HOME) is available".to_owned(),
+                    Some(Ok(())) => {
+                        "Link handler entry installed; see the command below to make it the default"
+                            .to_owned()
+                    }
+                    Some(Err(error)) => format!("Link handler not installed: {}", io_text(&error)),
+                };
+                self.set_notice(text, now);
+            }
+            Action::RemoveLinkHandler => {
+                let text = match self.desktop_entry.as_deref().map(remove_desktop_entry) {
+                    None => "No data directory (XDG_DATA_HOME/HOME) is available".to_owned(),
+                    Some(Ok(true)) => "Link handler entry removed".to_owned(),
+                    Some(Ok(false)) => "The link handler entry was not installed by rust-microsip \
+                        or was changed; it was left in place"
+                        .to_owned(),
+                    Some(Err(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+                        "The link handler entry is not installed".to_owned()
+                    }
+                    Some(Err(error)) => format!("Link handler not removed: {}", io_text(&error)),
+                };
+                self.set_notice(text, now);
+            }
+        }
+    }
+
+    fn quit_now(&mut self, backend: &dyn Backend, now: Instant) {
+        if !self.quitting {
+            self.quitting = true;
+            self.confirm = None;
+            self.send(backend, Command::Shutdown, now);
+        }
+    }
+
+    /// Apply the result of a background [`Job`].
+    pub fn apply_job(&mut self, result: JobResult, backend: &dyn Backend, now: Instant) {
+        match result {
+            JobResult::PasswordStored { reference, result } => {
+                if self.remember_pending.as_ref() != Some(&reference) {
+                    return; // Superseded by a later save.
+                }
+                self.remember_pending = None;
+                let saved = result.and_then(|()| {
+                    self.store
+                        .as_mut()
+                        .ok_or_else(|| "history storage is unavailable".to_owned())?
+                        .set_secret_ref(Some(&reference))
+                        .map_err(|e| e.to_string())
+                });
+                match saved {
+                    Ok(()) => self.set_notice("Password remembered in the system keyring", now),
+                    Err(error) => self.set_notice(
+                        format!(
+                            "Password not remembered ({error}); it is kept for this session only"
+                        ),
+                        now,
+                    ),
+                }
+            }
+            JobResult::PasswordDeleted { result, .. } => {
+                if let Err(error) = result {
+                    self.set_notice(
+                        format!("The keyring entry could not be removed ({error}); remove it in the desktop keyring"),
+                        now,
+                    );
+                }
+            }
+            JobResult::PasswordLoaded { reference, result } => match result {
+                Ok(Some(password)) => {
+                    let account = self
+                        .account
+                        .clone()
+                        .filter(|a| keyring_reference(a).as_deref() == Some(reference.as_str()));
+                    if let (Some(account), None, false) = (account, &self.password, self.quitting) {
+                        self.password = Some(password.clone());
+                        self.send(backend, Command::Register(Box::new(account), password), now);
+                    }
+                }
+                Ok(None) => self.set_notice(
+                    "No remembered password in the system keyring; enter it in Settings",
+                    now,
+                ),
+                Err(error) => self.set_notice(
+                    format!("Remembered password unavailable ({error}); enter it in Settings"),
+                    now,
+                ),
+            },
+            JobResult::AudioDevices(devices) => {
+                self.audio_devices_loading = false;
+                self.audio_devices = devices;
+            }
+            // Results of an earlier run never touch a newer one.
+            JobResult::AudioLevel { generation, peak } => {
+                if self.audio_test.is_some() && generation == self.audio_test_generation {
+                    self.audio_test = Some(peak);
+                }
+            }
+            JobResult::AudioTestDone { generation, result } => {
+                if generation != self.audio_test_generation {
+                    return;
+                }
+                self.audio_test = None;
+                match result {
+                    Ok(()) => self.set_notice("Audio test finished", now),
+                    Err(error) => self.set_notice(format!("Audio test failed: {error}"), now),
+                }
+            }
+        }
+    }
+
+    /// Queue keyring work after a successful settings save.
+    fn update_keyring(
+        &mut self,
+        backend: &dyn Backend,
+        reference: Option<String>,
+        typed: bool,
+        password: &SecretString,
+        now: Instant,
+    ) {
+        let current = self.secret_ref();
+        let pending = self.remember_pending.take();
+        if self.form.remember && reference.is_none() {
+            self.set_notice(
+                "Password not remembered (the account settings are too long for the keyring); \
+                 it is kept for this session only",
+                now,
+            );
+        }
+        // Every reference that may hold an item and is no longer wanted.
+        let wanted = reference.as_deref().filter(|_| self.form.remember);
+        let mut stale: Vec<String> = current
+            .iter()
+            .chain(pending.iter())
+            .filter(|r| Some(r.as_str()) != wanted)
+            .cloned()
+            .collect();
+        stale.dedup();
+        if current.as_deref().is_some_and(|r| Some(r) != wanted)
+            && let Some(store) = self.store.as_mut()
+            && let Err(error) = store.set_secret_ref(None)
+        {
+            self.set_notice(format!("Keyring reference not cleared: {error}"), now);
+        }
+        for old in stale {
+            if let Err(reason) = backend.run_job(Job::DeletePassword { reference: old }) {
+                self.set_notice(
+                    format!("The keyring entry could not be removed ({reason})"),
+                    now,
+                );
+            }
+        }
+        let unchanged = current.as_deref() == wanted && !typed;
+        if let (Some(wanted), false) = (wanted, unchanged) {
+            let job = Job::StorePassword {
+                reference: wanted.to_owned(),
+                password: password.clone(),
+            };
+            match backend.run_job(job) {
+                Ok(()) => self.remember_pending = Some(wanted.to_owned()),
+                Err(reason) => self.set_notice(
+                    format!("Password not remembered ({reason}); it is kept for this session only"),
+                    now,
+                ),
             }
         }
     }
@@ -882,13 +1186,8 @@ impl UiState {
         self.view = View::Main;
     }
 
-    fn save_audio(
-        &mut self,
-        save: &mut dyn FnMut(&UiSettings) -> Result<(), String>,
-        now: Instant,
-        revert: impl FnOnce(&mut Self),
-    ) {
-        match save(&self.settings()) {
+    fn save_audio(&mut self, save: &mut SaveRef<'_>, now: Instant, revert: impl FnOnce(&mut Self)) {
+        match save(&self.settings(), self.store.as_mut()) {
             Ok(()) => self.set_notice("Audio device saved; it applies on the next start", now),
             Err(message) => {
                 revert(self);
@@ -942,7 +1241,10 @@ impl UiState {
         }
     }
 
-    fn run_confirm(&mut self, now: Instant) {
+    fn run_confirm(&mut self, backend: &dyn Backend, now: Instant) {
+        if self.confirm == Some(Confirm::Quit) {
+            return self.quit_now(backend, now);
+        }
         let (Some(confirm), Some(store)) = (self.confirm.take(), &mut self.store) else {
             return;
         };
@@ -950,6 +1252,7 @@ impl UiState {
             Confirm::DeleteCall(id) => store.delete_call(id),
             Confirm::ClearHistory => store.clear_history().map(|_| ()),
             Confirm::DeleteContact(id) => store.delete_contact(id),
+            Confirm::Quit => Ok(()),
         };
         if let Err(error) = result {
             self.set_notice(format!("Not deleted: {error}"), now);
@@ -958,17 +1261,13 @@ impl UiState {
         self.refresh_contacts(now);
     }
 
-    fn save_settings(
-        &mut self,
-        backend: &dyn Backend,
-        save: &mut dyn FnMut(&UiSettings) -> Result<(), String>,
-        now: Instant,
-    ) {
+    fn save_settings(&mut self, backend: &dyn Backend, save: &mut SaveRef<'_>, now: Instant) {
         let account = match self.form.to_account() {
             Ok(account) => account,
             Err(error) => return self.set_notice(error.message(), now),
         };
-        let password = if self.form.password.is_empty() {
+        let typed = !self.form.password.is_empty();
+        let password = if !typed {
             match &self.password {
                 Some(secret) => secret.clone(),
                 None => return self.set_notice(FormError::PasswordRequired.message(), now),
@@ -980,15 +1279,21 @@ impl UiState {
             account: Some(account.clone()),
             ..self.settings()
         };
-        if let Err(message) = save(&settings) {
+        if let Err(message) = save(&settings, self.store.as_mut()) {
             return self.set_notice(format!("Settings not saved: {message}"), now);
         }
         self.account = Some(account.clone());
         self.password = Some(password.clone());
-        self.close_view();
-        if self.send(backend, Command::Register(Box::new(account), password), now) {
+        if self.send(
+            backend,
+            Command::Register(Box::new(account.clone()), password.clone()),
+            now,
+        ) {
             self.set_notice("Settings saved; registering", now);
         }
+        let reference = keyring_reference(&account);
+        self.update_keyring(backend, reference, typed, &password, now);
+        self.close_view();
     }
 
     /// Apply one engine event.
@@ -1014,6 +1319,10 @@ impl UiState {
             .call
             .as_ref()
             .is_some_and(|c| c.snapshot.id == snapshot.id);
+        if !self.times.contains_key(&snapshot.id) && !matches!(snapshot.phase, CallPhase::Ended(_))
+        {
+            self.journal_start(&snapshot, now);
+        }
         let times = self.times.entry(snapshot.id).or_insert(CallTimes {
             started_utc: utc_now(),
             answered: None,
@@ -1056,6 +1365,24 @@ impl UiState {
         }
     }
 
+    fn session_key(&self, id: CallId) -> String {
+        format!("{}:{}", self.session, id.0)
+    }
+
+    /// Journal a call as it starts, so a crash leaves an interrupted entry.
+    fn journal_start(&mut self, snap: &CallSnapshot, now: Instant) {
+        let start = CallStart {
+            session_key: self.session_key(snap.id),
+            started_utc: utc_now(),
+            direction: snap.direction,
+            remote: sanitize_remote(&snap.remote),
+            secure: snap.secure,
+        };
+        if let Some(Err(error)) = self.store.as_mut().map(|s| s.begin_call(&start)) {
+            self.set_notice(format!("Call not saved to history: {error}"), now);
+        }
+    }
+
     /// Record one final snapshot; the session key makes it idempotent.
     fn record_call(
         &mut self,
@@ -1064,10 +1391,11 @@ impl UiState {
         times: CallTimes,
         now: Instant,
     ) {
+        let session_key = self.session_key(snap.id);
         let Some(store) = &mut self.store else { return };
         let answered = times.answered;
         let record = CallRecord {
-            session_key: format!("{}:{}", self.session, snap.id.0),
+            session_key,
             started_utc: times.started_utc,
             answered_utc: answered.map(|(utc, _)| utc),
             ended_utc: Some(utc_now()),
@@ -1079,7 +1407,7 @@ impl UiState {
             }),
             secure: snap.secure,
         };
-        match store.record_call(&record) {
+        match store.finish_call(&record) {
             Ok(_) => self.refresh_history(now),
             Err(error) => self.set_notice(format!("Call not saved to history: {error}"), now),
         }
@@ -1191,6 +1519,62 @@ fn sanitize_remote(remote: &str) -> String {
     out
 }
 
+/// User-safe text for a file error; never includes the path.
+fn io_text(error: &std::io::Error) -> &'static str {
+    match error.kind() {
+        std::io::ErrorKind::PermissionDenied => "permission denied",
+        std::io::ErrorKind::NotFound => "the directory does not exist",
+        _ => "the file could not be written",
+    }
+}
+
+/// Write [`rust_microsip_platform::DESKTOP_ENTRY`] to `path` atomically with
+/// mode `0644`, creating the `applications` directory when missing. Nothing
+/// is executed and no default handler is changed.
+pub fn install_desktop_entry(path: &Path) -> std::io::Result<()> {
+    use std::io::Write;
+    use std::os::unix::fs::OpenOptionsExt;
+    let dir = path.parent().ok_or(std::io::ErrorKind::InvalidInput)?;
+    std::fs::create_dir_all(dir)?;
+    let tmp = dir.join(format!(".{DESKTOP_FILE}.{}.tmp", std::process::id()));
+    let _ = std::fs::remove_file(&tmp);
+    let written = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .mode(0o644)
+        .open(&tmp)
+        .and_then(|mut file| {
+            use std::os::unix::fs::PermissionsExt;
+            // Not subject to the umask: desktop entries are world-readable.
+            file.set_permissions(std::fs::Permissions::from_mode(0o644))?;
+            file.write_all(rust_microsip_platform::DESKTOP_ENTRY.as_bytes())?;
+            file.sync_all()
+        })
+        .and_then(|()| std::fs::rename(&tmp, path));
+    if written.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    written
+}
+
+/// Delete the link handler entry at `path` only if it is exactly what
+/// [`install_desktop_entry`] writes. Returns `Ok(false)`, leaving the file,
+/// when it is not a regular file or its content differs (another
+/// application's entry, or one the user edited).
+///
+/// # Errors
+/// I/O failures, including [`std::io::ErrorKind::NotFound`].
+pub fn remove_desktop_entry(path: &Path) -> std::io::Result<bool> {
+    let expected = rust_microsip_platform::DESKTOP_ENTRY.as_bytes();
+    let meta = std::fs::symlink_metadata(path)?;
+    // The size check bounds the read below.
+    if !meta.is_file() || meta.len() != expected.len() as u64 || std::fs::read(path)? != expected {
+        return Ok(false);
+    }
+    std::fs::remove_file(path)?;
+    Ok(true)
+}
+
 /// Read a CSV file for preview: absolute path, regular file, at most
 /// [`CSV_MAX_BYTES`], UTF-8. Errors are user-safe and never echo the path.
 fn read_csv_file(path: &str) -> Result<String, String> {
@@ -1288,6 +1672,7 @@ mod tests {
     struct Fake {
         sent: RefCell<Vec<String>>,
         fail: Option<Notice>,
+        jobs: RefCell<Vec<String>>,
     }
     impl Backend for Fake {
         fn send(&self, command: Command) -> Result<(), Notice> {
@@ -1306,6 +1691,13 @@ mod tests {
         fn poll(&self) -> Vec<Event> {
             Vec::new()
         }
+        fn run_job(&self, job: Job) -> Result<(), &'static str> {
+            // Opening settings always lists devices; not recorded.
+            if !matches!(job, Job::ListAudioDevices) {
+                self.jobs.borrow_mut().push(format!("{job:?}"));
+            }
+            Ok(())
+        }
     }
     impl Fake {
         fn take(&self) -> Vec<String> {
@@ -1313,8 +1705,8 @@ mod tests {
         }
     }
 
-    fn no_save() -> impl FnMut(&UiSettings) -> Result<(), String> {
-        |_| Ok(())
+    fn no_save() -> impl FnMut(&UiSettings, Option<&mut Store>) -> Result<(), String> {
+        |_, _| Ok(())
     }
 
     fn snap(id: u64, direction: Direction, phase: CallPhase, version: u64) -> CallSnapshot {
@@ -1339,7 +1731,7 @@ mod tests {
 
     fn stored() -> UiState {
         let mut st = UiState::new(UiSettings::default());
-        st.attach_store(Store::open_in_memory().ok(), None, Instant::now());
+        st.attach_store(Store::open_in_memory().ok(), None, true, Instant::now());
         assert!(st.storage_warning.is_none());
         st
     }
@@ -1565,7 +1957,7 @@ mod tests {
         let (mut st, b) = (UiState::new(UiSettings::default()), Fake::default());
         let saved = RefCell::new(Vec::new());
         let fail = std::cell::Cell::new(false);
-        let mut save = |s: &UiSettings| -> Result<(), String> {
+        let mut save = |s: &UiSettings, _: Option<&mut Store>| -> Result<(), String> {
             if fail.get() {
                 return Err("Configure an account before saving.".into());
             }
@@ -1614,7 +2006,7 @@ mod tests {
     #[test]
     fn missing_store_warns_and_never_records() {
         let mut st = UiState::new(UiSettings::default());
-        st.attach_store(None, None, Instant::now());
+        st.attach_store(None, None, true, Instant::now());
         assert!(st.storage_warning.is_some());
         end(&mut st, 1, Direction::Incoming, false, EndReason::Canceled);
         assert!(st.history.is_empty() && st.call.is_none());
@@ -1763,12 +2155,20 @@ mod tests {
     fn settings_validation_save_and_register() {
         let (mut st, b) = (UiState::new(UiSettings::default()), Fake::default());
         let saved = RefCell::new(Vec::new());
-        let mut save = |s: &UiSettings| -> Result<(), String> {
+        let mut save = |s: &UiSettings, _: Option<&mut Store>| -> Result<(), String> {
             saved.borrow_mut().push(s.clone());
             Ok(())
         };
         let now = Instant::now();
         st.dispatch(Action::OpenSettings, &b, &mut save, now);
+        // Devices are listed by a job, never on the UI thread.
+        assert!(st.audio_devices_loading && st.audio_devices.is_none());
+        st.apply_job(
+            JobResult::AudioDevices(Some(AudioDevices::default())),
+            &b,
+            now,
+        );
+        assert!(!st.audio_devices_loading && st.audio_devices.is_some());
         st.form.username = "1001".into();
         st.form.domain = "pbx.invalid".into();
         st.form.server = "192.0.2.1".into();
@@ -1868,5 +2268,347 @@ mod tests {
         );
         assert_eq!(registration_text(st.registration), "Failed: rejected (403)");
         assert!(st.notice(t1 + NOTICE_TTL).is_none());
+    }
+
+    fn established(st: &mut UiState, id: u64) {
+        st.apply_event(
+            Event::Call(snap(id, Direction::Outgoing, CallPhase::Established, 1)),
+            Instant::now(),
+        );
+    }
+
+    #[test]
+    fn quitting_during_a_call_asks_first_and_signals_do_not() {
+        let (mut st, b) = (UiState::new(UiSettings::default()), Fake::default());
+        established(&mut st, 1);
+        run(&mut st, &b, &[Action::Quit]);
+        assert_eq!(st.confirm, Some(Confirm::Quit));
+        assert_eq!(Confirm::Quit.question(), "Hang up and quit?");
+        assert!(!st.quitting && b.take().is_empty());
+        run(&mut st, &b, &[Action::CancelConfirm]);
+        assert!(!st.quitting && st.call.is_some());
+        run(&mut st, &b, &[Action::Quit, Action::Confirm]);
+        assert!(st.quitting && st.confirm.is_none());
+        assert_eq!(b.take(), ["Shutdown"]);
+        // SIGTERM path: no prompt.
+        let (mut st, b) = (UiState::new(UiSettings::default()), Fake::default());
+        established(&mut st, 2);
+        run(&mut st, &b, &[Action::QuitNow]);
+        assert!(st.quitting && st.confirm.is_none());
+        assert_eq!(b.take(), ["Shutdown"]);
+        // Without a call, quitting is immediate.
+        let (mut st, b) = (UiState::new(UiSettings::default()), Fake::default());
+        run(&mut st, &b, &[Action::Quit, Action::Quit]);
+        assert!(st.quitting);
+        assert_eq!(b.take(), ["Shutdown"]);
+    }
+
+    const REF: &str = "1001@pbx.invalid;server=192.0.2.1:5060;transport=udp";
+
+    fn fill_account(st: &mut UiState) {
+        st.form.username = "1001".into();
+        st.form.domain = "pbx.invalid".into();
+        st.form.server = "192.0.2.1".into();
+    }
+
+    #[test]
+    fn remembered_password_goes_to_the_keyring_off_the_ui_thread() {
+        let mut st = stored();
+        let b = Fake::default();
+        let now = Instant::now();
+        run(&mut st, &b, &[Action::OpenSettings]);
+        assert!(!st.form.remember);
+        fill_account(&mut st);
+        st.form.password = "s3cret-marker".into();
+        st.form.remember = true;
+        run(&mut st, &b, &[Action::SaveSettings]);
+        // Registration does not wait for the keyring.
+        assert_eq!(b.take().len(), 1);
+        let jobs = b.jobs.take();
+        assert_eq!(jobs.len(), 1);
+        assert!(jobs[0].starts_with("StorePassword") && jobs[0].contains("1001@pbx.invalid"));
+        assert!(!jobs[0].contains("s3cret-marker"));
+        assert_eq!(st.secret_ref(), None, "only after the keyring confirms");
+        // A failure keeps the session password and says why.
+        st.apply_job(
+            JobResult::PasswordStored {
+                reference: REF.into(),
+                result: Err("the keyring is locked".into()),
+            },
+            &b,
+            now,
+        );
+        assert_eq!(st.secret_ref(), None);
+        let notice = st.notice(now).unwrap_or_default().to_owned();
+        assert!(notice.contains("locked") && notice.contains("session only"));
+        // Saving again (same password) retries, and success records the reference.
+        run(&mut st, &b, &[Action::OpenSettings]);
+        st.form.remember = true;
+        run(&mut st, &b, &[Action::SaveSettings]);
+        assert_eq!(b.jobs.take().len(), 1);
+        st.apply_job(
+            JobResult::PasswordStored {
+                reference: REF.into(),
+                result: Ok(()),
+            },
+            &b,
+            now,
+        );
+        assert_eq!(st.secret_ref().as_deref(), Some(REF));
+        run(&mut st, &b, &[Action::OpenSettings]);
+        assert!(st.form.remember);
+        // Unchanged password and reference: no new keyring write.
+        run(&mut st, &b, &[Action::SaveSettings]);
+        assert!(b.jobs.take().is_empty());
+        // Unchecking clears the reference now and deletes the item.
+        run(&mut st, &b, &[Action::OpenSettings]);
+        st.form.remember = false;
+        run(&mut st, &b, &[Action::SaveSettings]);
+        assert_eq!(st.secret_ref(), None);
+        let jobs = b.jobs.take();
+        assert_eq!(jobs.len(), 1);
+        assert!(jobs[0].starts_with("DeletePassword") && jobs[0].contains("1001@pbx.invalid"));
+        assert!(b.take().iter().all(|c| !c.contains("s3cret-marker")));
+    }
+
+    #[test]
+    fn a_late_store_result_does_not_override_unchecking() {
+        let mut st = stored();
+        let b = Fake::default();
+        run(&mut st, &b, &[Action::OpenSettings]);
+        fill_account(&mut st);
+        st.form.password = "pw".into();
+        st.form.remember = true;
+        run(&mut st, &b, &[Action::SaveSettings, Action::OpenSettings]);
+        st.form.remember = false;
+        run(&mut st, &b, &[Action::SaveSettings]);
+        let jobs = b.jobs.take();
+        assert!(jobs[0].starts_with("StorePassword") && jobs[1].starts_with("DeletePassword"));
+        st.apply_job(
+            JobResult::PasswordStored {
+                reference: REF.into(),
+                result: Ok(()),
+            },
+            &b,
+            Instant::now(),
+        );
+        assert_eq!(st.secret_ref(), None);
+    }
+
+    #[test]
+    fn startup_password_from_the_keyring_registers_the_matching_account() {
+        let account = AccountSettings {
+            display_name: String::new(),
+            username: "1001".into(),
+            auth_username: None,
+            domain: "pbx.invalid".into(),
+            server: "192.0.2.1".into(),
+            port: 5060,
+            transport: Transport::Udp,
+            media: MediaSecurity::PlainRtp,
+            expires: 300,
+        };
+        let mut st = UiState::new(UiSettings {
+            account: Some(account),
+            ..UiSettings::default()
+        });
+        let b = Fake::default();
+        let now = Instant::now();
+        let loaded = |reference: &str| JobResult::PasswordLoaded {
+            reference: reference.into(),
+            result: Ok(Some(SecretString::from("pw"))),
+        };
+        st.apply_job(loaded(&REF.replace("1001@", "1002@")), &b, now);
+        assert!(b.take().is_empty(), "another account's item is not used");
+        // An old-style reference or another server never gets the password.
+        st.apply_job(loaded("1001@pbx.invalid"), &b, now);
+        st.apply_job(loaded(&REF.replace("192.0.2.1", "192.0.2.9")), &b, now);
+        assert!(b.take().is_empty());
+        st.apply_job(loaded(REF), &b, now);
+        let sent = b.take();
+        assert!(sent.len() == 1 && sent[0].starts_with("Register("));
+        // Only once: the session password now exists.
+        st.apply_job(loaded(REF), &b, now);
+        assert!(b.take().is_empty());
+        let mut st = UiState::new(UiSettings::default());
+        st.apply_job(
+            JobResult::PasswordLoaded {
+                reference: REF.into(),
+                result: Err("Secret Service is unavailable".into()),
+            },
+            &b,
+            now,
+        );
+        assert!(
+            st.notice(now)
+                .is_some_and(|n| n.contains("enter it in Settings"))
+        );
+    }
+
+    #[test]
+    fn audio_test_is_bounded_and_refused_during_a_call() {
+        let (mut st, b) = (UiState::new(UiSettings::default()), Fake::default());
+        let now = Instant::now();
+        st.audio_output = Some("alsa:hw:2".into());
+        run(&mut st, &b, &[Action::TestAudio]);
+        assert_eq!(st.audio_test, Some(0));
+        let jobs = b.jobs.take();
+        assert!(jobs.len() == 1 && jobs[0].contains("alsa:hw:2"));
+        run(&mut st, &b, &[Action::TestAudio]);
+        assert!(b.jobs.take().is_empty(), "one test at a time");
+        st.apply_job(
+            JobResult::AudioLevel {
+                generation: 1,
+                peak: 1234,
+            },
+            &b,
+            now,
+        );
+        assert_eq!(st.audio_test, Some(1234));
+        st.apply_job(
+            JobResult::AudioTestDone {
+                generation: 1,
+                result: Err("no matching audio output device".into()),
+            },
+            &b,
+            now,
+        );
+        assert_eq!(st.audio_test, None);
+        assert!(
+            st.notice(now)
+                .is_some_and(|n| n.contains("no matching audio output"))
+        );
+        // A second run: late results of the first never reset it.
+        run(&mut st, &b, &[Action::TestAudio]);
+        assert!(b.jobs.take()[0].contains("generation: 2"));
+        for late in [
+            JobResult::AudioLevel {
+                generation: 1,
+                peak: 99,
+            },
+            JobResult::AudioTestDone {
+                generation: 1,
+                result: Ok(()),
+            },
+        ] {
+            st.apply_job(late, &b, now);
+        }
+        assert_eq!(st.audio_test, Some(0));
+        st.apply_job(
+            JobResult::AudioTestDone {
+                generation: 2,
+                result: Ok(()),
+            },
+            &b,
+            now,
+        );
+        assert_eq!(st.audio_test, None);
+        established(&mut st, 3);
+        assert_eq!(
+            st.can_test_audio(),
+            Err("The call is using the audio devices")
+        );
+        run(&mut st, &b, &[Action::TestAudio]);
+        assert!(b.jobs.take().is_empty() && st.audio_test.is_none());
+    }
+
+    #[test]
+    fn calls_left_open_by_a_killed_process_are_recovered() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let dir =
+            std::env::temp_dir().join(format!("rust-microsip-ui-journal-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join("db.sqlite3");
+        {
+            let mut st = UiState::new(UiSettings::default());
+            st.attach_store(Some(Store::open(&path)?), None, true, Instant::now());
+            established(&mut st, 1);
+            // Not listed while it runs.
+            assert!(st.history.is_empty());
+            // Dropped mid-call: the process was killed.
+        }
+        // Without single-instance protection another window may own the
+        // open call: nothing is recovered.
+        let mut st = UiState::new(UiSettings::default());
+        st.attach_store(Some(Store::open(&path)?), None, false, Instant::now());
+        assert!(st.history.is_empty());
+        let mut st = UiState::new(UiSettings::default());
+        let now = Instant::now();
+        st.attach_store(Some(Store::open(&path)?), None, true, now);
+        assert_eq!(st.history.len(), 1);
+        assert_eq!(st.history[0].call.outcome, CallOutcome::Interrupted);
+        assert!(
+            st.notice(now)
+                .is_some_and(|n| n.starts_with("1 call(s) interrupted"))
+        );
+        // A normally ended call is recorded once, not as interrupted.
+        end(&mut st, 2, Direction::Outgoing, true, EndReason::Normal);
+        assert_eq!(st.history.len(), 2);
+        assert_eq!(st.history[0].call.outcome, CallOutcome::Answered);
+        std::fs::remove_dir_all(dir)?;
+        Ok(())
+    }
+
+    #[test]
+    fn link_handler_entry_is_opt_in_private_to_the_user_and_removable() -> std::io::Result<()> {
+        use std::os::unix::fs::PermissionsExt;
+        let dir =
+            std::env::temp_dir().join(format!("rust-microsip-ui-desktop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let entry = dir.join("applications").join(DESKTOP_FILE);
+        let (mut st, b) = (
+            UiState::new(UiSettings {
+                desktop_entry: Some(entry.clone()),
+                ..UiSettings::default()
+            }),
+            Fake::default(),
+        );
+        assert!(!entry.exists(), "nothing is installed without the action");
+        run(&mut st, &b, &[Action::InstallLinkHandler]);
+        assert_eq!(
+            std::fs::read_to_string(&entry)?,
+            rust_microsip_platform::DESKTOP_ENTRY
+        );
+        assert_eq!(
+            std::fs::metadata(&entry)?.permissions().mode() & 0o777,
+            0o644
+        );
+        // Reinstalling replaces it atomically and leaves no temporary file.
+        run(&mut st, &b, &[Action::InstallLinkHandler]);
+        assert_eq!(std::fs::read_dir(dir.join("applications"))?.count(), 1);
+        // An entry that differs from ours (edited or foreign) is kept.
+        let edited = rust_microsip_platform::DESKTOP_ENTRY.replace("%u", "--bogus %u");
+        std::fs::write(&entry, &edited)?;
+        run(&mut st, &b, &[Action::RemoveLinkHandler]);
+        assert_eq!(std::fs::read_to_string(&entry)?, edited);
+        assert!(
+            st.notice(Instant::now())
+                .is_some_and(|n| n.contains("left in place"))
+        );
+        run(&mut st, &b, &[Action::InstallLinkHandler]);
+        run(&mut st, &b, &[Action::RemoveLinkHandler]);
+        assert!(!entry.exists());
+        run(&mut st, &b, &[Action::RemoveLinkHandler]);
+        assert_eq!(
+            st.notice(Instant::now()),
+            Some("The link handler entry is not installed")
+        );
+        assert!(b.take().is_empty());
+        std::fs::remove_dir_all(dir)
+    }
+
+    #[test]
+    fn saves_receive_the_open_store() {
+        let mut st = stored();
+        let b = Fake::default();
+        let mut seen = false;
+        let mut save = |_: &UiSettings, store: Option<&mut Store>| -> Result<(), String> {
+            seen = store.is_some();
+            Err("`ui.theme` is set by toml; change it there (nothing was saved)".into())
+        };
+        let now = Instant::now();
+        st.dispatch(Action::SetTheme(Theme::Dark), &b, &mut save, now);
+        assert!(seen);
+        assert!(st.notice(now).is_some_and(|n| n.contains("set by toml")));
     }
 }

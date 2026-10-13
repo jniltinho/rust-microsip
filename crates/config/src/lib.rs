@@ -7,10 +7,13 @@
 //! 3. an explicit `.env` file (only from `--env-file`; the current directory is never searched),
 //! 4. one TOML file: the explicit `--config` path *replaces* the XDG default
 //!    `$XDG_CONFIG_HOME/rust-microsip/config.toml` (fallback `$HOME/.config/...`),
-//! 5. built-in defaults.
+//! 5. values the user saved in the SQLite database ([`ResolveContext::sqlite`],
+//!    loaded by the caller from `rust-microsip-storage`, see [`sqlite_layer`]),
+//! 6. built-in defaults.
 //!
-//! SQLite persistence will slot in between TOML and defaults in a later slice; the
-//! resolver already treats sources as ordered layers so it is one more layer.
+//! Only explicit user edits are written back to SQLite, and only for fields no
+//! higher source overrides ([`sqlite_edits`]); the effective configuration is
+//! never persisted.
 //!
 //! Each resolved field records its [`Source`]. A missing required field
 //! ([`ConfigError::Missing`]) is distinct from a present but invalid one
@@ -38,16 +41,19 @@ mod cli;
 mod doctor;
 mod dotenv;
 mod files;
+mod import;
 
 pub use cli::{CliArgs, CliCommand, CliError, HELP, parse_args};
 pub use doctor::{DoctorField, DoctorReport};
 pub use dotenv::{DotEnvError, parse_dotenv};
 pub use files::{FileProblem, MAX_CA_BYTES, read_ca_file, save};
+pub use import::{IMPORT_APPLIED, ImportPreview, preview_import};
 
 use rust_microsip_core::{AccountSettings, MediaSecurity, Transport, ValidationError};
 use secrecy::SecretString;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::fs::Metadata;
 use std::path::{Path, PathBuf};
 
 /// Supported value of the top-level `schema` key.
@@ -68,6 +74,8 @@ pub enum Source {
     DotEnv,
     /// The TOML configuration file.
     Toml,
+    /// A value the user saved in the SQLite database.
+    Sqlite,
     /// The built-in default (or unset for optional fields).
     Default,
 }
@@ -79,6 +87,7 @@ impl Source {
             Self::Env => "env",
             Self::DotEnv => "dotenv",
             Self::Toml => "toml",
+            Self::Sqlite => "sqlite",
             Self::Default => "default",
         }
     }
@@ -182,6 +191,11 @@ impl Field {
             "RUST_MICROSIP_{}",
             self.key().replace('.', "_").to_ascii_uppercase()
         )
+    }
+
+    /// The field with this dotted key, if any.
+    pub fn from_key(key: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|f| f.key() == key)
     }
 
     const fn kind(self) -> Kind {
@@ -364,6 +378,12 @@ pub struct EffectiveConfig {
     provenance: BTreeMap<Field, Source>,
 }
 impl EffectiveConfig {
+    /// Source of every field (fields absent from the map are defaults); pass
+    /// it to [`sqlite_edits`].
+    pub const fn provenance(&self) -> &BTreeMap<Field, Source> {
+        &self.provenance
+    }
+
     /// Where the effective value of `field` came from.
     pub fn source(&self, field: Field) -> Source {
         self.provenance
@@ -459,6 +479,14 @@ pub enum ConfigError {
     /// TOML serialization failed.
     #[error("cannot serialize configuration")]
     Serialize,
+    /// An edited field is fixed by a higher-precedence source; nothing was saved.
+    #[error("`{field}` is set by {origin}; change it there (nothing was saved)")]
+    Overridden {
+        /// The field.
+        field: Field,
+        /// The source that overrides the stored value.
+        origin: Source,
+    },
 }
 
 /// Inputs for [`resolve`]. Inject everything here; nothing else is read from the
@@ -473,6 +501,8 @@ pub struct ResolveContext {
     pub config_path: Option<PathBuf>,
     /// Explicit `.env` path (`--env-file`).
     pub env_file: Option<PathBuf>,
+    /// Values saved in SQLite, below TOML and above defaults (see [`sqlite_layer`]).
+    pub sqlite: BTreeMap<Field, String>,
     /// Effective user id that must own secret-bearing files.
     pub uid: u32,
 }
@@ -490,6 +520,7 @@ impl ResolveContext {
             flags: BTreeMap::new(),
             config_path: args.config.clone(),
             env_file: args.env_file.clone(),
+            sqlite: BTreeMap::new(),
             uid: files::current_uid()?,
         })
     }
@@ -581,12 +612,28 @@ fn boolean(s: &str) -> Option<bool> {
     }
 }
 
-/// Resolve the effective configuration from all sources.
-///
-/// # Errors
-/// Any [`ConfigError`]; the caller must not register with SIP on error.
-pub fn resolve(ctx: &ResolveContext) -> Result<EffectiveConfig, ConfigError> {
-    let env_layer = |map: &BTreeMap<String, String>| -> BTreeMap<Field, String> {
+/// Convert the string map from `Store::load_config` into [`ResolveContext::sqlite`].
+/// Unknown keys are ignored (the store only returns schema keys).
+pub fn sqlite_layer(values: &BTreeMap<String, String>) -> BTreeMap<Field, String> {
+    values
+        .iter()
+        .filter_map(|(k, v)| Some((Field::from_key(k)?, v.clone())))
+        .collect()
+}
+
+type Layer = BTreeMap<Field, String>;
+
+/// Every source read from disk and the environment, before any parsing.
+struct Inputs {
+    layers: Vec<(Source, Layer)>,
+    dotenv: BTreeMap<String, String>,
+    dotenv_meta: Option<(PathBuf, Metadata)>,
+    config_file: Option<PathBuf>,
+    literal: Option<SecretString>,
+}
+
+fn load(ctx: &ResolveContext) -> Result<Inputs, ConfigError> {
+    let env_layer = |map: &BTreeMap<String, String>| -> Layer {
         Field::ALL
             .into_iter()
             .filter_map(|f| Some((f, map.get(&f.env_name())?.clone())))
@@ -601,7 +648,7 @@ pub fn resolve(ctx: &ResolveContext) -> Result<EffectiveConfig, ConfigError> {
                 path: path.clone(),
                 line: e.line,
             })?;
-            (map, Some((path.as_path(), loaded.meta)))
+            (map, Some((path.clone(), loaded.meta)))
         }
         None => (BTreeMap::new(), None),
     };
@@ -629,13 +676,45 @@ pub fn resolve(ctx: &ResolveContext) -> Result<EffectiveConfig, ConfigError> {
         None => (BTreeMap::new(), None),
     };
 
-    let mut l = Layers {
+    Ok(Inputs {
         layers: vec![
             (Source::Flag, ctx.flags.clone()),
             (Source::Env, env_layer(&ctx.env)),
             (Source::DotEnv, env_layer(&dotenv)),
             (Source::Toml, toml_layer),
+            (Source::Sqlite, ctx.sqlite.clone()),
         ],
+        dotenv,
+        dotenv_meta,
+        config_file: toml_file.map(|(path, _)| path),
+        literal,
+    })
+}
+
+/// Which source holds each field, without parsing or validating values.
+///
+/// Use it to check overrides when [`resolve`] fails (for example on first run,
+/// before an account exists). Fields absent from the map are defaults.
+///
+/// # Errors
+/// File, permission and syntax errors, as for [`resolve`].
+pub fn layer_sources(ctx: &ResolveContext) -> Result<BTreeMap<Field, Source>, ConfigError> {
+    let inputs = load(ctx)?;
+    Ok(Field::ALL
+        .into_iter()
+        .filter_map(|f| {
+            let (source, _) = inputs.layers.iter().find(|(_, m)| m.contains_key(&f))?;
+            Some((f, *source))
+        })
+        .collect())
+}
+
+/// Parse and validate the layered values (first layer wins per field).
+fn build(
+    layers: Vec<(Source, Layer)>,
+) -> Result<(StoredConfig, BTreeMap<Field, Source>), ConfigError> {
+    let mut l = Layers {
+        layers,
         provenance: BTreeMap::new(),
     };
 
@@ -695,6 +774,22 @@ pub fn resolve(ctx: &ResolveContext) -> Result<EffectiveConfig, ConfigError> {
             output_device: l.optional(Field::OutputDevice, device)?,
         },
     };
+    Ok((config, l.provenance))
+}
+
+/// Resolve the effective configuration from all sources.
+///
+/// # Errors
+/// Any [`ConfigError`]; the caller must not register with SIP on error.
+pub fn resolve(ctx: &ResolveContext) -> Result<EffectiveConfig, ConfigError> {
+    let Inputs {
+        layers,
+        dotenv,
+        dotenv_meta,
+        config_file,
+        literal,
+    } = load(ctx)?;
+    let (config, provenance) = build(layers)?;
 
     // Password: environment, then a private .env, then a private file, then a TOML literal.
     let non_empty = |v: &&String| !v.is_empty();
@@ -729,9 +824,60 @@ pub fn resolve(ctx: &ResolveContext) -> Result<EffectiveConfig, ConfigError> {
         password,
         password_source,
         literal_password_warning: literal.is_some(),
-        config_file: toml_file.map(|(path, _)| path),
-        provenance: l.provenance,
+        config_file,
+        provenance,
     })
+}
+
+/// String form of a field value as stored in SQLite (`None` = not set).
+fn stored_string(config: &StoredConfig, field: Field) -> Option<String> {
+    Some(match config.value(field)? {
+        toml::Value::String(s) => s,
+        other => other.to_string(),
+    })
+}
+
+/// The SQLite writes for a settings edit, keyed like `Store::save_config` expects.
+///
+/// `sources` is [`EffectiveConfig::provenance`] (or [`layer_sources`] when
+/// resolution failed); `before` is the configuration the form started from.
+/// Only fields whose value changed are returned, so values coming from flags,
+/// environment, `.env` or TOML are never written back. A changed field held by
+/// one of those sources is refused, because saving it would have no effect.
+///
+/// With `before = None` (first run, nothing resolved yet) every field counts as
+/// edited, except fields held by a higher source: those are skipped, and the UI
+/// must show them as fixed by that source.
+///
+/// # Errors
+/// [`ConfigError::Validation`] for invalid account settings, or
+/// [`ConfigError::Overridden`] naming the first overridden field and its source.
+pub fn sqlite_edits(
+    sources: &BTreeMap<Field, Source>,
+    before: Option<&StoredConfig>,
+    after: &StoredConfig,
+) -> Result<BTreeMap<String, Option<String>>, ConfigError> {
+    after.account.validate()?;
+    let mut edits = BTreeMap::new();
+    for field in Field::ALL {
+        let new = stored_string(after, field);
+        let changed = before.map_or(new.is_some(), |b| stored_string(b, field) != new);
+        if !changed {
+            continue;
+        }
+        let source = sources.get(&field).copied().unwrap_or(Source::Default);
+        if !matches!(source, Source::Sqlite | Source::Default) {
+            if before.is_none() {
+                continue;
+            }
+            return Err(ConfigError::Overridden {
+                field,
+                origin: source,
+            });
+        }
+        edits.insert(field.key().to_owned(), new);
+    }
+    Ok(edits)
 }
 
 /// Printable form of a user-supplied TOML key for error messages.
@@ -748,7 +894,7 @@ fn safe_key(section: &str, key: &str) -> String {
     }
 }
 
-type TomlLayer = (BTreeMap<Field, String>, Option<SecretString>);
+type TomlLayer = (Layer, Option<SecretString>);
 
 /// Parse schema-1 TOML into per-field strings (types already checked) and an
 /// optional literal password.

@@ -461,4 +461,130 @@ mod tests {
         }
         Ok(())
     }
+
+    /// Counts non-silent decoded frames handed to playback.
+    struct Counter(Arc<std::sync::atomic::AtomicU64>);
+    impl MediaIo for Counter {
+        fn capture(&mut self, frame: &mut [i16; FRAME_SAMPLES]) -> bool {
+            frame.fill(0);
+            false
+        }
+        fn play(&mut self, frame: &[i16; FRAME_SAMPLES]) {
+            if frame.iter().any(|s| *s != 0) {
+                self.0.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+        }
+    }
+
+    /// Deterministic xorshift generator: the impairment is reproducible.
+    struct Seeded(u64);
+    impl Seeded {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+    }
+
+    /// AUD-02: a user-space UDP relay drops 1%, delays 0-30 ms (which
+    /// reorders 20 ms packets) between two real media tasks. Playback must
+    /// stay continuous within the bounded jitter buffer.
+    #[tokio::test]
+    async fn impaired_network_keeps_audio_flowing_with_bounded_buffers()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for secure in [false, true] {
+            let sender = Arc::new(UdpSocket::bind("127.0.0.1:0").await?);
+            let relay = Arc::new(UdpSocket::bind("127.0.0.1:0").await?);
+            let receiver = Arc::new(UdpSocket::bind("127.0.0.1:0").await?);
+            let key = [0x55u8; 30];
+            let played = Arc::new(std::sync::atomic::AtomicU64::new(0));
+            let (send_tx, send_rx) = mpsc::channel(4);
+            let (recv_tx, recv_rx) = mpsc::channel(4);
+            let sending = tokio::spawn(run(
+                MediaParams {
+                    socket: sender.clone(),
+                    remote: relay.local_addr()?,
+                    codec: Codec::Pcma,
+                    event_pt: None,
+                    local_key: secure.then(|| MasterKey::from_bytes(&key)).transpose()?,
+                    remote_key: None,
+                    send: true,
+                    receive: false,
+                },
+                Arc::new(Mutex::new(Box::new(Tone(0)))),
+                send_rx,
+            ));
+            // The relay forwards to the receiver from its own address, which
+            // the receiver treats as the negotiated peer.
+            let receiving = tokio::spawn(run(
+                MediaParams {
+                    socket: receiver.clone(),
+                    remote: relay.local_addr()?,
+                    codec: Codec::Pcma,
+                    event_pt: None,
+                    // A secure call always has both directional keys.
+                    local_key: secure
+                        .then(|| MasterKey::from_bytes(&[0x66; 30]))
+                        .transpose()?,
+                    remote_key: secure.then(|| MasterKey::from_bytes(&key)).transpose()?,
+                    send: false,
+                    receive: true,
+                },
+                Arc::new(Mutex::new(Box::new(Counter(played.clone())))),
+                recv_rx,
+            ));
+            let target = receiver.local_addr()?;
+            let forward = relay.clone();
+            let relaying = tokio::spawn(async move {
+                let mut rng = Seeded(0x9e37_79b9_7f4a_7c15);
+                let (mut forwarded, mut dropped) = (0u32, 0u32);
+                let mut buf = [0u8; 1600];
+                let deadline = tokio::time::Instant::now() + Duration::from_secs(4);
+                while let Ok(Ok((length, _))) =
+                    tokio::time::timeout_at(deadline, forward.recv_from(&mut buf)).await
+                {
+                    if rng.next().is_multiple_of(100) {
+                        dropped += 1;
+                        continue;
+                    }
+                    let delay = Duration::from_millis(rng.next() % 31);
+                    let packet = buf[..length].to_vec();
+                    let socket = forward.clone();
+                    tokio::spawn(async move {
+                        tokio::time::sleep(delay).await;
+                        let _ = socket.send_to(&packet, target).await;
+                    });
+                    forwarded += 1;
+                }
+                (forwarded, dropped)
+            });
+            let (forwarded, dropped) = relaying.await?;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            drop((send_tx, recv_tx));
+            let sent = sending.await?.sent;
+            let stats = receiving.await?;
+            let played = played.load(std::sync::atomic::Ordering::Relaxed);
+            assert!(
+                sent >= 180 && forwarded >= 180,
+                "sent {sent} forwarded {forwarded}"
+            );
+            assert!(
+                dropped >= 1,
+                "the seeded 1% loss must drop at least one packet"
+            );
+            // Nearly every forwarded frame is authenticated, decoded and played.
+            assert!(
+                stats.received + 2 >= u64::from(forwarded),
+                "received {} of {forwarded}",
+                stats.received
+            );
+            assert!(
+                played * 100 >= u64::from(forwarded) * 90,
+                "played {played} of {forwarded}"
+            );
+            assert!(stats.failure.is_none());
+        }
+        Ok(())
+    }
 }

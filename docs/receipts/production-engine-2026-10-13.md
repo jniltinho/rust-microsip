@@ -18,7 +18,7 @@ The SRTP packet adapter proven in the isolated experiments was adopted unchanged
 
 ## Runtime evidence
 
-`crates/telephony/examples/engine_lab.rs` drives two real engines (test `MediaIo` with 440/880 Hz tones and Goertzel meters) through the lab PBX, once per profile. Final run after the review fixes: log SHA-256 `7cb7292ee3cf66bc4b16b7c2d864340cede8d5fe3ab157f5477b53ccfca33feb`; example ELF `a0d0ccd10df7803438f4108945077e31174954478986c87ad7eada4b69fe6d13`.
+`crates/telephony/examples/engine_lab.rs` drives two real engines (test `MediaIo` with 440/880 Hz tones and Goertzel meters) through the lab PBX, once per profile. Final run after the review fixes: log SHA-256 `c95bf550c8d76c314926f77d28f4d5c979442ea0f278378063d8fbd6b5f81e71`; example ELF `e93cb152a334ab519a8cffba0600ad2e2bdf227db7f573ff1ec2b345f73f85ad`.
 
 | Step | UDP / RTP (1001→1002) | TLS / SRTP (1201→1202) |
 | --- | --- | --- |
@@ -37,6 +37,11 @@ The SRTP packet adapter proven in the isolated experiments was adopted unchanged
 | Second incoming call while busy (third party on a **TCP** account) | refused with 486 (`Busy` at the caller), never shown to the busy callee; the active call kept two-way audio (76 frames, ratio ≥ 1661) while DND was switched on mid-call | — |
 | Reverse direction (B calls A, A answers and hangs up) | two-way audio, callee sees `Normal` | same |
 | CANCEL racing the callee's 200 OK (3 runs) | no call left on either side; caller `Canceled`, callee `Normal` | same |
+| Downgrade attempts (TLS accounts) | — | an SDES-mandatory account offering plaintext RTP, and an SRTP-mandatory client reaching an endpoint without SRTP: both end `NotAcceptable` and never establish |
+
+**Degraded network (AUD-02).** A unit-level integration test runs two real media tasks through a seeded user-space UDP relay (1% loss, 0–30 ms delay that reorders 20 ms packets) with plaintext RTP and with SRTP: nearly every forwarded frame is authenticated and decoded, at least 90% of frames play, the jitter buffer stays within its fixed bound and no failure is raised. Incompatible-codec offers and answers are rejected by the SDP layer (unit tests; incoming offers get 488, outgoing answers end `NotAcceptable`). No network privileges are needed.
+
+**Secret Service.** The `rust-microsip-platform` secret store passed a store/retrieve/delete round trip against a real gnome-keyring inside a disposable `dbus-run-session` with a fictional unlock password; the personal keyring was never used.
 
 Two engine defects found by these runs were fixed before this receipt: a jitter buffer that discarded a new RTP source after a PBX bridge change (now restarts on SSRC change or a long late streak, with a unit test), and test-harness races (mute criterion, DND end detection).
 
