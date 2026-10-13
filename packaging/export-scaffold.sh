@@ -1,5 +1,6 @@
 #!/bin/sh
-# Export only the scaffold, not an AppImage or an approved-G0 receipt.
+# Export the desktop ELF build candidate with notices, manifest and SBOM.
+# Not an AppImage and not a release approval: release gates are separate.
 set -eu
 binary=target/x86_64-unknown-linux-gnu/release/rust-microsip
 cp "$binary" /out/rust-microsip
@@ -27,20 +28,21 @@ files += sorted((root / 'packaging').glob('*.sh'))
 files += sorted((root / 'packaging').rglob('*.py'))
 sources = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
 digest = hashlib.sha256(json.dumps(sources, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
-report = json.loads(subprocess.check_output(['/out/rust-microsip', '--doctor', '--json']))
+version = subprocess.check_output(['/out/rust-microsip', '--version'], text=True).split()[1]
+report = {'schema_version': 2, 'version': version}
 dockerfile = (root / 'Dockerfile').read_text()
 rust_version = subprocess.check_output(['rustc', '--version'], text=True).split()[1]
 ubuntu_image = re.search(r'^FROM (ubuntu:[^ ]+) AS toolchain$', dockerfile, re.M)[1]
 snapshot = re.search(r'URIs: https://snapshot.ubuntu.com/ubuntu/([0-9TZ]+)/', dockerfile)[1]
 report.update({
-    'artifact_kind': 'scaffold-not-release',
+    'artifact_kind': 'build-candidate-not-release',
     'source_files_sha256': sources,
     'source_manifest_sha256': digest,
     'target': 'x86_64-unknown-linux-gnu',
     'rust_version': rust_version,
     'ubuntu_snapshot': snapshot,
     'ubuntu_image': ubuntu_image,
-    'scope': 'CLI scaffolding only; no UI, SIP, audio, SQLite, IPC or AppImage',
+    'scope': 'desktop ELF: egui UI, SIP/RTP/SRTP engine, ALSA audio, TOML config; no SQLite, IPC, tray or AppImage yet',
 })
 pathlib.Path('/out/build-manifest.json').write_text(json.dumps(report, indent=2) + '\n')
 sbom = {
@@ -50,15 +52,15 @@ sbom = {
     'components': [{'type': 'library', 'name': 'Rust standard library', 'version': rust_version,
         'properties': [{'name': 'rust-microsip:license-inventory',
             'value': 'incomplete; Rust and third-party terms in toolchain-licenses/generated-notices/COPYRIGHT-library.html and licenses/; no single license expression asserted'}]}],
-    'properties': [{'name': 'rust-microsip:scope', 'value': 'CLI scaffold plus selected workspace/G0 build inventory; not an ELF link map; full G0/release SBOM pending'}],
+    'properties': [{'name': 'rust-microsip:scope', 'value': 'desktop build candidate plus selected workspace build inventory; not an ELF link map; release SBOM review pending'}],
 }
 inventory = json.loads(pathlib.Path('/out/cargo-licenses/inventory.json').read_text())
 sbom['components'] += [{
     'type': 'library', 'name': p['name'], 'version': p['version'],
     'purl': f"pkg:cargo/{p['name']}@{p['version']}",
     'hashes': [{'alg': 'SHA-256', 'content': p['archive_sha256']}],
-    'licenses': [{'expression': p['declared_license']}],
-    'properties': [{'name': 'rust-microsip:scope', 'value': 'selected workspace/G0 dev/build graph; not necessarily linked into CLI scaffold'}],
+    'licenses': [{'expression': p.get('license_choice') or p['declared_license']}],
+    'properties': [{'name': 'rust-microsip:scope', 'value': 'selected Linux normal/build/dev graph; not an ELF link map'}],
 } for p in inventory['packages']]
 pathlib.Path('/out/scaffold-sbom.cdx.json').write_text(json.dumps(sbom, indent=2) + '\n')
 PY

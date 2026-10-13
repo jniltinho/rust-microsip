@@ -2,19 +2,38 @@
 
 A native Rust desktop softphone under development, with a planned compact interface inspired by [MicroSIP](https://www.microsip.org/) and complementary references from [GOnnect](https://github.com/gonicus/gonnect). Linux is the first release target.
 
-**Status: implementation has started with the G0 scaffold; no usable softphone or release yet.** The experimental binary provides help, version, and static diagnostics only; it does not open a desktop window, register, or dial. This is an independent project, not an official MicroSIP or GONICUS product.
+**Status: a first desktop build exists, but there is no release yet.** The binary opens a compact MicroSIP-like window, registers one SIP account over UDP, TCP or TLS, and places and receives calls with G.711 audio through ALSA, DTMF, hold, mute, blind transfer, DND and optional or mandatory SRTP/SDES. These functions passed end-to-end runs against a disposable Asterisk lab ([receipt](docs/receipts/production-engine-2026-10-13.md)). Clean desktop VMs, real headsets, persistence, desktop integration, AppImage and the other [release gates](openspec/changes/create-native-rust-linux-release/tasks.md) are still open. This is an independent project, not an official MicroSIP or GONICUS product.
 
-## Build the scaffold
+See the [roadmap](docs/README.md) for what is done and what remains, and the [architecture overview](docs/architecture.md) for the crate layers.
+
+## Build
 
 Only Docker Engine with BuildKit/buildx is required on the host. Rust is installed exclusively inside the Ubuntu 24.04 builder, pinned by version and SHA-256.
 
 ```sh
 docker buildx build --platform linux/amd64 --target artifacts --output type=local,dest=dist .
 ./dist/rust-microsip --help
-./dist/rust-microsip --doctor --json
 ```
 
-After fetching, the build runs fmt, clippy, tests, and rustdoc without network access. It exports a **scaffold ELF**, checksums, licenses, preliminary inventory, and metadata. **It does not produce an AppImage or independently satisfy full DIST-03/G0.** See the [development guide and limitations](docs/development.md).
+After fetching, the build runs fmt, clippy, tests, rustdoc and the dependency/notice policy without network access, then exports the ELF, `SHA256SUMS`, licenses, a build manifest and an SBOM. The ELF needs the host's glibc and `libasound.so.2` (ALSA, present on standard desktops). See the [development guide](docs/development.md) and [ADR 0012](docs/adr/0012-production-dependency-graph.md).
+
+## Run
+
+Start `./dist/rust-microsip` and open **Menu → Settings** to enter the account; the password is kept in memory for the session only. Alternatively, create `$XDG_CONFIG_HOME/rust-microsip/config.toml` (mode 0600):
+
+```toml
+schema = 1
+
+[account]
+username = "1001"
+domain = "sip.example.invalid"
+server = "sip.example.invalid"
+transport = "tls"        # udp | tcp | tls
+media = "srtp"           # rtp | srtp (srtp requires tls)
+password_env = "RUST_MICROSIP_SIP_PASSWORD"
+```
+
+and export the password in that environment variable before starting. Passwords are never accepted as command-line arguments. `rust-microsip --doctor` prints a sanitized report of the effective configuration and where each value came from; `rust-microsip config validate` and `config export` check and print it without secrets.
 
 ## Proposal
 
@@ -41,7 +60,7 @@ openspec validate create-native-rust-linux-release --strict --no-interactive
 
 [Implementation approval](docs/implementation-approval.md) was given on 2026-10-12. In Codex, use `$openspec-apply-change`; in Claude, use the installed OpenSpec workflow or request change application. Check tasks only after obtaining evidence. G0 remains pending until the complete vertical proof passes. A [pre-adoption license/asset/native inventory](docs/adr/0003-g0-license-and-native-boundaries.md) and tested dependency boundary now precede candidate incorporation.
 
-The scaffold builder exists. The [disposable PBX lab](docker/asterisk/README.md) uses a [pinned andrius/asterisk image](docs/adr/0002-disposable-asterisk-lab.md). An experimental Rust adapter now passes real UDP/TCP/TLS registration, explicit refresh/unregistration, wrong-password and CA/hostname-negative tests ([receipt](docs/receipts/g0-rust-registration-2026-10-12.md)). This is an isolated signaling proof, not a usable softphone or completed task 1.6. An opt-in lab now also passes 12 five-second synthetic PCMA/PCMU calls over UDP/TCP/TLS in both directions ([media receipt](docs/receipts/g0-rust-media-2026-10-12.md)). TLS calls use explicitly plaintext-RTP fixtures, not SRTP. The opt-in RFC 4733 runner also verifies correct/incorrect three-digit sequences against actual Asterisk IVR tones ([DTMF receipt](docs/receipts/g0-rust-dtmf-2026-10-12.md)). An opt-in hold probe now checks sendonly/recvonly negotiation, local suppression, resumed two-way synthetic audio and preserved audio after a 488 re-INVITE rejection ([hold receipt](docs/receipts/g0-rust-hold-2026-10-12.md)). An opt-in REFER/NOTIFY probe now checks final success with measured destination media and preserved two-way audio after an invalid destination ([transfer receipt](docs/receipts/g0-rust-transfer-2026-10-12.md)). Mandatory SRTP/SDES is not enabled in the application; an [isolated pre-adoption SRTP diagnostic](docs/receipts/g0-srtp-candidate-2026-10-13.md) preserves a failing duplicate-packet rejection test, so the candidate is not approved for direct secure-media use. An [isolated per-SSRC SRTP/SRTCP adapter](docs/receipts/g0-srtp-adapter-2026-10-13.md) now passes 29 packet tests, and an [isolated initial TLS/SDES call proof](docs/receipts/g0-secure-call-2026-10-13.md) now exercises four encrypted PCMA/PCMU calls and negative cases against the PBX. SRTCP interoperability, secure call controls, source/key lifecycles and application adoption remain pending. These probes are not production call controls. Human voice, production audio, UI, persistence and CLI/MCP controls remain release requirements; G0 and task 1.6 are still open.
+Earlier isolated G0 experiments and their receipts are listed in the [development guide](docs/development.md) and [`docs/receipts/`](docs/receipts/).
 
 ## Local references and skills
 

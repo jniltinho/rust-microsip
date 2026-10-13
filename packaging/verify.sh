@@ -11,7 +11,7 @@ cargo tree --frozen --target x86_64-unknown-linux-gnu --prefix none --no-dedupe 
 python3 -B packaging/check-g0-dependencies.py < /tmp/g0-selected-tree.txt
 cargo tree --frozen --target x86_64-unknown-linux-gnu --prefix none --no-dedupe --format '{p}|{f}' -e normal,build,dev > /tmp/g0-example-tree.txt
 python3 -B packaging/check-g0-dependencies.py < /tmp/g0-example-tree.txt
-python3 -B packaging/collect-cargo-notices.py /tmp/g0-cargo-notices
+python3 -B packaging/collect-cargo-notices.py /tmp/g0-cargo-notices /tmp/g0-example-tree.txt
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --frozen -- -D warnings
 cargo test --workspace --frozen

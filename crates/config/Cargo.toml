@@ -1,0 +1,19 @@
+[package]
+name = "rust-microsip-config"
+description = "XDG/TOML/environment configuration resolution without persisting secrets"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+rust-microsip-core = { path = "../core" }
+serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
+toml = { version = "=1.1.8", default-features = false, features = ["std", "parse", "display", "serde"] }
+secrecy = "=0.10.3"
+thiserror = "=2.0.21"
+
+[lints]
+workspace = true

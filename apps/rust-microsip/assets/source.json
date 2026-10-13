@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "scope": "Application UI font embedded by apps/rust-microsip/src/ui; unmodified copy of the reviewed G0 asset. Release approval still requires the release gates.",
+  "font": {
+    "name": "Noto Sans Regular",
+    "version": "2.008",
+    "path": "NotoSans-Regular.ttf",
+    "source_repository": "https://github.com/notofonts/noto-fonts",
+    "source_revision": "ffebf8c1ee449e544955a7e813c54f9b73848eac",
+    "source_path": "hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+    "source_url": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/hinted/ttf/NotoSans/NotoSans-Regular.ttf",
+    "sha256": "b85c38ecea8a7cfb39c24e395a4007474fa5a4fc864f6ee33309eb4948d232d5",
+    "bytes": 569208,
+    "unmodified": true,
+    "subsetted": false,
+    "embedded_copyright": "Copyright 2015-2021 Google LLC. All Rights Reserved.",
+    "os2_embedding_fstype": 0
+  },
+  "license": {
+    "expression": "OFL-1.1",
+    "path": "OFL.txt",
+    "source_url": "https://raw.githubusercontent.com/notofonts/noto-fonts/ffebf8c1ee449e544955a7e813c54f9b73848eac/LICENSE",
+    "sha256": "0dab92d0544f7b233403f14b84a663bdbfa746982eda629e7f4f9ffe1b036feb",
+    "upstream_copyright": "Copyright 2018 The Noto Project Authors (github.com/googlei18n/noto-fonts)",
+    "reserved_font_names": "None declared after the copyright notice in the inspected license; no font modifications made.",
+    "redistribution_obligations": [
+      "Keep complete copyright and OFL-1.1 text with every distributed font/app copy.",
+      "Keep font under OFL-1.1; project GPL-3.0-or-later applies only to own source.",
+      "Do not sell the font by itself or imply upstream endorsement.",
+      "Do not subset, rename or modify without separate review."
+    ]
+  },
+  "review": {
+    "before_incorporation": true,
+    "provenance": "Exact official upstream Git revision; raw bytes retrieved over HTTPS; primary license and font name/OS2 metadata inspected.",
+    "embedding": "Unmodified bundling/embedding permitted by OFL-1.1 subject to retained copyright/license; fsType=0.",
+    "default_egui_fonts": "Not selected; no epaint_default_fonts bundle.",
+    "copied_from": "tests/probes/ui-assets (byte-identical; SHA-256 values unchanged)"
+  }
+}

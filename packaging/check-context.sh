@@ -21,7 +21,14 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     crates/media/src/dtmf.rs crates/media/Cargo.toml crates/media/src/lib.rs crates/media/tests/media.rs \
     packaging/verify.sh packaging/export-scaffold.sh \
     packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py \
-    packaging/collect-cargo-notices.py packaging/tests/test_cargo_notices.py; do
+    packaging/collect-cargo-notices.py packaging/tests/test_cargo_notices.py \
+    packaging/reviewed-licenses.json \
+    apps/rust-microsip/assets/NotoSans-Regular.ttf apps/rust-microsip/assets/OFL.txt \
+    apps/rust-microsip/assets/source.json \
+    crates/core/Cargo.toml crates/audio/Cargo.toml crates/config/Cargo.toml crates/storage/Cargo.toml \
+    $(find apps/rust-microsip/src/ui crates/telephony/src/engine crates/core/src crates/audio/src \
+        crates/config/src crates/storage/src crates/telephony/examples crates/media/src -maxdepth 1 -type f -name '*.rs' | sort) \
+    $(find packaging/third-party-notices -type f | sort); do
     if [ -L "$path" ] || [ ! -f "$path" ]; then
         echo "ERROR: missing or symlinked test source: $path" >&2
         exit 1

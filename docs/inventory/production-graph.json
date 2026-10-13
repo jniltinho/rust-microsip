@@ -1,0 +1,2731 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-13",
+  "target": "x86_64-unknown-linux-gnu",
+  "cargo_lock_sha256": "dbc9cc535ac53180d35b6459521aa6766ce583050baa2ab9434fbe3a4cb0dd76",
+  "scope": "Registry packages in the cargo tree normal/build/dev selection for the production workspace; engineering inventory, not legal certification, vulnerability audit, ELF-link map or release approval. For allowlist entries license_choice repeats the declared expression; no narrower choice is claimed.",
+  "counts": {
+    "registry_packages": 294,
+    "reviewed_exceptions": 35,
+    "upstream_pinned_notice_packages": 15,
+    "metadata_only_not_built": 17
+  },
+  "packages": [
+    {
+      "name": "accesskit",
+      "version": "0.24.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "d3b7f7f85a7e5f68090000ed7622545829afd484d210358702ae4cb97dd0c320"
+    },
+    {
+      "name": "accesskit_atspi_common",
+      "version": "0.18.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "1e8c61bee90b42a772d39d06a740207dc71a4e780004ace1db8d99fb1baaa954"
+    },
+    {
+      "name": "accesskit_consumer",
+      "version": "0.36.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "25e0d7e25d06f4dc21d1774d67146e9e80d6789216cbd4d1e88185b0095dba60"
+    },
+    {
+      "name": "accesskit_unix",
+      "version": "0.21.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "b016ca8db0ea0ea2ceff29a9d6240391492d960716aa471967c00e8cc8cb197c"
+    },
+    {
+      "name": "accesskit_winit",
+      "version": "0.32.2",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "1fe9a94394896352cc4660ca2288bd4ef883d83238853c038b44070c8f134313"
+    },
+    {
+      "name": "adler2",
+      "version": "2.0.1",
+      "declared_license": "0BSD OR MIT OR Apache-2.0",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa"
+    },
+    {
+      "name": "aead",
+      "version": "0.5.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d122413f284cf2d62fb1b7db97e02edb8cda96d769b16e443a4f6195e35662b0"
+    },
+    {
+      "name": "aes",
+      "version": "0.8.4",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b169f7a6d4742236a0a00c541b845991d0ac43e546831af1249753ab4c3aa3a0"
+    },
+    {
+      "name": "aes",
+      "version": "0.9.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "35f0f96ce78e38c3dc6d8948aa8163d06385be74000f3c7a95bf1eef35d3ea32"
+    },
+    {
+      "name": "aes-gcm",
+      "version": "0.10.3",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "831010a0f742e1209b3bcea8fab6a8e149051ba6099432c8cb2cc117dec3ead1"
+    },
+    {
+      "name": "ahash",
+      "version": "0.8.12",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5a15f179cd60c4584b8a8c596927aadc462e27f2ca70c04e0071964a73ba7a75"
+    },
+    {
+      "name": "allocator-api2",
+      "version": "0.2.21",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "683d7910e743518b0e34f1186f92494becacb047c7b6bf616c96772180fef923"
+    },
+    {
+      "name": "alsa",
+      "version": "0.11.0",
+      "declared_license": "Apache-2.0/MIT",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "812947049edcd670a82cd5c73c3661d2e58468577ba8489de58e1a73c04cbd5d"
+    },
+    {
+      "name": "alsa-sys",
+      "version": "0.4.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ad7569085a265dd3f607ebecce7458eaab2132a84393534c95b18dcbc3f31e04"
+    },
+    {
+      "name": "arboard",
+      "version": "3.6.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf"
+    },
+    {
+      "name": "arrayvec",
+      "version": "0.7.8",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
+    },
+    {
+      "name": "as-raw-xcb-connection",
+      "version": "1.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "175571dd1d178ced59193a6fc02dde1b972eb0bc56c892cde9beeceac5bf0f6b"
+    },
+    {
+      "name": "ash",
+      "version": "0.38.0+1.3.281",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0bb44936d800fea8f016d7f2311c6a4f97aebd5dc86f09906139ec848cf3a46f"
+    },
+    {
+      "name": "async-broadcast",
+      "version": "0.7.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "435a87a52755b8f27fcf321ac4f04b2802e337c8c4872923137471ec39c37532"
+    },
+    {
+      "name": "async-channel",
+      "version": "2.5.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "924ed96dd52d1b75e9c1a3e6275715fd320f5f9439fb5a4a11fa51f4221158d2"
+    },
+    {
+      "name": "async-executor",
+      "version": "1.14.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c96bf972d85afc50bf5ab8fe2d54d1586b4e0b46c97c50a0c9e71e2f7bcd812a"
+    },
+    {
+      "name": "async-io",
+      "version": "2.6.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "456b8a8feb6f42d237746d4b3e9a178494627745c3c56c6ea55d92ba50d026fc"
+    },
+    {
+      "name": "async-lock",
+      "version": "3.4.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "290f7f2596bd5b78a9fec8088ccd89180d7f9f55b94b0576823bbbdc72ee8311"
+    },
+    {
+      "name": "async-process",
+      "version": "2.5.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "fc50921ec0055cdd8a16de48773bfeec5c972598674347252c0399676be7da75"
+    },
+    {
+      "name": "async-recursion",
+      "version": "1.2.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4f8abc12baad266b1c8cec146854c195b5864b4221d4b2ca7296a7ae82d9e451"
+    },
+    {
+      "name": "async-signal",
+      "version": "0.2.14",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "52b5aaafa020cf5053a01f2a60e8ff5dccf550f0f77ec54a4e47285ac2bab485"
+    },
+    {
+      "name": "async-task",
+      "version": "4.7.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8b75356056920673b02621b35afd0f7dda9306d03c79a30f5c56c44cf256e3de"
+    },
+    {
+      "name": "async-trait",
+      "version": "0.1.92",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "82f6aeea286b8eb4dd3431a1be1b59d290ace00f5bfd8e2a159bc2a05e2c1667"
+    },
+    {
+      "name": "atomic-waker",
+      "version": "1.1.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
+    },
+    {
+      "name": "atspi",
+      "version": "0.29.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c77886257be21c9cd89a4ae7e64860c6f0eefca799bb79127913052bd0eefb3d"
+    },
+    {
+      "name": "atspi-common",
+      "version": "0.13.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "20c5617155740c98003016429ad13fe43ce7a77b007479350a9f8bf95a29f63d"
+    },
+    {
+      "name": "atspi-proxies",
+      "version": "0.13.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2230e48787ed3eb4088996eab66a32ca20c0b67bbd4fd6cdfe79f04f1f04c9fc"
+    },
+    {
+      "name": "autocfg",
+      "version": "1.5.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
+    },
+    {
+      "name": "base64",
+      "version": "0.22.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
+    },
+    {
+      "name": "bit-set",
+      "version": "0.10.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "09ec2f926cc3060f09db9ebc5b52823d85268d24bb917e472c0c4bea35780a7d"
+    },
+    {
+      "name": "bit-vec",
+      "version": "0.9.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b71798fca2c1fe1086445a7258a4bc81e6e49dcd24c8d0dd9a1e57395b603f51"
+    },
+    {
+      "name": "bitflags",
+      "version": "2.13.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
+    },
+    {
+      "name": "block-buffer",
+      "version": "0.12.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d2f6c7dbe95a6ed67ad9f18e57daf93a2f034c524b99fd2b76d18fdfeb6660aa"
+    },
+    {
+      "name": "blocking",
+      "version": "1.7.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a70e4329df6cb94385eed412ec92375c3cdd8a6e502493d1229b6414e4036dfa"
+    },
+    {
+      "name": "bytemuck",
+      "version": "1.25.2",
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
+    },
+    {
+      "name": "bytemuck_derive",
+      "version": "1.12.1",
+      "declared_license": "Zlib OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c"
+    },
+    {
+      "name": "byteorder-lite",
+      "version": "0.1.0",
+      "declared_license": "Unlicense OR MIT",
+      "license_choice": "Unlicense OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8f1fe948ff07f4bd06c30984e69f5b4899c516a3ef74f34df92a2df2ab535495"
+    },
+    {
+      "name": "bytes",
+      "version": "1.12.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "fc652a48c352aef3ea3aed32080501cf3ef6ed5da78602a020c991775b0aff04"
+    },
+    {
+      "name": "calloop",
+      "version": "0.13.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b99da2f8558ca23c71f4fd15dc57c906239752dd27ff3c00a1d56b685b7cbfec"
+    },
+    {
+      "name": "calloop",
+      "version": "0.14.5",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "43b32313e937c8721c9d17ee9bf60699a6402b4b7c2cb6ac1bee0ffcaa4b4e5e"
+    },
+    {
+      "name": "calloop-wayland-source",
+      "version": "0.3.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "95a66a987056935f7efce4ab5668920b5d0dac4a7c99991a67395f13702ddd20"
+    },
+    {
+      "name": "calloop-wayland-source",
+      "version": "0.4.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "138efcf0940a02ebf0cc8d1eff41a1682a46b431630f4c52450d6265876021fa"
+    },
+    {
+      "name": "cc",
+      "version": "1.8.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6651c9ed80effdc7db0ff72512157f901af5e3549e341e24b1dd4887d836d838"
+    },
+    {
+      "name": "cfg-if",
+      "version": "1.0.5",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4e7648175b45a9a48536d676f68d918270699102aa8dab5496df06904c914600"
+    },
+    {
+      "name": "cfg_aliases",
+      "version": "0.2.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f079e83a288787bcd14a6aea84cee5c87a67c5a3e660c30f557a3d24761b3527"
+    },
+    {
+      "name": "chacha20",
+      "version": "0.10.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "65c35e4b699c7e15ccbe7ee35c005e4fc0a278d22238a2857e6ce2dadeda1b06"
+    },
+    {
+      "name": "cipher",
+      "version": "0.4.4",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "773f3b9af64447d2ce9850330c473515014aa235e6a783b02db81ff39e4a3dad"
+    },
+    {
+      "name": "cipher",
+      "version": "0.5.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e8cf2a2c93cd704877c0858356ed03480ff301ee950b43f1cbe4573b088bfa6c"
+    },
+    {
+      "name": "cmov",
+      "version": "0.5.4",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0c9ea0ac24bc397ab3c98583a3c9ba74fa56b09a4449bbe172b9b1ddb016027a"
+    },
+    {
+      "name": "codespan-reporting",
+      "version": "0.13.1",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681"
+    },
+    {
+      "name": "color",
+      "version": "0.3.3",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2ec7c5eb7a16992b1904d76c517d170ab353b0e0b3d5a0c81a8a0cd1037893cf"
+    },
+    {
+      "name": "concurrent-queue",
+      "version": "2.5.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
+    },
+    {
+      "name": "const-oid",
+      "version": "0.10.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a6ef517f0926dd24a1582492c791b6a4818a4d94e789a334894aa15b0d12f55c"
+    },
+    {
+      "name": "cpal",
+      "version": "0.18.2",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "6f02e8d0327b42d3e2e4ab2119af397344eb9fc54a34bf0ddeaa1277af8681f1"
+    },
+    {
+      "name": "cpubits",
+      "version": "0.1.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "15b85f9c39137c3a891689859392b1bd49812121d0d61c9caf00d46ed5ce06ae"
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.2.17",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "59ed5838eebb26a2bb2e58f6d5b5316989ae9d08bab10e0e6d103e656d1b0280"
+    },
+    {
+      "name": "cpufeatures",
+      "version": "0.3.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5ca28b0ae3115b884660db4118d803791fd6756b6e88f39c0f3f7859060d7566"
+    },
+    {
+      "name": "crc32fast",
+      "version": "1.5.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "01a7799fd6b852db0e61728dde9a204c423b44d689dbd432522543614b490e78"
+    },
+    {
+      "name": "crossbeam-utils",
+      "version": "0.8.23",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a31eee39dddec8330830986fcd7625edb5a24ec90ea038215273bbc3adb08ac6"
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.1.7",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "78c8292055d1c1df0cce5d180393dc8cce0abec0a7102adb6c7b1eef6016d60a"
+    },
+    {
+      "name": "crypto-common",
+      "version": "0.2.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ce6e4c961d6cd6c9a86db418387425e8bdeaf05b3c8bc1411e6dca4c252f1453"
+    },
+    {
+      "name": "ctr",
+      "version": "0.10.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "baaca1c4b237092596f64d571e9db6ce4109c4ef9742e27590f1709594461f21"
+    },
+    {
+      "name": "ctr",
+      "version": "0.9.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0369ee1ad671834580515889b80f2ea915f23b8be8d0daa4bbaf2ac5c7590835"
+    },
+    {
+      "name": "ctutils",
+      "version": "0.4.3",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "03bb0e1cc970d482d121d9a1744999169b69a07470b3d644a7894e53fcaf4574"
+    },
+    {
+      "name": "cursor-icon",
+      "version": "1.2.0",
+      "declared_license": "MIT OR Apache-2.0 OR Zlib",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f"
+    },
+    {
+      "name": "dasp_sample",
+      "version": "0.11.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "0c87e182de0887fd5361989c677c4e8f5000cd9491d6d563161a8f3a5519fc7f"
+    },
+    {
+      "name": "digest",
+      "version": "0.11.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f1dd6dbb5841937940781866fa1281a1ff7bd3bf827091440879f9994983d5c2"
+    },
+    {
+      "name": "dlib",
+      "version": "0.5.3",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ab8ecd87370524b461f8557c119c405552c396ed91fc0a8eec68679eab26f94a"
+    },
+    {
+      "name": "document-features",
+      "version": "0.2.12",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d4b8a88685455ed29a21542a33abd9cb6510b6b129abadabdcef0f4c55bc8f61"
+    },
+    {
+      "name": "downcast-rs",
+      "version": "1.2.1",
+      "declared_license": "MIT/Apache-2.0",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2"
+    },
+    {
+      "name": "dpi",
+      "version": "0.1.2",
+      "declared_license": "Apache-2.0 AND MIT",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76"
+    },
+    {
+      "name": "ecolor",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "0656a7530b9e2841ee7a5f983965bdd9840c32f4012f759cfd44b912cced6b34"
+    },
+    {
+      "name": "eframe",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "55ad41fac6e3149abb4866e93df37dbd33baa95db525c3368c944584e95a5dc2"
+    },
+    {
+      "name": "egui",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "dc938cc27cd911415e1e4d151bc56ff9df063d8db081374e87aeb805ea74b2ba"
+    },
+    {
+      "name": "egui-wgpu",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "5cef1f6d1bba40b09a4d0d62cb822b81030922cfbf65c5373398c3a3caafc5bd"
+    },
+    {
+      "name": "egui-winit",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "98466000559d66ba4db786a30448b01483946add4188e7f10f522a27b4fb89cc"
+    },
+    {
+      "name": "either",
+      "version": "1.19.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0e9c71c2167ca323c882b99918929403426e2373ea17242ff5653e0d5e1058be"
+    },
+    {
+      "name": "emath",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "52c8d4141cf0f60fb2f7aefaf352d3ffa5171ef0ab09731c64391801e95e48f1"
+    },
+    {
+      "name": "endi",
+      "version": "1.1.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
+    },
+    {
+      "name": "enumflags2",
+      "version": "0.7.12",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "1027f7680c853e056ebcec683615fb6fbbc07dbaa13b4d5d9442b146ded4ecef"
+    },
+    {
+      "name": "enumflags2_derive",
+      "version": "0.7.12",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "67c78a4d8fdf9953a5c9d458f9efe940fd97a0cab0941c075a813ac594733827"
+    },
+    {
+      "name": "epaint",
+      "version": "0.36.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "a0ec0308dc23130fc1a7d4623a8534c2ed069c6dc84e258ee4f3de99615aa1a3"
+    },
+    {
+      "name": "equivalent",
+      "version": "1.0.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
+    },
+    {
+      "name": "errno",
+      "version": "0.3.14",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
+    },
+    {
+      "name": "euclid",
+      "version": "0.22.14",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f1a05365e3b1c6d1650318537c7460c6923f1abdd272ad6842baa2b509957a06"
+    },
+    {
+      "name": "event-listener",
+      "version": "5.4.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5a23add41df1562121a9393cb065eab5146a1242410f23a644851e90cfd669d2"
+    },
+    {
+      "name": "event-listener-strategy",
+      "version": "0.5.4",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8be9f3dfaaffdae2972880079a491a1a8bb7cbed0b8dd7a347f668b4150a3b93"
+    },
+    {
+      "name": "fastrand",
+      "version": "2.5.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
+    },
+    {
+      "name": "fdeflate",
+      "version": "0.3.7",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "1e6853b52649d4ac5c0bd02320cddc5ba956bdb407c4b75a2c6b75bf51500f8c"
+    },
+    {
+      "name": "fearless_simd",
+      "version": "0.4.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b97b65636e5b9ef369943878ac74335ba1c55c1cb6adbf1e2c293c624248d693"
+    },
+    {
+      "name": "find-msvc-tools",
+      "version": "0.1.14",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "aedcfb3409746eddb02b9e19ebda1c3394f759a152e48ee875a0844d1b955484"
+    },
+    {
+      "name": "flate2",
+      "version": "1.1.10",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6e634e2e0ebac1ee034020da1ca582e17ffe4e0f5e985823721e168928136dcb"
+    },
+    {
+      "name": "foldhash",
+      "version": "0.2.0",
+      "declared_license": "Zlib",
+      "license_choice": "Zlib",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
+    },
+    {
+      "name": "font-types",
+      "version": "0.12.6",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6c92d9081c7ab3bd83ef1eecdfad090f3d966e3ce74106779664114cfe1a6274"
+    },
+    {
+      "name": "futures",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9a31d2a3fbaaeb2af2368bbdd904aa8e812d3c04a1ee10d3171f52d556e5d0a3"
+    },
+    {
+      "name": "futures-channel",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
+    },
+    {
+      "name": "futures-core",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "92d699e522242e69e3003b94ecc1f960f3a5e015aa7c5d7486e65ad01dd94f5e"
+    },
+    {
+      "name": "futures-io",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "53c0fa8157de1303bfffdaa1cc2a673bfffb60102f76b0ef4441659124373fed"
+    },
+    {
+      "name": "futures-lite",
+      "version": "2.6.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
+    },
+    {
+      "name": "futures-macro",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9fb9654ba8355388abeb8dcb4fc62f511300867002afc858860463bdd9fe0c44"
+    },
+    {
+      "name": "futures-sink",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "1944426bf7d03f1d14f708785e4b33efd750b36d48a157b836b3efc15ede8e1d"
+    },
+    {
+      "name": "futures-task",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "cd417de3d1d015fc3bfd2b1ea46dfc7bab72ef86f1cc7cc9c78e728b34a6d1fd"
+    },
+    {
+      "name": "futures-util",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0d50a92467f8ba5dd6e3ee5d4bd04d73ab2e4e1c44474a0674821dfce14b79bc"
+    },
+    {
+      "name": "generic-array",
+      "version": "0.14.7",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
+    },
+    {
+      "name": "gethostname",
+      "version": "1.1.0",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.2.17",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ff2abc00be7fca6ebc474524697ae276ad847ad0a6b3faa4bcb027e9a4614ad0"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.3.4",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "899def5c37c4fd7b2664648c28120ecec138e4d395b459e5ca34f9cce2dd77fd"
+    },
+    {
+      "name": "getrandom",
+      "version": "0.4.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "300e883d756b2e4ec94e02791f39b04b522276138852cfc41d9fb7e904106099"
+    },
+    {
+      "name": "ghash",
+      "version": "0.5.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
+    },
+    {
+      "name": "glow",
+      "version": "0.17.0",
+      "declared_license": "MIT OR Apache-2.0 OR Zlib",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "29038e1c483364cc6bb3cf78feee1816002e127c331a1eec55a4d202b9e1adb5"
+    },
+    {
+      "name": "gpu-allocator",
+      "version": "0.28.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "51255ea7cfaadb6c5f1528d43e92a82acb2b96c43365989a28b2d44ee38f8795"
+    },
+    {
+      "name": "guillotiere",
+      "version": "0.7.0",
+      "declared_license": "MIT/Apache-2.0",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "6b17e70c989c36bad147b27a58d148c0741c51448aa5653436547323e524d0ab"
+    },
+    {
+      "name": "half",
+      "version": "2.7.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b"
+    },
+    {
+      "name": "harfrust",
+      "version": "0.12.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c03d949a14aa089bbb282f7dd76a498a7f684428e4257202efc119ec010376f9"
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.15.5",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.16.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+    },
+    {
+      "name": "hashbrown",
+      "version": "0.17.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
+    },
+    {
+      "name": "hex",
+      "version": "0.4.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70"
+    },
+    {
+      "name": "hmac",
+      "version": "0.13.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6303bc9732ae41b04cb554b844a762b4115a61bfaa81e3e83050991eeb56863f"
+    },
+    {
+      "name": "hybrid-array",
+      "version": "0.4.15",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "27f864f10dfb56725ce5ce5472bc52252c8f93a4ab86327122cebf62c5f59a17"
+    },
+    {
+      "name": "if-addrs",
+      "version": "0.14.0",
+      "declared_license": "MIT OR BSD-3-Clause",
+      "license_choice": "MIT OR BSD-3-Clause",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "bf39cc0423ee66021dc5eccface85580e4a001e0c5288bae8bea7ecb69225e90"
+    },
+    {
+      "name": "image",
+      "version": "0.25.10",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "85ab80394333c02fe689eaf900ab500fbd0c2213da414687ebf995a65d5a6104"
+    },
+    {
+      "name": "indexmap",
+      "version": "2.14.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
+    },
+    {
+      "name": "inout",
+      "version": "0.1.4",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "879f10e63c20629ecabbb64a8010319738c66a5cd0c29b02d63d272b03751d01"
+    },
+    {
+      "name": "inout",
+      "version": "0.2.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4250ce6452e92010fdf7268ccc5d14faa80bb12fc741938534c58f16804e03c7"
+    },
+    {
+      "name": "itertools",
+      "version": "0.15.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8b4baf93f58d4425749ca49a51c50ebab072c5df6994d08fed93541c331481dc"
+    },
+    {
+      "name": "itoa",
+      "version": "1.0.18",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
+    },
+    {
+      "name": "khronos-egl",
+      "version": "6.0.0",
+      "declared_license": "MIT/Apache-2.0",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "6aae1df220ece3c0ada96b8153459b67eebe9ae9212258bb0134ae60416fdf76"
+    },
+    {
+      "name": "kurbo",
+      "version": "0.13.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2"
+    },
+    {
+      "name": "libc",
+      "version": "0.2.190",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
+    },
+    {
+      "name": "libloading",
+      "version": "0.8.9",
+      "declared_license": "ISC",
+      "license_choice": "ISC",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d7c4b02199fee7c5d21a5ae7d8cfa79a6ef5bb2fc834d6e9058e89c825efdc55"
+    },
+    {
+      "name": "libm",
+      "version": "0.2.16",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
+    },
+    {
+      "name": "linebender_resource_handle",
+      "version": "0.1.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d4a5ff6bcca6c4867b1c4fd4ef63e4db7436ef363e0ad7531d1558856bae64f4"
+    },
+    {
+      "name": "linux-raw-sys",
+      "version": "0.12.1",
+      "declared_license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
+    },
+    {
+      "name": "linux-raw-sys",
+      "version": "0.4.15",
+      "declared_license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab"
+    },
+    {
+      "name": "litrs",
+      "version": "1.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4744e383959f0db86ede514b809b1c53251889093803c05267acc7d4e7030d70"
+    },
+    {
+      "name": "lock_api",
+      "version": "0.4.14",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "224399e74b87b5f3557511d98dff8b14089b3dadafcab6bb93eab67d3aace965"
+    },
+    {
+      "name": "log",
+      "version": "0.4.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
+    },
+    {
+      "name": "md-5",
+      "version": "0.11.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "69b6441f590336821bb897fb28fc622898ccceb1d6cea3fde5ea86b090c4de98"
+    },
+    {
+      "name": "memchr",
+      "version": "2.8.3",
+      "declared_license": "Unlicense OR MIT",
+      "license_choice": "Unlicense OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
+    },
+    {
+      "name": "memmap2",
+      "version": "0.9.11",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0"
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.8.9",
+      "declared_license": "MIT OR Zlib OR Apache-2.0",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316"
+    },
+    {
+      "name": "miniz_oxide",
+      "version": "0.9.1",
+      "declared_license": "MIT OR Zlib OR Apache-2.0",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c"
+    },
+    {
+      "name": "mio",
+      "version": "1.2.4",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "1788edb87fdc09c7e26304471e2f5be8cdefb1b6930d6e3985fc02ff53bf86ee"
+    },
+    {
+      "name": "moxcms",
+      "version": "0.8.1",
+      "declared_license": "BSD-3-Clause OR Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b"
+    },
+    {
+      "name": "naga",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a616d2fb8c89516ac2723a581f69d6c18576046bed761bd6b305e5618e6ae130"
+    },
+    {
+      "name": "naga-types",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "590afbf58a6f4f62873cd5cff4468061844bafa1cdf399cc954537c22d768d49"
+    },
+    {
+      "name": "nohash-hasher",
+      "version": "0.2.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
+    },
+    {
+      "name": "num-traits",
+      "version": "0.2.19",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
+    },
+    {
+      "name": "once_cell",
+      "version": "1.21.4",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+    },
+    {
+      "name": "opaque-debug",
+      "version": "0.3.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c08d65885ee38876c4f86fa503fb49d7b507c2b62552df7c70b2fce627e06381"
+    },
+    {
+      "name": "ordered-float",
+      "version": "5.5.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8c7c9e0d9b23589f26070720bac724174bfec1083e82f7854cdd0267518343c0"
+    },
+    {
+      "name": "ordered-stream",
+      "version": "0.2.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9aa2b01e1d916879f73a53d01d1d6cee68adbb31d6d9177a8cfce093cced1d50"
+    },
+    {
+      "name": "parking",
+      "version": "2.2.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f38d5652c16fde515bb1ecef450ab0f6a219d619a7274976324d5e377f7dceba"
+    },
+    {
+      "name": "parking_lot",
+      "version": "0.12.5",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "93857453250e3077bd71ff98b6a65ea6621a19bb0f559a85248955ac12c45a1a"
+    },
+    {
+      "name": "parking_lot_core",
+      "version": "0.9.12",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2621685985a2ebf1c516881c026032ac7deafcda1a2c9b7850dc81e3dfcb64c1"
+    },
+    {
+      "name": "peniko",
+      "version": "0.6.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "839c8299360d2e998bdb106dc0a6cd71dcc5f4df51df1b620361bf50e283cca6"
+    },
+    {
+      "name": "percent-encoding",
+      "version": "2.3.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9b4f627cb1b25917193a259e49bdad08f671f8d9708acfd5fe0a8c1455d87220"
+    },
+    {
+      "name": "phf",
+      "version": "0.13.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c1562dc717473dbaa4c1f85a36410e03c047b2e7df7f45ee938fbef64ae7fadf"
+    },
+    {
+      "name": "phf_generator",
+      "version": "0.13.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "135ace3a761e564ec88c03a77317a7c6b80bb7f7135ef2544dbe054243b89737"
+    },
+    {
+      "name": "phf_macros",
+      "version": "0.13.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "812f032b54b1e759ccd5f8b6677695d5268c588701effba24601f6932f8269ef"
+    },
+    {
+      "name": "phf_shared",
+      "version": "0.13.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e57fef6bc5981e38c2ce2d63bfa546861309f875b8a75f092d1d54ae2d64f266"
+    },
+    {
+      "name": "pin-project-lite",
+      "version": "0.2.17",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+    },
+    {
+      "name": "piper",
+      "version": "0.2.5",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c835479a4443ded371d6c535cbfd8d31ad92c5d23ae9770a61bc155e4992a3c1"
+    },
+    {
+      "name": "pkg-config",
+      "version": "0.3.34",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
+    },
+    {
+      "name": "png",
+      "version": "0.18.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "60769b8b31b2a9f263dae2776c37b1b28ae246943cf719eb6946a1db05128a61"
+    },
+    {
+      "name": "polling",
+      "version": "3.11.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5d0e4f59085d47d8241c88ead0f274e8a0cb551f3625263c05eb8dd897c34218"
+    },
+    {
+      "name": "pollster",
+      "version": "1.0.1",
+      "declared_license": "Apache-2.0/MIT",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336"
+    },
+    {
+      "name": "polycool",
+      "version": "0.4.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6"
+    },
+    {
+      "name": "polyval",
+      "version": "0.6.2",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9d1fe60d06143b2430aa532c94cfe9e29783047f06c0d7fd359a9a51b729fa25"
+    },
+    {
+      "name": "presser",
+      "version": "0.3.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e8cf8e6a8aa66ce33f63993ffc4ea4271eb5b0530a9002db8455ea6050c77bfa"
+    },
+    {
+      "name": "proc-macro-crate",
+      "version": "3.5.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e67ba7e9b2b56446f1d419b1d807906278ffa1a658a8a5d8a39dcb1f5a78614f"
+    },
+    {
+      "name": "proc-macro2",
+      "version": "1.0.107",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
+    },
+    {
+      "name": "profiling",
+      "version": "1.0.18",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
+    },
+    {
+      "name": "pxfm",
+      "version": "0.1.30",
+      "declared_license": "BSD-3-Clause OR Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea"
+    },
+    {
+      "name": "quick-xml",
+      "version": "0.41.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
+    },
+    {
+      "name": "quote",
+      "version": "1.0.47",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
+    },
+    {
+      "name": "rand",
+      "version": "0.10.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
+    },
+    {
+      "name": "rand_core",
+      "version": "0.10.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
+    },
+    {
+      "name": "raw-window-handle",
+      "version": "0.6.2",
+      "declared_license": "MIT OR Apache-2.0 OR Zlib",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539"
+    },
+    {
+      "name": "read-fonts",
+      "version": "0.41.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "046a7d674daf459825b32f5062056d6882db0d2f5a479fbd76ccfc870ac18709"
+    },
+    {
+      "name": "renderdoc-sys",
+      "version": "1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "19b30a45b0cd0bcca8037f3d0dc3421eaf95327a17cad11964fb8179b4fc4832"
+    },
+    {
+      "name": "ring",
+      "version": "0.17.14",
+      "declared_license": "Apache-2.0 AND ISC",
+      "license_choice": "Apache-2.0 AND ISC",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7"
+    },
+    {
+      "name": "rsipstack",
+      "version": "0.7.3",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "fd6577026d74d23d0eb114d158ea1a036275129e9b2a791be1679baad6821948"
+    },
+    {
+      "name": "rustc-hash",
+      "version": "1.1.0",
+      "declared_license": "Apache-2.0/MIT",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
+    },
+    {
+      "name": "rustc-hash",
+      "version": "2.1.3",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
+    },
+    {
+      "name": "rustix",
+      "version": "0.38.44",
+      "declared_license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154"
+    },
+    {
+      "name": "rustix",
+      "version": "1.1.5",
+      "declared_license": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+    },
+    {
+      "name": "rustls",
+      "version": "0.23.45",
+      "declared_license": "Apache-2.0 OR ISC OR MIT",
+      "license_choice": "Apache-2.0 OR ISC OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634"
+    },
+    {
+      "name": "rustls-pki-types",
+      "version": "1.15.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2f4925028c7eb5d1fcdaf196971378ed9d2c1c4efc7dc5d011256f76c99c0a96"
+    },
+    {
+      "name": "rustls-webpki",
+      "version": "0.103.15",
+      "declared_license": "ISC",
+      "license_choice": "ISC",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f3c3cf1d8b1e7d4927e2d154c3fcb02979afb9939629c62cd9048d4f07b60ac2"
+    },
+    {
+      "name": "rustrtc",
+      "version": "0.4.7",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "7fc50a0fd78b4b7a61fab57d1e4ee915eb9a8d710c22333f231cf8fc79f3befe"
+    },
+    {
+      "name": "scoped-tls",
+      "version": "1.0.1",
+      "declared_license": "MIT/Apache-2.0",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
+    },
+    {
+      "name": "scopeguard",
+      "version": "1.2.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
+    },
+    {
+      "name": "secrecy",
+      "version": "0.10.3",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e891af845473308773346dc847b2c23ee78fe442e0472ac50e22a18a93d3ae5a"
+    },
+    {
+      "name": "self_cell",
+      "version": "1.3.0",
+      "declared_license": "Apache-2.0 OR GPL-2.0-only",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "2ab42ca02749e120097e328d91d415325bdf43b1c72c4c8badf37375fe40a813"
+    },
+    {
+      "name": "serde",
+      "version": "1.0.229",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
+    },
+    {
+      "name": "serde_core",
+      "version": "1.0.229",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
+    },
+    {
+      "name": "serde_derive",
+      "version": "1.0.229",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
+    },
+    {
+      "name": "serde_json",
+      "version": "1.0.154",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e7e9cc8b1b85264074fbcc02a88680c4096b1e47df8f739dceb03bf482f04bd6"
+    },
+    {
+      "name": "serde_repr",
+      "version": "0.1.21",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8d3b1629de253c70a0508c3899572da79ca359fdab27c7920ff00406df418906"
+    },
+    {
+      "name": "serde_spanned",
+      "version": "1.1.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4e7523beb55eece201a2356bee0bbca0d1ab466c14c07703b2e0ee6d42cb0c2c"
+    },
+    {
+      "name": "sha1",
+      "version": "0.11.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "aacc4cc499359472b4abe1bf11d0b12e688af9a805fa5e3016f9a386dc2d0214"
+    },
+    {
+      "name": "sha2",
+      "version": "0.11.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "47d7069beb7d6ac7b9acd1039986e73443f24234f41074da099d6f994ac9ad19"
+    },
+    {
+      "name": "shlex",
+      "version": "2.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "f8fadd59c855ef2080decdef8ff161eb6661b86933c9d82e5ba29dc602a55aba"
+    },
+    {
+      "name": "signal-hook-registry",
+      "version": "1.4.8",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c4db69cba1110affc0e9f7bcd48bbf87b3f4fc7c61fc9155afd4c469eb3d6c1b"
+    },
+    {
+      "name": "simd-adler32",
+      "version": "0.3.10",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "3a219298ac11a56ea9a6d2120044824d6f01aeb034955e7af7bc16858527deea"
+    },
+    {
+      "name": "siphasher",
+      "version": "1.0.4",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "33f4fe9184a62d842c9ef383018f3306d8ba224fd9d836f56d7288308847c256"
+    },
+    {
+      "name": "skrifa",
+      "version": "0.44.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "819ab7d62b1d3e72d9d9dea5650bac30424f9111364bb94928dbf5ecad1baa68"
+    },
+    {
+      "name": "slab",
+      "version": "0.4.12",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
+    },
+    {
+      "name": "smallvec",
+      "version": "1.16.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5b3dc8af474f516a851ff4bd12db780f948b9250ad37211e4eec0bccea54e01b"
+    },
+    {
+      "name": "smithay-client-toolkit",
+      "version": "0.19.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "3457dea1f0eb631b4034d61d4d8c32074caa6cd1ab2d59f2327bd8461e2c0016"
+    },
+    {
+      "name": "smithay-client-toolkit",
+      "version": "0.20.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "0512da38f5e2b31201a93524adb8d3136276fa4fe4aafab4e1f727a82b534cc0"
+    },
+    {
+      "name": "smithay-clipboard",
+      "version": "0.7.3",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "71704c03f739f7745053bde45fa203a46c58d25bc5c4efba1d9a60e9dba81226"
+    },
+    {
+      "name": "smol_str",
+      "version": "0.2.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "dd538fb6910ac1099850255cf94a94df6551fbdd602454387d0adb2d1ca6dead"
+    },
+    {
+      "name": "socket2",
+      "version": "0.6.5",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c3d1e2c7f27f8d4cb10542a02c49005dbd6e93095799d6f3be745fae9f8fedd4"
+    },
+    {
+      "name": "spirv",
+      "version": "0.4.0+sdk-1.4.341.0",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "upstream-pinned",
+      "archive_sha256": "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f"
+    },
+    {
+      "name": "static_assertions",
+      "version": "1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
+    },
+    {
+      "name": "subtle",
+      "version": "2.6.1",
+      "declared_license": "BSD-3-Clause",
+      "license_choice": "BSD-3-Clause",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "13c2bddecc57b384dee18652358fb23172facb8a2c51ccc10d74c157bdea3292"
+    },
+    {
+      "name": "syn",
+      "version": "2.0.119",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
+    },
+    {
+      "name": "syn",
+      "version": "3.0.9",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d78c8dee4c7bf0e14673097256fed6142ce9d3b85a408189d07482442145823b"
+    },
+    {
+      "name": "thiserror",
+      "version": "1.0.69",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
+    },
+    {
+      "name": "thiserror",
+      "version": "2.0.21",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "09e52cb86a36cede5cb101bf8908837b3e4c6e5e59fe7fd85c23fb56200d189e"
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "1.0.69",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
+    },
+    {
+      "name": "thiserror-impl",
+      "version": "2.0.21",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "fe5197923287db20a58125f0bc85c062f7f2c892de97b18c356f9efb14b28524"
+    },
+    {
+      "name": "tokio",
+      "version": "1.53.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
+    },
+    {
+      "name": "tokio-macros",
+      "version": "2.7.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "78773a2a397f451582ce068015985c33193cf6dea8b74d2a639fe457b2f07b0e"
+    },
+    {
+      "name": "tokio-rustls",
+      "version": "0.26.6",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
+    },
+    {
+      "name": "tokio-util",
+      "version": "0.7.20",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b"
+    },
+    {
+      "name": "toml",
+      "version": "1.1.8+spec-1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "20489e00e4d8741d6be680764cc12e270655e375a20d1011e844a9c3379e678d"
+    },
+    {
+      "name": "toml_datetime",
+      "version": "1.1.2+spec-1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2b86d767906c6c42421dcba507eb9d203e779497710a47782a224bb871653053"
+    },
+    {
+      "name": "toml_edit",
+      "version": "0.25.17+spec-1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e3641d5bbb5349a79e1020a242d251efbc546ad8048d133958323ce9c40a9c9c"
+    },
+    {
+      "name": "toml_parser",
+      "version": "1.1.5+spec-1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "baa693a8032d7e1cada7d0041e96126df243179ff061456783ac7f12bda4744c"
+    },
+    {
+      "name": "toml_writer",
+      "version": "1.1.3+spec-1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "06bdbd8cfc056b8d2e2e85f29b56a3bdbecb527cef81eb39e3e7b98af4652770"
+    },
+    {
+      "name": "tracing",
+      "version": "0.1.44",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "63e71662fa4b2a2c3a26f570f037eb95bb1f85397f3cd8076caed2f026a6d100"
+    },
+    {
+      "name": "tracing-attributes",
+      "version": "0.1.31",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "7490cfa5ec963746568740651ac6781f701c9c5ea257c58e057f3ba8cf69e8da"
+    },
+    {
+      "name": "tracing-core",
+      "version": "0.1.36",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
+    },
+    {
+      "name": "type-map",
+      "version": "0.5.1",
+      "declared_license": "MIT/Apache-2.0",
+      "license_choice": "Apache-2.0 AND MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "cb30dbbd9036155e74adad6812e9898d03ec374946234fbcebd5dfc7b9187b90"
+    },
+    {
+      "name": "typenum",
+      "version": "1.20.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
+    },
+    {
+      "name": "unicode-general-category",
+      "version": "1.1.0",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "0b993bddc193ae5bd0d623b49ec06ac3e9312875fdae725a975c51db1cc1677f"
+    },
+    {
+      "name": "unicode-ident",
+      "version": "1.0.27",
+      "declared_license": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "license_choice": "(MIT OR Apache-2.0) AND Unicode-3.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "a2c754d6c33795a1c324727428e5a7dedb5b06195f9890bdbcba760d3e246563"
+    },
+    {
+      "name": "unicode-segmentation",
+      "version": "1.13.3",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"
+    },
+    {
+      "name": "unicode-width",
+      "version": "0.2.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
+    },
+    {
+      "name": "universal-hash",
+      "version": "0.5.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "fc1de2c688dc15305988b563c3854064043356019f97a4b46276fe734c4f07ea"
+    },
+    {
+      "name": "untrusted",
+      "version": "0.9.0",
+      "declared_license": "ISC",
+      "license_choice": "ISC",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+    },
+    {
+      "name": "uuid",
+      "version": "1.28.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
+    },
+    {
+      "name": "vello_common",
+      "version": "0.1.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b2e9aed918117e8152c9eddfd8362d73c465c23f26c44786aa331707b8a64fa2"
+    },
+    {
+      "name": "vello_cpu",
+      "version": "0.1.0",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ac7349e1f55f6b801c7c277958df4ea53e7f20f21e8014910ad888b2ecda93ea"
+    },
+    {
+      "name": "version_check",
+      "version": "0.9.5",
+      "declared_license": "MIT/Apache-2.0",
+      "license_choice": "MIT/Apache-2.0",
+      "license_basis": "legacy-reviewed",
+      "notice_source": "archive",
+      "archive_sha256": "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+    },
+    {
+      "name": "wayland-backend",
+      "version": "0.3.17",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "38a91b4eaddff87b1cd1074985e3713da4af2c49742d1b356b2c01670a67a078"
+    },
+    {
+      "name": "wayland-client",
+      "version": "0.31.15",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e3c36a0f861ad76d0901f2800b46321410d9f73f2ea88aac0650d86c32688073"
+    },
+    {
+      "name": "wayland-csd-frame",
+      "version": "0.3.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "625c5029dbd43d25e6aa9615e88b829a5cad13b2819c4ae129fdbb7c31ab4c7e"
+    },
+    {
+      "name": "wayland-cursor",
+      "version": "0.31.14",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "4a52d18780be9b1314328a3de5f930b73d2200112e3849ca6cb11822793fb34d"
+    },
+    {
+      "name": "wayland-protocols",
+      "version": "0.32.13",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "23d0c813de3daa2ed6520af85a3bd49b0e722a3078506899aa9686fea58dc4b6"
+    },
+    {
+      "name": "wayland-protocols-experimental",
+      "version": "20250721.0.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "40a1f863128dcaaec790d7b4b396cc9b9a7a079e878e18c47e6c2d2c5a8dcbb1"
+    },
+    {
+      "name": "wayland-protocols-misc",
+      "version": "0.3.12",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6e9567599ef23e09b8dad6e429e5738d4509dfc46b3b21f32841a304d16b29c8"
+    },
+    {
+      "name": "wayland-protocols-plasma",
+      "version": "0.3.12",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2b6d8cf1eb2c1c31ed1f5643c88a6e53538129d4af80030c8cabd1f9fa884d91"
+    },
+    {
+      "name": "wayland-protocols-wlr",
+      "version": "0.3.12",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "eb04e52f7836d7c7976c78ca0250d61e33873c34156a2a1fc9474828ec268234"
+    },
+    {
+      "name": "wayland-scanner",
+      "version": "0.31.11",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "338e30461b3a2b67d70eb30a6d89f8e0c93a833e07d2ae89085cd070c4a00ac0"
+    },
+    {
+      "name": "wayland-sys",
+      "version": "0.31.11",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d8eab23fefc9e41f8e841df4a9c707e8a8c4ed26e944ef69297184de2785e3be"
+    },
+    {
+      "name": "web-time",
+      "version": "1.1.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
+    },
+    {
+      "name": "wgpu",
+      "version": "30.0.0",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6d8f4bd44d92da5270f03409dba9f952dab24f128e05d6a554926101d1bf9114"
+    },
+    {
+      "name": "wgpu-core",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
+    },
+    {
+      "name": "wgpu-core-deps-windows-linux-android",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "7586165fd5f6d881cb9ce4bb71f40d6caab2c0f1837e3fc1d9788a197fb6004f"
+    },
+    {
+      "name": "wgpu-hal",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
+    },
+    {
+      "name": "wgpu-naga-bridge",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d2f62e73117bb7a62bfd9c5a5841438a823f6566c6442a808ee269d2d055c081"
+    },
+    {
+      "name": "wgpu-types",
+      "version": "30.0.1",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "99dad6f1fbdbbdb4c278a6508b059d44688f5cebddf78d005a46a31340269286"
+    },
+    {
+      "name": "winit",
+      "version": "0.30.13",
+      "declared_license": "Apache-2.0",
+      "license_choice": "Apache-2.0",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d"
+    },
+    {
+      "name": "winnow",
+      "version": "1.0.4",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "23b97319f7b8343df12cc98938e5c3eb436064524c8d2b4e30a1d3a36eecdf81"
+    },
+    {
+      "name": "x11-dl",
+      "version": "2.21.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "38735924fedd5314a6e548792904ed8c6de6636285cb9fec04d5b1db85c1516f"
+    },
+    {
+      "name": "x11rb",
+      "version": "0.13.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "9993aa5be5a26815fe2c3eacfc1fde061fc1a1f094bf1ad2a18bf9c495dd7414"
+    },
+    {
+      "name": "x11rb-protocol",
+      "version": "0.13.2",
+      "declared_license": "MIT OR Apache-2.0",
+      "license_choice": "MIT OR Apache-2.0",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
+    },
+    {
+      "name": "xcursor",
+      "version": "0.3.11",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "163b33ed8786455e2fa5d72f554057ce3f3182425434f756cd39c99839d88e23"
+    },
+    {
+      "name": "xkbcommon-dl",
+      "version": "0.4.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d039de8032a9a8856a6be89cea3e5d12fdd82306ab7c94d74e6deab2460651c5"
+    },
+    {
+      "name": "xkeysym",
+      "version": "0.2.1",
+      "declared_license": "MIT OR Apache-2.0 OR Zlib",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56"
+    },
+    {
+      "name": "zbus",
+      "version": "5.19.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "5db4be7c075cb421e4b7ee645541604239bd243ba7c357511f4ff3a74b555907"
+    },
+    {
+      "name": "zbus-lockstep",
+      "version": "0.5.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "6998de05217a084b7578728a9443d04ea4cd80f2a0839b8d78770b76ccd45863"
+    },
+    {
+      "name": "zbus-lockstep-macros",
+      "version": "0.5.2",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "10da05367f3a7b7553c8cdf8fa91aee6b64afebe32b51c95177957efc47ca3a0"
+    },
+    {
+      "name": "zbus_macros",
+      "version": "5.19.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "2990635d09ade6df1868f72f8cac69a876a90981e8bd3c40b1be413f8dc88f40"
+    },
+    {
+      "name": "zbus_names",
+      "version": "4.3.4",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d8bf88b4a3ff53e883001e0e0115b297a9d53c31b9c1edd2bfdd853e3428624e"
+    },
+    {
+      "name": "zbus_xml",
+      "version": "5.2.1",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d1586c021a01ca0a9216dcd874e546382e156a5cbab5fab6cb5f10087e22682a"
+    },
+    {
+      "name": "zcheapstr",
+      "version": "1.1.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "d1afec51604565183aeb5c54c20aeab286120d4e4460f7f76e3e8bb8c0d99473"
+    },
+    {
+      "name": "zerocopy",
+      "version": "0.8.62",
+      "declared_license": "BSD-2-Clause OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "86502bf56ac7c77571a32e2647bb2a15894565e981fb2a48d7bde2d91c965a9d"
+    },
+    {
+      "name": "zerocopy-derive",
+      "version": "0.8.62",
+      "declared_license": "BSD-2-Clause OR Apache-2.0 OR MIT",
+      "license_choice": "MIT",
+      "license_basis": "reviewed-exception",
+      "notice_source": "archive",
+      "archive_sha256": "5457206954b06561e2608c7e19cf58b1926586d999c246eebe4502f7e2039d1a"
+    },
+    {
+      "name": "zeroize",
+      "version": "1.9.1",
+      "declared_license": "Apache-2.0 OR MIT",
+      "license_choice": "Apache-2.0 OR MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
+    },
+    {
+      "name": "zmij",
+      "version": "1.0.23",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+    },
+    {
+      "name": "zvariant",
+      "version": "5.15.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "c1d34c27cc6cdd1f458427519dd6b8612f7b7e3f7b9a0b2355d041dda9869147"
+    },
+    {
+      "name": "zvariant_derive",
+      "version": "5.15.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "864155e69b4352db0c7f374917bf45d1e0c8d17659c8b3dbf9795f3673f8c497"
+    },
+    {
+      "name": "zvariant_utils",
+      "version": "4.2.0",
+      "declared_license": "MIT",
+      "license_choice": "MIT",
+      "license_basis": "allowlist",
+      "notice_source": "archive",
+      "archive_sha256": "bad0294361a320b694a328460dc73add56c306150f5cb6bfafc44446120008a3"
+    }
+  ],
+  "metadata_only_not_built": [
+    {
+      "name": "egui_glow",
+      "version": "0.36.2"
+    },
+    {
+      "name": "fax",
+      "version": "0.2.7"
+    },
+    {
+      "name": "gl_generator",
+      "version": "0.14.0"
+    },
+    {
+      "name": "glifo",
+      "version": "0.2.0"
+    },
+    {
+      "name": "glutin",
+      "version": "0.32.3"
+    },
+    {
+      "name": "glutin-winit",
+      "version": "0.5.0"
+    },
+    {
+      "name": "glutin_egl_sys",
+      "version": "0.7.1"
+    },
+    {
+      "name": "glutin_glx_sys",
+      "version": "0.6.1"
+    },
+    {
+      "name": "jobserver",
+      "version": "0.1.35"
+    },
+    {
+      "name": "khronos_api",
+      "version": "3.1.0"
+    },
+    {
+      "name": "quick-error",
+      "version": "2.0.1"
+    },
+    {
+      "name": "tiff",
+      "version": "0.11.3"
+    },
+    {
+      "name": "weezl",
+      "version": "0.1.12"
+    },
+    {
+      "name": "xml-rs",
+      "version": "0.8.29"
+    },
+    {
+      "name": "zlib-rs",
+      "version": "0.6.8"
+    },
+    {
+      "name": "zune-core",
+      "version": "0.5.3"
+    },
+    {
+      "name": "zune-jpeg",
+      "version": "0.5.15"
+    }
+  ]
+}

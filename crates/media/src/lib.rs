@@ -217,3 +217,6 @@ impl<'a> RtpPacket<'a> {
         })
     }
 }
+
+/// SRTP/SRTCP AES-CM-128/HMAC-SHA1-80 packet adapter (SDES keys).
+pub mod srtp_adapter;

@@ -16,6 +16,7 @@ RUN printf '%s\n' \
     && apt-get update --error-on=any \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
         ca-certificates curl xz-utils build-essential binutils python3 \
+        pkgconf libasound2-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY docker/rust-components.sha256 /tmp/rust-components.sha256
 RUN set -eu; cd /tmp; \
@@ -81,6 +82,10 @@ allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
     "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256",
+    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml",
+    "packaging/reviewed-licenses.json",
+    "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
+    "apps/rust-microsip/assets/source.json",
     "packaging/verify.sh", "packaging/export-scaffold.sh",
     "packaging/check-g0-dependencies.py", "packaging/tests/test_g0_dependencies.py",
     "packaging/collect-cargo-notices.py", "packaging/tests/test_cargo_notices.py",
@@ -92,8 +97,11 @@ for path in files:
     is_source = path.suffix == ".rs" and str(path.parent.relative_to(root)) in {
         "apps/rust-microsip/src", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
-        "crates/media/src", "crates/media/tests",
+        "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui",
+        "crates/telephony/src/engine", "crates/core/src", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests",
     }
+    # Reviewed, commit-pinned third-party license texts only.
+    is_source = is_source or relative.startswith("packaging/third-party-notices/")
     if relative not in allowed and not is_source:
         unexpected.append(relative)
 if unexpected:

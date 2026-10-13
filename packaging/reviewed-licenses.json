@@ -1,0 +1,306 @@
+[
+  {
+    "name": "accesskit_winit",
+    "version": "0.32.2",
+    "archive_sha256": "1fe9a94394896352cc4660ca2288bd4ef883d83238853c038b44070c8f134313",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "adler2",
+    "version": "2.0.1",
+    "archive_sha256": "320119579fcad9c21884f5c4861d16174d0e06250625266f50fe6898340abefa",
+    "declared_expression": "0BSD OR MIT OR Apache-2.0",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "alsa",
+    "version": "0.11.0",
+    "archive_sha256": "812947049edcd670a82cd5c73c3661d2e58468577ba8489de58e1a73c04cbd5d",
+    "declared_expression": "Apache-2.0/MIT",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: production audio/config dependency review (2026-10-13)"
+  },
+  {
+    "name": "bytemuck",
+    "version": "1.25.2",
+    "archive_sha256": "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797",
+    "declared_expression": "Zlib OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "bytemuck_derive",
+    "version": "1.12.1",
+    "archive_sha256": "6a1f896587b6f2c069c73d2f0913e2d590c3990285cd2f0b6aa02b786b4c679c",
+    "declared_expression": "Zlib OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "codespan-reporting",
+    "version": "0.13.1",
+    "archive_sha256": "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "cpal",
+    "version": "0.18.2",
+    "archive_sha256": "6f02e8d0327b42d3e2e4ab2119af397344eb9fc54a34bf0ddeaa1277af8681f1",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: production audio/config dependency review (2026-10-13)"
+  },
+  {
+    "name": "cursor-icon",
+    "version": "1.2.0",
+    "archive_sha256": "f27ae1dd37df86211c42e150270f82743308803d90a6f6e6651cd730d5e1732f",
+    "declared_expression": "MIT OR Apache-2.0 OR Zlib",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "downcast-rs",
+    "version": "1.2.1",
+    "archive_sha256": "75b325c5dbd37f80359721ad39aca5a29fb04c89279657cffdda8736d0c0b9d2",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "dpi",
+    "version": "0.1.2",
+    "archive_sha256": "d8b14ccef22fc6f5a8f4d7d768562a182c04ce9a3b3157b91390b52ddfdf1a76",
+    "declared_expression": "Apache-2.0 AND MIT",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "conjunctive expression; every listed license and bundled notice retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "fallible-iterator",
+    "version": "0.3.0",
+    "archive_sha256": "2acce4a10f12dc2fb14a218589d4f1f62ef011b2d0cc4b3cb1bba8e94da14649",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: production SQLite dependency review (2026-10-13)"
+  },
+  {
+    "name": "fallible-streaming-iterator",
+    "version": "0.1.9",
+    "archive_sha256": "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: production SQLite dependency review (2026-10-13)"
+  },
+  {
+    "name": "foldhash",
+    "version": "0.2.0",
+    "archive_sha256": "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb",
+    "declared_expression": "Zlib",
+    "chosen_license": "Zlib",
+    "reason": "Zlib permissive license; complete text retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "gethostname",
+    "version": "1.1.0",
+    "archive_sha256": "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "glow",
+    "version": "0.17.0",
+    "archive_sha256": "29038e1c483364cc6bb3cf78feee1816002e127c331a1eec55a4d202b9e1adb5",
+    "declared_expression": "MIT OR Apache-2.0 OR Zlib",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "guillotiere",
+    "version": "0.7.0",
+    "archive_sha256": "6b17e70c989c36bad147b27a58d148c0741c51448aa5653436547323e524d0ab",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "khronos-egl",
+    "version": "6.0.0",
+    "archive_sha256": "6aae1df220ece3c0ada96b8153459b67eebe9ae9212258bb0134ae60416fdf76",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "linux-raw-sys",
+    "version": "0.12.1",
+    "archive_sha256": "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53",
+    "declared_expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "linux-raw-sys",
+    "version": "0.4.15",
+    "archive_sha256": "d26c52dbd32dccf2d10cac7725f8eae5296885fb5703b261f7d0a0739ec807ab",
+    "declared_expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "miniz_oxide",
+    "version": "0.8.9",
+    "archive_sha256": "1fa76a2c86f704bdb222d66965fb3d63269ce38518b83cb0575fca855ebb6316",
+    "declared_expression": "MIT OR Zlib OR Apache-2.0",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "miniz_oxide",
+    "version": "0.9.1",
+    "archive_sha256": "b63fbc4a50860e98e7b2aa7804ded1db5cbc3aff9193adaff57a6931bf7c4b4c",
+    "declared_expression": "MIT OR Zlib OR Apache-2.0",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "moxcms",
+    "version": "0.8.1",
+    "archive_sha256": "bb85c154ba489f01b25c0d36ae69a87e4a1c73a72631fc6c0eb6dde34a73e44b",
+    "declared_expression": "BSD-3-Clause OR Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "pollster",
+    "version": "1.0.1",
+    "archive_sha256": "bc6355899e1c9462875b6757c79f3caa011a1fdae12bbb1a2e72dd1f234f8336",
+    "declared_expression": "Apache-2.0/MIT",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "pxfm",
+    "version": "0.1.30",
+    "archive_sha256": "d55d956fa96f5ec02be2e13af0e20391a5aa83d6a074e3ad368959d0fab299ea",
+    "declared_expression": "BSD-3-Clause OR Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "raw-window-handle",
+    "version": "0.6.2",
+    "archive_sha256": "20675572f6f24e9e76ef639bc5552774ed45f1c30e2951e1e99c59888861c539",
+    "declared_expression": "MIT OR Apache-2.0 OR Zlib",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "rustc-hash",
+    "version": "1.1.0",
+    "archive_sha256": "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2",
+    "declared_expression": "Apache-2.0/MIT",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "rustix",
+    "version": "0.38.44",
+    "archive_sha256": "fdb5bc1ae2baa591800df16c9ca78619bf65c0488b41b96ccec5d11220d8c154",
+    "declared_expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "rustix",
+    "version": "1.1.5",
+    "archive_sha256": "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d",
+    "declared_expression": "Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "scoped-tls",
+    "version": "1.0.1",
+    "archive_sha256": "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "self_cell",
+    "version": "1.3.0",
+    "archive_sha256": "2ab42ca02749e120097e328d91d415325bdf43b1c72c4c8badf37375fe40a813",
+    "declared_expression": "Apache-2.0 OR GPL-2.0-only",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 option selected; GPL-2.0-only option not used; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "spirv",
+    "version": "0.4.0+sdk-1.4.341.0",
+    "archive_sha256": "d9571ea910ebd84c86af4b3ed27f9dbdc6ad06f17c5f96146b2b671e2976744f",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "type-map",
+    "version": "0.5.1",
+    "archive_sha256": "cb30dbbd9036155e74adad6812e9898d03ec374946234fbcebd5dfc7b9187b90",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "unicode-general-category",
+    "version": "1.1.0",
+    "archive_sha256": "0b993bddc193ae5bd0d623b49ec06ac3e9312875fdae725a975c51db1cc1677f",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "vcpkg",
+    "version": "0.2.15",
+    "archive_sha256": "accd4ea62f7bb7a82fe23066fb0957d48ef677f6eeb8215f372f52e48bb32426",
+    "declared_expression": "MIT/Apache-2.0",
+    "chosen_license": "Apache-2.0 AND MIT",
+    "reason": "legacy slash expression reviewed for this exact archive only; both complete texts retained; conservative both-license path; source: production SQLite dependency review (2026-10-13)"
+  },
+  {
+    "name": "winit",
+    "version": "0.30.13",
+    "archive_sha256": "a6755fa58a9f8350bd1e472d4c3fcc25f824ec358933bba33306d0b63df5978d",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Apache-2.0 only; Apache-2.0 to GPL-3.0-or-later direction; complete Apache text and any NOTICE retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "xkeysym",
+    "version": "0.2.1",
+    "archive_sha256": "b9cc00251562a284751c9973bace760d86c0276c471b4be569fe6b068ee97a56",
+    "declared_expression": "MIT OR Apache-2.0 OR Zlib",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "zerocopy",
+    "version": "0.8.62",
+    "archive_sha256": "86502bf56ac7c77571a32e2647bb2a15894565e981fb2a48d7bde2d91c965a9d",
+    "declared_expression": "BSD-2-Clause OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "zerocopy-derive",
+    "version": "0.8.62",
+    "archive_sha256": "5457206954b06561e2608c7e19cf58b1926586d999c246eebe4502f7e2039d1a",
+    "declared_expression": "BSD-2-Clause OR Apache-2.0 OR MIT",
+    "chosen_license": "MIT",
+    "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
+  }
+]

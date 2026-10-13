@@ -1,5 +1,13 @@
 [workspace]
-members = ["apps/rust-microsip", "crates/telephony", "crates/media"]
+members = [
+    "apps/rust-microsip",
+    "crates/core",
+    "crates/telephony",
+    "crates/media",
+    "crates/audio",
+    "crates/config",
+    "crates/storage",
+]
 resolver = "3"
 
 [workspace.package]
