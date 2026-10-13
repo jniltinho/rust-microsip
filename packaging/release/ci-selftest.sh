@@ -9,6 +9,10 @@
 #   2. Docker verify target: an injected rustfmt violation fails the build.
 # Usage: sh packaging/release/ci-selftest.sh [--no-docker]
 set -eu
+# No detached auto-gc/maintenance in the scratch repositories: it races
+# with their removal between scenarios.
+export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=gc.auto GIT_CONFIG_VALUE_0=0 \
+    GIT_CONFIG_KEY_1=maintenance.auto GIT_CONFIG_VALUE_1=false
 here=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 scan="$here/scan-publication.sh"
