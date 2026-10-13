@@ -30,6 +30,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
+mod control;
 /// Maximum characters accepted in the number and transfer entries.
 pub const MAX_NUMBER_CHARS: usize = 64;
 /// How long a transient notice stays visible.
@@ -401,6 +402,12 @@ impl SettingsForm {
 /// A user intent.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Action {
+    /// Approve a pending control request (by operation id).
+    ApproveControl(String),
+    /// Deny a pending control request (by operation id).
+    DenyControl(String),
+    /// Deny every pending control request and pause new ones.
+    DenyAllControl,
     /// Switch tab (also returns to the main view).
     SelectTab(Tab),
     /// Keypad or keyboard key: DTMF while established, else appended.
@@ -563,9 +570,19 @@ pub struct UiState {
     times: HashMap<CallId, CallTimes>,
     store: Option<Store>,
     session: String,
+    control: Option<crate::owner::ControlOwner>,
+    /// Approval prompt on screen and when it appeared (arming delay).
+    pub approval_shown: Option<(String, Instant)>,
+    /// Last frame that drew the approval prompt.
+    pub approval_frame: Option<Instant>,
 }
 
 impl UiState {
+    /// Serve control requests as this owner session (see [`crate::owner`]).
+    pub fn attach_control(&mut self, owner: crate::owner::ControlOwner) {
+        self.control = Some(owner);
+    }
+
     /// Initial state from saved settings.
     pub fn new(settings: UiSettings) -> Self {
         Self {
@@ -605,6 +622,9 @@ impl UiState {
             versions: HashMap::new(),
             times: HashMap::new(),
             store: None,
+            control: None,
+            approval_shown: None,
+            approval_frame: None,
             // Unique per process start, so session keys never collide.
             session: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
@@ -995,6 +1015,9 @@ impl UiState {
                 self.confirm = Some(Confirm::Quit);
             }
             Action::Quit | Action::QuitNow => self.quit_now(backend, now),
+            Action::ApproveControl(id) => self.control_decide(&id, true, backend, now),
+            Action::DenyControl(id) => self.control_decide(&id, false, backend, now),
+            Action::DenyAllControl => self.control_deny_all(backend, now),
             Action::TestAudio => {
                 if let Err(reason) = self.can_test_audio() {
                     return self.set_notice(reason, now);

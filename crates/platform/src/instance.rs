@@ -161,8 +161,32 @@ pub fn acquire(runtime_dir: &Path, request: &Request) -> Result<Acquired, Instan
         .map_err(io_err(&lock_path))?;
     let socket = runtime_dir.join(SOCKET_FILE);
     match lock.try_lock() {
-        Ok(()) => Listener::start(lock, socket, uid).map(Acquired::Owner),
+        Ok(()) => Listener::start(lock, runtime_dir, socket, uid).map(Acquired::Owner),
         Err(TryLockError::WouldBlock) => forward(&socket, uid, request).map(Acquired::Forwarded),
+        Err(TryLockError::Error(e)) => Err(io_err(&lock_path)(e)),
+    }
+}
+
+/// Become the owner of `runtime_dir` without forwarding anything: `None`
+/// when another process already owns it (the headless service uses this).
+///
+/// # Errors
+/// As [`acquire`].
+pub fn acquire_owner(runtime_dir: &Path) -> Result<Option<Listener>, InstanceError> {
+    let uid = current_uid()?;
+    ensure_private_dir(runtime_dir, uid)?;
+    let lock_path = runtime_dir.join(LOCK_FILE);
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .mode(0o600)
+        .open(&lock_path)
+        .map_err(io_err(&lock_path))?;
+    match lock.try_lock() {
+        Ok(()) => Listener::start(lock, runtime_dir, runtime_dir.join(SOCKET_FILE), uid).map(Some),
+        Err(TryLockError::WouldBlock) => Ok(None),
         Err(TryLockError::Error(e)) => Err(io_err(&lock_path)(e)),
     }
 }
@@ -171,6 +195,7 @@ pub fn acquire(runtime_dir: &Path, request: &Request) -> Result<Acquired, Instan
 ///
 /// Dropping it stops the accept thread, removes the socket and releases the lock.
 pub struct Listener {
+    dir: PathBuf,
     requests: Receiver<Request>,
     waker: Arc<Mutex<Option<Waker>>>,
     stop: Arc<AtomicBool>,
@@ -185,7 +210,7 @@ impl std::fmt::Debug for Listener {
     }
 }
 impl Listener {
-    fn start(lock: File, socket: PathBuf, uid: u32) -> Result<Self, InstanceError> {
+    fn start(lock: File, dir: &Path, socket: PathBuf, uid: u32) -> Result<Self, InstanceError> {
         // We hold the lock, so any existing socket is stale; remove it only if ours.
         match fs::symlink_metadata(&socket) {
             Ok(meta) if meta.file_type().is_socket() && meta.uid() == uid => {
@@ -206,12 +231,19 @@ impl Listener {
             .spawn(move || accept_loop(&listener, &tx, &thread_waker, &thread_stop))
             .map_err(io_err(&socket))?;
         Ok(Self {
+            dir: dir.to_owned(),
             requests,
             waker,
             stop,
             socket,
             _lock: lock,
         })
+    }
+
+    /// The private runtime directory this process owns.
+    #[must_use]
+    pub fn runtime_dir(&self) -> &Path {
+        &self.dir
     }
 
     /// Run `waker` after every queued request (replaces any previous waker).

@@ -200,6 +200,14 @@
     "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
   },
   {
+    "name": "rmcp",
+    "version": "3.5.1",
+    "archive_sha256": "ab5023804cbe0304cbe06197ac16e645a0a0d0ffa2953bf735c15c2fa0213350",
+    "declared_expression": "Apache-2.0",
+    "chosen_license": "Apache-2.0",
+    "reason": "Official MCP Rust SDK; Apache-2.0 declared, upstream LICENSE also keeps MIT terms for legacy contributions; both are compatible with GPL-3.0-or-later and the complete upstream LICENSE text is retained; source: CLI/MCP dependency review (2026-10-13)"
+  },
+  {
     "name": "rustc-hash",
     "version": "1.1.0",
     "archive_sha256": "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2",

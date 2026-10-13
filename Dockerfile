@@ -106,7 +106,7 @@ allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
     "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256",
-    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml", "crates/platform/Cargo.toml",
+    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml", "crates/platform/Cargo.toml", "crates/control/Cargo.toml",
     "packaging/reviewed-licenses.json",
     "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
     "apps/rust-microsip/assets/source.json",
@@ -124,8 +124,8 @@ for path in files:
     is_source = path.suffix == ".rs" and str(path.parent.relative_to(root)) in {
         "apps/rust-microsip/src", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
-        "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui",
-        "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src",
+        "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui", "apps/rust-microsip/src/mcp", "apps/rust-microsip/examples",
+        "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src", "crates/platform/src/control", "crates/control/src", "apps/rust-microsip/src/ui/state",
     }
     # Reviewed, commit-pinned third-party license texts only.
     is_source = is_source or relative.startswith(("packaging/third-party-notices/", "packaging/appimage/runtime-licenses/"))
@@ -145,7 +145,8 @@ PY
 # workspace tests and rustdoc for the same sources first.
 FROM build AS suite-build
 RUN --network=none cargo build -p rust-microsip-telephony --example engine_lab --example engine_network \
-        --release --frozen --target x86_64-unknown-linux-gnu
+        --release --frozen --target x86_64-unknown-linux-gnu \
+    && cargo build -p rust-microsip --example mcp_probe --release --frozen --target x86_64-unknown-linux-gnu
 FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS suite-runner
 COPY --from=bootstrap-ca /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 RUN printf '%s\n' \
@@ -166,6 +167,7 @@ RUN printf '%s\n' \
 COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/rust-microsip /usr/local/bin/rust-microsip
 COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_lab /usr/local/bin/engine-lab
 COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/engine_network /usr/local/bin/engine-network
+COPY --from=suite-build /work/target/x86_64-unknown-linux-gnu/release/examples/mcp_probe /usr/local/bin/mcp-probe
 COPY --from=suite-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-suite/
 USER 10001:10001
 

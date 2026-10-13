@@ -59,6 +59,10 @@ pub trait Backend {
     fn job_results(&self) -> Vec<JobResult> {
         Vec::new()
     }
+    /// Requests from CLI/MCP clients on the control socket.
+    fn control_requests(&self) -> Vec<rust_microsip_platform::Incoming> {
+        Vec::new()
+    }
 }
 
 /// Blocking work the window hands to the backend.
@@ -282,6 +286,8 @@ pub struct Storage {
     /// when this process is known to be the single instance; otherwise
     /// another window may own those open calls.
     pub recover_interrupted: bool,
+    /// Control-socket session when this process serves CLI/MCP clients.
+    pub control: Option<crate::owner::ControlOwner>,
 }
 
 /// Open the window and block until it closes.
@@ -346,6 +352,9 @@ impl SoftphoneApp {
             storage.recover_interrupted,
             Instant::now(),
         );
+        if let Some(owner) = storage.control {
+            state.attach_control(owner);
+        }
         Self {
             backend,
             save,
@@ -382,6 +391,13 @@ impl SoftphoneApp {
         }
         if self.state.audio_test.is_some() {
             ctx.request_repaint_after(Duration::from_millis(100));
+        }
+        for incoming in self.backend.control_requests() {
+            self.state.control_request(incoming, now);
+        }
+        self.state.control_tick(&*self.backend, now);
+        if !self.state.pending_approvals().is_empty() || self.state.control_busy() {
+            ctx.request_repaint_after(Duration::from_millis(200));
         }
         for request in self.backend.external() {
             if request == External::Quit {
@@ -468,6 +484,7 @@ impl SoftphoneApp {
         ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACING, tokens::SPACING);
         egui::Panel::top("rust_microsip_tabs").show(ui, |ui| tab_strip(ui, st, &mut out));
         egui::Panel::bottom("rust_microsip_status").show(ui, |ui| status_bar(ui, st, &palette));
+        approval_modal(&ctx, st, &palette, now, &mut out);
         let focus_number = std::mem::take(&mut self.focus_number);
         egui::CentralPanel::default().show(ui, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
@@ -589,6 +606,82 @@ fn status_bar(ui: &mut egui::Ui, st: &UiState, palette: &tokens::Palette) {
         }
     });
     ui.label(egui::RichText::new(st.account_text()).small());
+}
+
+/// Delay before Allow/Deny accept a click, so a click aimed at something else
+/// when the prompt appears can never approve it.
+const APPROVAL_ARM: Duration = Duration::from_secs(1);
+
+/// The oldest control request waiting for a person, in a modal that blocks the
+/// rest of the window: who asks and what would happen. **Allow** arms only
+/// after this request has been on screen in the focused window for one second,
+/// so a click aimed elsewhere (or the click that focuses the window) cannot
+/// approve it. **Deny** and **Deny all** always work; Deny all also pauses
+/// control requests for a while, so a client cannot keep the window blocked.
+fn approval_modal(
+    ctx: &egui::Context,
+    st: &mut UiState,
+    palette: &tokens::Palette,
+    now: Instant,
+    out: &mut Vec<Action>,
+) {
+    let Some(pending) = st.pending_approvals().first().cloned() else {
+        st.approval_shown = None;
+        st.approval_frame = None;
+        return;
+    };
+    let focused = ctx.input(|i| i.viewport().focused.unwrap_or(false));
+    let fresh = !matches!(&st.approval_shown, Some((id, _)) if *id == pending.operation_id);
+    // The arming clock starts when this request is visible in a focused window
+    // and restarts whenever focus is lost or frames stopped for a while (a
+    // minimized window may not draw unfocused frames).
+    let gap = st
+        .approval_frame
+        .is_some_and(|last| now.saturating_duration_since(last) > Duration::from_millis(500));
+    st.approval_frame = Some(now);
+    if fresh || !focused || gap {
+        st.approval_shown = Some((pending.operation_id.clone(), now));
+    }
+    let shown = st.approval_shown.as_ref().map_or(now, |(_, at)| *at);
+    let armed = focused && now.saturating_duration_since(shown) >= APPROVAL_ARM;
+    if !armed {
+        ctx.request_repaint_after(Duration::from_millis(200));
+    }
+    let waiting = st.pending_approvals().len() - 1;
+    egui::Modal::new(egui::Id::new("rust_microsip_approval")).show(ctx, |ui| {
+        ui.set_max_width(260.0);
+        ui.label(egui::RichText::new(format!("{} asks to:", pending.requester)).strong());
+        ui.label(egui::RichText::new(&pending.description).color(palette.warn));
+        let left = pending.deadline.saturating_duration_since(now).as_secs();
+        ui.label(egui::RichText::new(format!("Expires in {left} s")).small());
+        if waiting > 0 {
+            ui.label(egui::RichText::new(format!("{waiting} more waiting")).small());
+        }
+        ui.horizontal(|ui| {
+            let deny = named(ui.button("Deny"), "Deny request");
+            if fresh {
+                // Keyboard focus starts on the safe choice.
+                deny.request_focus();
+            }
+            if deny.clicked() {
+                out.push(Action::DenyControl(pending.operation_id.clone()));
+            }
+            let allow = ui.add_enabled(armed, egui::Button::new("Allow"));
+            if named(allow, "Allow request").clicked() {
+                out.push(Action::ApproveControl(pending.operation_id.clone()));
+            }
+        });
+        let pause = named(
+            ui.small_button("Deny all and pause"),
+            "Deny all control requests",
+        );
+        if pause
+            .on_hover_text("Deny every waiting request and refuse new ones for 5 minutes")
+            .clicked()
+        {
+            out.push(Action::DenyAllControl);
+        }
+    });
 }
 
 fn incoming_banner(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
@@ -1439,6 +1532,7 @@ mod tests {
                 store: Store::open_in_memory().ok(),
                 warning: Some("Not saved to disk.".into()),
                 recover_interrupted: true,
+                control: None,
             },
         );
         app.state.audio_devices = Some(AudioDevices {

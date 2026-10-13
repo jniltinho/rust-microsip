@@ -12,6 +12,8 @@
 //! in-memory store keeps the session usable with a visible warning, but the
 //! account is not registered automatically and settings cannot be saved.
 
+use rust_microsip::cli;
+use rust_microsip::owner::ControlOwner;
 use rust_microsip::ui::{
     self, AUDIO_TEST_SECONDS, Backend, DESKTOP_FILE, External, Job, JobResult, Storage, Theme,
     UiSettings, keyring_reference,
@@ -21,12 +23,14 @@ use rust_microsip_config::{
     self as config, CliArgs, CliCommand, ConfigError, DoctorReport, Field, ResolveContext, Source,
     StoredConfig,
 };
+use rust_microsip_control::{ControlError, ErrorCode, Operation, OwnerMode, Response};
 use rust_microsip_core::{
     CallId, CallPhase, Command, Direction, Event, FRAME_SAMPLES, MediaIo, Notice, NullMedia,
 };
 use rust_microsip_platform::{
-    Ack, Acquired, CallAction, InstanceError, Listener, Notifier, Request, SecretStore, Waker,
-    acquire, default_runtime_dir, parse_dial_uri,
+    Ack, Acquired, CallAction, ControlClient, ControlServer, ControlSocketError, Incoming,
+    InstanceError, Listener, Notifier, Request, SecretStore, Waker, acquire, default_runtime_dir,
+    parse_dial_uri,
 };
 use rust_microsip_storage::{DEFAULT_RETENTION_DAYS, Store};
 use rust_microsip_telephony::engine::{EngineHandle, TrustAnchors};
@@ -34,7 +38,7 @@ use secrecy::{ExposeSecret, SecretString};
 use std::{
     cell::{Cell, RefCell},
     collections::BTreeMap,
-    io::Write,
+    io::{BufRead, Read, Write},
     path::PathBuf,
     process::ExitCode,
     sync::{
@@ -58,6 +62,8 @@ fn fail(text: &str, code: u8) -> ExitCode {
 
 /// Engine adapter for the window: non-blocking send/poll plus local notices.
 struct EngineBackend {
+    /// Control socket for CLI/MCP clients (owner only).
+    control: Option<ControlServer>,
     engine: Option<EngineHandle>,
     repaint: Arc<OnceLock<eframe::egui::Context>>,
     pending: RefCell<Vec<Event>>,
@@ -138,6 +144,9 @@ impl Backend for EngineBackend {
         if let Some(listener) = &self.listener {
             listener.set_waker(waker.clone());
         }
+        if let Some(control) = &self.control {
+            control.set_waker(waker.clone());
+        }
         self.notifier.set_waker(waker);
         let _ = self.repaint.set(ctx.clone());
     }
@@ -206,6 +215,46 @@ impl Backend for EngineBackend {
     }
     fn job_results(&self) -> Vec<JobResult> {
         self.results.try_iter().collect()
+    }
+    fn control_requests(&self) -> Vec<Incoming> {
+        self.control
+            .as_ref()
+            .map_or_else(Vec::new, |c| std::iter::from_fn(|| c.try_recv()).collect())
+    }
+}
+
+/// Open a ledger epoch and serve CLI/MCP clients, only as the profile owner.
+/// Without a durable database the socket still answers reads, and every
+/// mutation is refused before it can have an effect (CFG-08).
+fn start_control(
+    listener: Option<&Listener>,
+    storage: &mut Storage,
+    durable: bool,
+) -> Option<ControlServer> {
+    let listener = listener?;
+    let epoch = storage
+        .store
+        .as_mut()
+        .filter(|_| durable)
+        .and_then(|store| store.control_begin_epoch().ok());
+    let owner = ControlOwner::new(OwnerMode::Gui, epoch.unwrap_or(0), epoch.is_some()).ok()?;
+    let server = ControlServer::start(
+        listener,
+        OwnerMode::Gui,
+        u64::try_from(owner.epoch).unwrap_or(0),
+    );
+    match server {
+        Ok(server) => {
+            storage.control = Some(owner);
+            Some(server)
+        }
+        Err(error) => {
+            let _ = writeln!(
+                std::io::stderr().lock(),
+                "rust-microsip: control socket unavailable: {error}"
+            );
+            None
+        }
     }
 }
 
@@ -458,6 +507,7 @@ fn open_storage(
                     store: Some(store),
                     warning: None,
                     recover_interrupted: single,
+                    control: None,
                 },
                 Some(values),
             )
@@ -475,6 +525,7 @@ fn open_storage(
                             .to_owned(),
                     ),
                     recover_interrupted: false,
+                    control: None,
                 },
                 None,
             )
@@ -620,8 +671,9 @@ fn desktop(args: &CliArgs) -> ExitCode {
     // The settings database is a configuration layer: open it first.
     // Interrupted-call recovery needs the single-instance lock: without it,
     // calls left "open" may belong to another running window.
-    let (storage, saved) = open_storage(&ctx.env, listener.is_some());
+    let (mut storage, saved) = open_storage(&ctx.env, listener.is_some());
     let durable = saved.is_some();
+    let control = start_control(listener.as_ref(), &mut storage, durable);
     ctx.sqlite = config::sqlite_layer(&saved.unwrap_or_default());
     let resolved = config::resolve(&ctx);
     let mut notices = Vec::new();
@@ -749,6 +801,7 @@ fn desktop(args: &CliArgs) -> ExitCode {
         }
     });
     let backend = EngineBackend {
+        control,
         engine: Some(engine),
         repaint,
         pending: RefCell::new(notices),
@@ -856,7 +909,112 @@ fn watch_signals(
     }
 }
 
+/// Run one control command against the running owner (never starts one).
+fn control_cli(raw: &[String]) -> ExitCode {
+    let mut command = match cli::parse(raw) {
+        Ok(command) => command,
+        Err(message) => return fail(&format!("rust-microsip: {message}"), 2),
+    };
+    if command.from_stdin {
+        let mut line = String::new();
+        if std::io::stdin()
+            .lock()
+            .take(128)
+            .read_line(&mut line)
+            .is_ok()
+        {
+            match &mut command.operation {
+                Operation::CallDtmf { digits: value, .. }
+                | Operation::CallDial { target: value }
+                | Operation::CallTransfer { target: value, .. } => *value = line.trim().to_owned(),
+                _ => {}
+            }
+        }
+    }
+    let rng = ring::rand::SystemRandom::new();
+    let random = |prefix: &str| {
+        let mut bytes = [0u8; 12];
+        ring::rand::SecureRandom::fill(&rng, &mut bytes)
+            .map(|()| {
+                format!(
+                    "{prefix}-{}",
+                    bytes.iter().map(|b| format!("{b:02x}")).collect::<String>()
+                )
+            })
+            .unwrap_or_else(|_| format!("{prefix}-{}", std::process::id()))
+    };
+    let key = command.key.clone().unwrap_or_else(|| random("cli"));
+    let request = cli::request(&command, &random("req"), &key);
+    let shown_key = request.idempotency_key.clone();
+    let response = match request.validate() {
+        Err(error) => Response::error(&request.request_id, &error),
+        Ok(()) => match default_runtime_dir()
+            .map_err(|_| ControlSocketError::Unavailable)
+            .and_then(|dir| ControlClient::connect(&dir))
+        {
+            Ok(mut client) => client.call(&request).unwrap_or_else(|error| {
+                let code = if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) {
+                    ErrorCode::Timeout
+                } else {
+                    ErrorCode::EngineUnavailable
+                };
+                Response::error(
+                    &request.request_id,
+                    &ControlError::new(
+                        code,
+                        "the running instance did not answer; query the operation before retrying",
+                    ),
+                )
+            }),
+            Err(ControlSocketError::Unavailable) => Response::error(
+                &request.request_id,
+                &ControlError::new(
+                    ErrorCode::EngineUnavailable,
+                    "rust-microsip is not running; nothing was started",
+                ),
+            ),
+            Err(error) => Response::error(
+                &request.request_id,
+                &ControlError::new(
+                    ErrorCode::EngineUnavailable,
+                    &format!("cannot reach the running instance: {error}"),
+                ),
+            ),
+        },
+    };
+    let text = if command.json {
+        format!("{}\n", serde_json::to_string(&response).unwrap_or_default())
+    } else {
+        cli::render(&response, shown_key.as_deref())
+    };
+    let _ = std::io::stdout().lock().write_all(text.as_bytes());
+    ExitCode::from(response.exit_code())
+}
+
 fn main() -> ExitCode {
+    let raw: Vec<String> = std::env::args_os()
+        .skip(1)
+        .map_while(|a| a.into_string().ok())
+        .collect();
+    let control = raw.first().is_some_and(|first| cli::is_control(first))
+        || (raw.first().map(String::as_str) == Some("config")
+            && raw.get(1).map(String::as_str) == Some("show"));
+    if control {
+        return control_cli(&raw);
+    }
+    if raw.first().map(String::as_str) == Some("mcp") {
+        // stdout belongs to the protocol; diagnostics go to stderr only.
+        if raw.get(1..) != Some(&["--stdio".to_owned()][..]) {
+            return fail("rust-microsip: usage: rust-microsip mcp --stdio", 2);
+        }
+        return match rust_microsip::mcp::run_stdio(default_runtime_dir().ok()) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(message) => fail(&format!("rust-microsip: {message}"), 1),
+        };
+    }
     let args = match config::parse_args(std::env::args_os().skip(1)) {
         Ok(args) => args,
         // Never echo arguments: they may contain secrets.
@@ -864,9 +1022,10 @@ fn main() -> ExitCode {
     };
     match args.command {
         CliCommand::Help => print(&format!(
-            "rust-microsip {}\n\n{}",
+            "rust-microsip {}\n\n{}\n{}",
             env!("CARGO_PKG_VERSION"),
-            config::HELP
+            config::HELP,
+            cli::HELP
         )),
         CliCommand::Version => print(concat!("rust-microsip ", env!("CARGO_PKG_VERSION"), "\n")),
         CliCommand::Doctor { json } => {

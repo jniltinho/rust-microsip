@@ -1,17 +1,24 @@
-//! Linux desktop integration: single instance with protected local IPC,
+//! Linux desktop integration: single instance with protected local IPC, the
+//! authenticated control socket for the CLI and MCP server,
 //! strict `sip:`/`tel:` link parsing, incoming-call notifications and
 //! Secret Service password storage.
 //!
 //! Nothing here executes shell commands or installs files: the desktop entry
 //! is only rendered, and installing it is a user-level opt-in left to the caller.
 
+mod control;
 mod instance;
 mod notify;
 mod secrets;
 mod uri;
 
+pub use control::{
+    ControlClient, ControlServer, ControlSocketError, GLOBAL_RATE, Incoming, MAX_CONNECTIONS,
+    PER_CONNECTION_RATE, REPLY_DEADLINE,
+};
 pub use instance::{
-    Ack, Acquired, InstanceError, Listener, MAX_LINE, Request, acquire, default_runtime_dir,
+    Ack, Acquired, InstanceError, Listener, MAX_LINE, Request, acquire, acquire_owner,
+    default_runtime_dir,
 };
 pub use notify::{
     CallAction, Delivery, NotificationAction, Notifier, NotifierStatus, sanitize_caller,

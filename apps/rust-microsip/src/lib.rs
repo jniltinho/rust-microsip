@@ -2,4 +2,7 @@
 //! state reducer. The binary wires it to the telephony engine, audio bridge
 //! and configuration.
 
+pub mod cli;
+pub mod mcp;
+pub mod owner;
 pub mod ui;

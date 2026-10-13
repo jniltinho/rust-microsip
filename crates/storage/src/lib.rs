@@ -16,16 +16,18 @@ use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+mod control;
 mod csv;
 mod settings;
 #[cfg(test)]
 mod tests;
 
+pub use control::{AUDIT_RETENTION_DAYS, LEDGER_RETENTION_SECS, OperationRecord, OperationState};
 pub use csv::{CSV_MAX_BYTES, CSV_MAX_RECORDS, CsvIssue, CsvIssueKind, CsvPreview, preview_csv};
 pub use settings::{CONFIG_KEYS, MAX_CONFIG_VALUE_LEN};
 
 /// Newest schema version this release can read and write.
-pub const SCHEMA_VERSION: i64 = 3;
+pub const SCHEMA_VERSION: i64 = 4;
 /// Default call-history retention, in days.
 pub const DEFAULT_RETENTION_DAYS: u32 = 90;
 /// Maximum numbers stored for one contact.
@@ -41,7 +43,7 @@ pub const MAX_SESSION_KEY_LEN: usize = 128;
 
 const BUSY_TIMEOUT: Duration = Duration::from_secs(2);
 
-const MIGRATIONS: [&str; 3] = [
+const MIGRATIONS: [&str; 4] = [
     r"
 CREATE TABLE calls (
     id INTEGER PRIMARY KEY,
@@ -107,6 +109,36 @@ CREATE TABLE preferences (
     r"
 ALTER TABLE calls ADD COLUMN open INTEGER NOT NULL DEFAULT 0 CHECK (open IN (0, 1));
 ",
+    // v4: control ledger, audit and owner epochs (CLI/MCP). Payloads are only
+    // HMACs under a per-epoch key held in memory; no digits or full numbers.
+    r"
+CREATE TABLE control_epochs (
+    epoch INTEGER PRIMARY KEY,
+    started_utc INTEGER NOT NULL
+);
+CREATE TABLE control_operations (
+    operation_id TEXT PRIMARY KEY,
+    epoch INTEGER NOT NULL,
+    idempotency_key TEXT NOT NULL,
+    operation TEXT NOT NULL,
+    payload_mac BLOB NOT NULL CHECK (length(payload_mac) = 32),
+    state TEXT NOT NULL CHECK (state IN ('awaiting_approval', 'executing', 'succeeded',
+        'failed', 'denied', 'expired', 'outcome_unknown')),
+    outcome TEXT,
+    created_utc INTEGER NOT NULL,
+    updated_utc INTEGER NOT NULL,
+    UNIQUE (epoch, idempotency_key)
+);
+CREATE INDEX control_operations_key ON control_operations (idempotency_key, epoch DESC);
+CREATE TABLE control_audit (
+    id INTEGER PRIMARY KEY,
+    at_utc INTEGER NOT NULL,
+    operation TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    detail TEXT NOT NULL
+);
+CREATE INDEX control_audit_at ON control_audit (at_utc);
+",
 ];
 
 #[cfg(test)]
@@ -152,6 +184,10 @@ pub enum InvalidField {
     /// A secret reference that is empty, too long or has control characters.
     #[error("secret reference")]
     SecretRef,
+    /// Control ledger or audit text that is empty, too long or has control
+    /// characters.
+    #[error("control record")]
+    ControlText,
 }
 
 /// Storage failure. `Display` never includes user data or paths.

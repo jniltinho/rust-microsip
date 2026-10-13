@@ -6,14 +6,14 @@
 #
 # Usage: sh docker/asterisk/suite.sh [SCENARIO...]
 #   Scenarios: engine-lab engine-network gui-link gui-frozen-exit gui-theme
-#   gui-a11y gui-a11y-call (default: all). SKIP_BUILD=1 reuses the image,
+#   gui-a11y gui-a11y-call gui-control (default: all). SKIP_BUILD=1 reuses the image,
 #   which must carry the current commit in its label.
 # Exit status 0 only when every requested scenario wrote a passing report
 # and no lab container, network or volume is left.
 set -u
 cd "$(dirname "$0")/../.."
 [ "$(id -u)" -ne 0 ] || { echo "ERROR: run the suite as a non-root user." >&2; exit 1; }
-all="engine-lab engine-network gui-link gui-frozen-exit gui-theme gui-a11y gui-a11y-call"
+all="engine-lab engine-network gui-link gui-frozen-exit gui-theme gui-a11y gui-a11y-call gui-control"
 scenarios=${*:-$all}
 for scenario in $scenarios; do
     case " $all " in *" $scenario "*) ;; *) echo "unknown scenario: $scenario" >&2; exit 2 ;; esac
@@ -280,6 +280,34 @@ gui_a11y_call() {
     report gui-a11y-call "$result" "{\"channels_in_call\": $(j "$in_call"), \"channels_after_end\": $(j "$ended"), \"call_controls_reached_by_tab\": $reached, \"tab_cycle_wraps\": $(j "$cycle")}"
 }
 
+gui_control() {
+    pbx_up; gui control
+    wait_phase "$out" requested 120; requested=$(channels); ack requested
+    wait_phase "$out" dialed 60; dialed=$(channels); ack dialed
+    wait_phase "$out" replayed 60; replayed=$(channels); ack replayed
+    wait_phase "$out" hangup-requested 60; before_hangup=$(channels); ack hangup-requested
+    wait_phase "$out" hung-up 60; hung_up=$(channels); ack hung-up
+    wait_phase "$out" dial-denied 60; denied=$(channels); ack dial-denied
+    wait_phase "$out" mcp-requested 60; mcp_requested=$(channels); ack mcp-requested
+    wait_phase "$out" mcp-disconnected 120; after_mcp=$(channels); ack mcp-disconnected
+    wait_phase "$out" mcp-ended 60; mcp_ended=$(channels); ack mcp-ended
+    gui_finish; pbx_down
+    v() { value "$1"; }
+    result=fail
+    [ "$(v registration)" = registered ] && [ "$(v registration_b)" = registered ] \
+        && [ "$(v prompt_focus)" = "pushbutton:Denyrequest" ] && [ "$before_hangup" = 1 ] \
+        && [ "$requested" = 0 ] && [ "$denied" = 0 ] && [ "$mcp_requested" = 0 ] && [ "$(v dial_exit)" = 3 ] && [ "$(v dial_status)" = approval_required ] \
+        && [ "$dialed" = 1 ] && [ "$(v op_state)" = succeeded ] && [ "$(v replay_exit)" = 0 ] \
+        && [ "$(v conflict)" = conflict ] && [ "$replayed" = 1 ] && [ "$(v status_has_remote)" = False ] \
+        && [ "$(v stale)" = not_found ] && [ "$hung_up" = 0 ] && [ "$(v dnd_state)" = denied ] \
+        && [ "$(v dnd_after)" = False ] && [ "$(v history_exit)" = 3 ] && [ "$(v no_owner_exit)" = 4 ] \
+        && [ "$(v mcp_exit)" = 0 ] && [ "$(v mcp_tools)" = 15 ] && [ "$(v mcp_dial)" = approval_required ] \
+        && [ "$(v mcp_state)" = succeeded ] && [ "$(v mcp_replay)" = ok ] && [ "$(v mcp_same)" = True ] \
+        && [ "$after_mcp" = 1 ] && [ "$mcp_ended" = 0 ] \
+        && ! grep -q spawned "$out/results.txt" && result=pass
+    report gui-control "$result" "{\"channels_while_awaiting_approval\": $(j "$requested"), \"channels_after_denied_dial\": $(j "$denied"), \"channels_before_hangup_approval\": $(j "$before_hangup"), \"prompt_initial_focus\": \"$(v prompt_focus)\", \"channels_while_mcp_awaits_approval\": $(j "$mcp_requested"), \"channels_after_approved_dial\": $(j "$dialed"), \"channels_after_replay\": $(j "$replayed"), \"channels_after_approved_hangup\": $(j "$hung_up"), \"dial_exit\": $(j "$(v dial_exit)"), \"operation_state\": \"$(v op_state)\", \"replay_exit\": $(j "$(v replay_exit)"), \"reused_key_other_payload\": \"$(v conflict)\", \"stale_version\": \"$(v stale)\", \"denied_dnd_state\": \"$(v dnd_state)\", \"dnd_after_denial\": \"$(v dnd_after)\", \"history_without_grant_exit\": $(j "$(v history_exit)"), \"no_owner_exit\": $(j "$(v no_owner_exit)"), \"mcp_tools\": $(j "$(v mcp_tools)"), \"mcp_dial\": \"$(v mcp_dial)\", \"mcp_state_after_approval\": \"$(v mcp_state)\", \"mcp_replay\": \"$(v mcp_replay)\", \"mcp_replay_same_operation\": \"$(v mcp_same)\", \"channels_after_mcp_disconnect\": $(j "$after_mcp"), \"channels_after_cleanup\": $(j "$mcp_ended")}"
+}
+
 for scenario in $scenarios; do
     case $scenario in
         engine-lab) engine_lab ;;
@@ -289,6 +317,7 @@ for scenario in $scenarios; do
         gui-theme) gui_theme ;;
         gui-a11y) gui_a11y ;;
         gui-a11y-call) gui_a11y_call ;;
+        gui-control) gui_control ;;
     esac
 done
 cleanup

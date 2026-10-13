@@ -262,3 +262,29 @@ fn malformed_files_never_echo_secret_lines() -> std::io::Result<()> {
     }
     std::fs::remove_dir_all(dir)
 }
+
+#[test]
+fn control_commands_never_start_an_owner() -> std::io::Result<()> {
+    let dir = temp_dir("control")?;
+    let runtime = dir.to_string_lossy().into_owned();
+    let output = run(&["status", "--json"], &[("XDG_RUNTIME_DIR", &runtime)])?;
+    assert_eq!(output.status.code(), Some(4), "{}", text(&output));
+    let body = String::from_utf8_lossy(&output.stdout);
+    assert!(body.contains("\"engine_unavailable\""), "{body}");
+    // Nothing was created: no lock, socket or database next to it.
+    assert!(!dir.join("rust-microsip").join("instance.lock").exists());
+    let output = run(&["call", "dial", "1002"], &[("XDG_RUNTIME_DIR", &runtime)])?;
+    assert_eq!(output.status.code(), Some(4));
+    assert!(text(&output).contains("idempotency key: cli-"));
+    // There is no way to approve from the command line.
+    for args in [
+        &["approve", "op-1"][..],
+        &["call", "dial", "1002", "--yes"],
+        &["call", "dial", "1002", "--confirm"],
+        &["grant", "call_dial"],
+    ] {
+        let output = run(args, &[("XDG_RUNTIME_DIR", &runtime)])?;
+        assert_eq!(output.status.code(), Some(2), "{args:?}: {}", text(&output));
+    }
+    std::fs::remove_dir_all(dir)
+}

@@ -842,3 +842,104 @@ fn killed_mid_call_is_recovered_once_as_interrupted() -> TestResult {
     assert_eq!(count(&store, "calls")?, 3);
     Ok(())
 }
+
+fn record(id: &str, epoch: i64, key: &str, state: OperationState) -> OperationRecord {
+    OperationRecord {
+        operation_id: id.into(),
+        epoch,
+        idempotency_key: key.into(),
+        operation: "call_dial".into(),
+        payload_mac: vec![7; 32],
+        state,
+        outcome: None,
+        created_utc: now_utc(),
+    }
+}
+
+#[test]
+fn control_ledger_keys_epochs_and_final_states() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    let first = store.control_begin_epoch()?;
+    store.control_insert(&record(
+        "op-1",
+        first,
+        "k1",
+        OperationState::AwaitingApproval,
+    ))?;
+    store.control_insert(&record("op-2", first, "k2", OperationState::Executing))?;
+    store.control_insert(&record("op-3", first, "k3", OperationState::Executing))?;
+    // Same key twice in one epoch is refused by the database.
+    assert!(
+        store
+            .control_insert(&record(
+                "op-4",
+                first,
+                "k1",
+                OperationState::AwaitingApproval
+            ))
+            .is_err()
+    );
+    store.control_update("op-3", OperationState::Succeeded, Some("{\"call_id\":4}"))?;
+    // Final states never change again.
+    assert!(matches!(
+        store.control_update("op-3", OperationState::Failed, None),
+        Err(StorageError::NotFound)
+    ));
+    // A restart opens a new epoch: waiting expires, maybe-sent becomes unknown.
+    let second = store.control_begin_epoch()?;
+    assert_eq!(second, first + 1);
+    let state = |store: &Store, id: &str| -> Result<Option<OperationState>> {
+        Ok(store.control_get(id)?.map(|r| r.state))
+    };
+    assert_eq!(state(&store, "op-1")?, Some(OperationState::Expired));
+    assert_eq!(state(&store, "op-2")?, Some(OperationState::OutcomeUnknown));
+    assert_eq!(state(&store, "op-3")?, Some(OperationState::Succeeded));
+    assert_eq!(
+        store
+            .control_get("op-3")?
+            .and_then(|r| r.outcome)
+            .as_deref(),
+        Some("{\"call_id\":4}")
+    );
+    // The key is found in the old epoch (the owner answers stale_epoch).
+    store.control_insert(&record("op-5", second, "k1", OperationState::Executing))?;
+    assert_eq!(store.control_find_key("k1")?.map(|r| r.epoch), Some(second));
+    assert_eq!(store.control_find_key("k2")?.map(|r| r.epoch), Some(first));
+    assert!(store.control_find_key("missing")?.is_none());
+    // Bad text and bad MAC sizes are rejected.
+    let mut bad = record("op\n6", second, "k6", OperationState::Executing);
+    assert!(store.control_insert(&bad).is_err());
+    bad.operation_id = "op-6".into();
+    bad.payload_mac = vec![1; 8];
+    assert!(store.control_insert(&bad).is_err());
+    Ok(())
+}
+
+#[test]
+fn control_rows_expire_and_audit_is_sanitized_and_clearable() -> TestResult {
+    let mut store = Store::open_in_memory()?;
+    let epoch = store.control_begin_epoch()?;
+    let mut old = record("old", epoch, "k-old", OperationState::Succeeded);
+    old.created_utc = now_utc() - LEDGER_RETENTION_SECS - 10;
+    store.control_insert(&old)?;
+    assert!(
+        store.control_get("old")?.is_none(),
+        "past retention is not served"
+    );
+    store.control_begin_epoch()?;
+    assert_eq!(
+        count(&store, "control_operations")?,
+        0,
+        "purged at the next epoch"
+    );
+    store.control_audit("call_dial", "approved", "destination ***02")?;
+    assert!(
+        store
+            .control_audit("call_dtmf", "approved", "bad\u{7}")
+            .is_err()
+    );
+    assert_eq!(store.control_audit_rows(10)?.len(), 1);
+    assert_eq!(store.control_audit_clear()?, 1);
+    assert!(store.control_audit_rows(10)?.is_empty());
+    Ok(())
+}

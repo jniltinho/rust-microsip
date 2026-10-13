@@ -18,6 +18,12 @@ apps/rust-microsip/src/**
 !apps/rust-microsip/src/ui/
 apps/rust-microsip/src/ui/**
 !apps/rust-microsip/src/ui/*.rs
+!apps/rust-microsip/src/ui/state/
+apps/rust-microsip/src/ui/state/**
+!apps/rust-microsip/src/ui/state/*.rs
+!apps/rust-microsip/src/mcp/
+apps/rust-microsip/src/mcp/**
+!apps/rust-microsip/src/mcp/*.rs
 !apps/rust-microsip/assets/
 apps/rust-microsip/assets/**
 !apps/rust-microsip/assets/NotoSans-Regular.ttf
@@ -29,6 +35,9 @@ apps/rust-microsip/assets/icons/**
 !apps/rust-microsip/tests/
 apps/rust-microsip/tests/**
 !apps/rust-microsip/tests/*.rs
+!apps/rust-microsip/examples/
+apps/rust-microsip/examples/**
+!apps/rust-microsip/examples/*.rs
 !docker/
 docker/**
 !docker/rust-components.sha256
@@ -115,3 +124,12 @@ crates/platform/**
 !crates/platform/src/
 crates/platform/src/**
 !crates/platform/src/*.rs
+!crates/platform/src/control/
+crates/platform/src/control/**
+!crates/platform/src/control/*.rs
+!crates/control/
+crates/control/**
+!crates/control/Cargo.toml
+!crates/control/src/
+crates/control/src/**
+!crates/control/src/*.rs

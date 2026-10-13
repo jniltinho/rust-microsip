@@ -47,7 +47,18 @@ const ALLOWED: &[(&str, &[&str])] = &[
     ),
     (
         "rust-microsip-platform",
-        &["rust-microsip-core", "zbus", "thiserror"],
+        &[
+            "rust-microsip-core",
+            "rust-microsip-control",
+            "rustix",
+            "serde_json",
+            "zbus",
+            "thiserror",
+        ],
+    ),
+    (
+        "rust-microsip-control",
+        &["rust-microsip-core", "serde", "serde_json", "thiserror"],
     ),
     (
         "rust-microsip",
@@ -58,6 +69,10 @@ const ALLOWED: &[(&str, &[&str])] = &[
             "rust-microsip-config",
             "rust-microsip-storage",
             "rust-microsip-platform",
+            "rust-microsip-control",
+            "ring",
+            "serde_json",
+            "rmcp",
             "eframe",
             "wgpu",
             "secrecy",

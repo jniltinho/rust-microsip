@@ -1,0 +1,18 @@
+[package]
+name = "rust-microsip-control"
+description = "Local control contract (JSON v1) shared by the owner, the CLI and the MCP server"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+rust-microsip-core = { path = "../core" }
+serde = { version = "=1.0.229", default-features = false, features = ["std", "derive"] }
+serde_json = "=1.0.154"
+thiserror = "=2.0.21"
+
+[lints]
+workspace = true

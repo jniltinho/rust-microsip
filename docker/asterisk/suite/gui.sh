@@ -3,7 +3,7 @@
 # private Xvfb, private D-Bus session with AT-SPI, the release app, and a
 # fictional lab account. Progress is signalled to the host through
 # /capture/phase-* files; the host checks the PBX at each phase.
-# Usage (by suite.sh): gui.sh link|frozen-exit|theme|a11y|a11y-call
+# Usage (by suite.sh): gui.sh link|frozen-exit|theme|a11y|a11y-call|control
 set -u
 umask 077
 scenario=$1
@@ -101,6 +101,81 @@ case "$scenario" in
         $tool sweep "Transfer" "Transfer to" >> /capture/screens.txt; echo "transfer_sweep_exit=$?" >> /capture/results.txt
         $tool press Cancel End >> /capture/atspi-steps.txt; sleep 2; checkpoint ended
         stop_app app ;;
+    control) # AG-01/02/04/05: CLI clients against the window as owner.
+        start_app app
+        cli() { "$app_bin" "$@" --json 2>>/capture/cli-stderr.log; }
+        # The prompt arms its buttons one second after it appears.
+        decide() { sleep 1.5; $tool press "$1" >> /capture/atspi-steps.txt; }
+        field() { python3 -I -c 'import json,sys; d=json.load(sys.stdin); print(eval(sys.argv[1], {"d": d}))' "$1"; }
+        # Two clients at once read coherent status (no personal data).
+        cli status > /capture/status-a.json & first=$!
+        cli status > /capture/status-b.json; wait "$first"
+        echo "registration=$(field 'd["data"]["registration"]' < /capture/status-a.json)" >> /capture/results.txt
+        echo "registration_b=$(field 'd["data"]["registration"]' < /capture/status-b.json)" >> /capture/results.txt
+        cli call dial 600 --key suite-dial > /capture/dial.json; echo "dial_exit=$?" >> /capture/results.txt
+        op=$(field 'd["operation_id"]' < /capture/dial.json)
+        echo "dial_status=$(field 'd["status"]' < /capture/dial.json)" >> /capture/results.txt
+        sleep 2; echo "prompt_focus=$($tool focused | tr -d "' ")" >> /capture/results.txt
+        checkpoint requested
+        decide "Allow request"; sleep 4
+        checkpoint dialed
+        cli operation get "$op" > /capture/op.json
+        echo "op_state=$(field 'd["data"]["state"]' < /capture/op.json)" >> /capture/results.txt
+        # Same key again: reported, never repeated. Same key, other payload: conflict.
+        cli call dial 600 --key suite-dial > /capture/replay.json; echo "replay_exit=$?" >> /capture/results.txt
+        cli call dial 602 --key suite-dial > /capture/conflict.json
+        echo "conflict=$(field 'd["error"]["code"]' < /capture/conflict.json)" >> /capture/results.txt
+        sleep 2; checkpoint replayed
+        cli status > /capture/status-call.json
+        call_id=$(field 'd["data"]["call"]["call_id"]' < /capture/status-call.json)
+        version=$(field 'd["data"]["call"]["version"]' < /capture/status-call.json)
+        echo "status_has_remote=$(field '"remote" in d["data"]["call"] or "600" in str(d["data"]["call"])' < /capture/status-call.json)" >> /capture/results.txt
+        # A stale version is refused before anything is recorded.
+        cli call hangup "$call_id" 0 --key suite-stale > /capture/stale.json
+        echo "stale=$(field 'd["error"]["code"]' < /capture/stale.json)" >> /capture/results.txt
+        cli call hangup "$call_id" "$version" --key suite-hangup > /capture/hangup.json
+        sleep 1; checkpoint hangup-requested
+        decide "Allow request"; sleep 3
+        checkpoint hung-up
+        # Denied: no effect.
+        cli dnd on --key suite-dnd > /capture/dnd.json
+        dnd_op=$(field 'd["operation_id"]' < /capture/dnd.json)
+        decide "Deny request"; sleep 1
+        cli operation get "$dnd_op" > /capture/dnd-op.json
+        echo "dnd_state=$(field 'd["data"]["state"]' < /capture/dnd-op.json)" >> /capture/results.txt
+        cli status > /capture/status-end.json
+        echo "dnd_after=$(field 'd["data"]["dnd"]' < /capture/status-end.json)" >> /capture/results.txt
+        # A denied dial never reaches the PBX.
+        cli call dial 600 --key suite-denied > /capture/denied.json
+        sleep 2; decide "Deny request"; sleep 2
+        checkpoint dial-denied
+        # Personal reads need a grant.
+        cli history list > /capture/history.json; echo "history_exit=$?" >> /capture/results.txt
+        # MCP through the official SDK client: dial, approve, replay, disconnect.
+        /usr/local/bin/mcp-probe "$app_bin" 600 mcp-dial > /capture/mcp.jsonl 2> /capture/mcp-stderr.log &
+        probe=$!
+        timeout 30 sh -c 'until grep -q "\"step\":\"dial\"" /capture/mcp.jsonl; do sleep 0.2; done'
+        sleep 1; checkpoint mcp-requested
+        decide "Allow request"
+        wait "$probe"; echo "mcp_exit=$?" >> /capture/results.txt
+        line() { grep "\"step\":\"$1\"" /capture/mcp.jsonl; }
+        echo "mcp_tools=$(line tools | field 'd["count"]')" >> /capture/results.txt
+        echo "mcp_dial=$(line dial | field 'd["status"]')" >> /capture/results.txt
+        echo "mcp_state=$(line approved | field 'd["state"]')" >> /capture/results.txt
+        echo "mcp_replay=$(line replay | field 'd["status"]')" >> /capture/results.txt
+        echo "mcp_same=$(line replay | field 'd["same_operation"]')" >> /capture/results.txt
+        checkpoint mcp-disconnected
+        # The call stays with the owner after the client left; end it from the CLI.
+        cli status > /capture/status-mcp.json
+        call_id=$(field 'd["data"]["call"]["call_id"]' < /capture/status-mcp.json)
+        version=$(field 'd["data"]["call"]["version"]' < /capture/status-mcp.json)
+        cli call hangup "$call_id" "$version" --key mcp-cleanup > /capture/mcp-hangup.json
+        decide "Allow request"; sleep 3
+        checkpoint mcp-ended
+        stop_app app
+        # No owner: unavailable, nothing started.
+        cli status > /capture/status-none.json; echo "no_owner_exit=$?" >> /capture/results.txt
+        pgrep -x rust-microsip > /dev/null && echo "spawned=1" >> /capture/results.txt ;;
     *) echo "unknown scenario $scenario" > /capture/failure ;;
 esac
 phase exited
