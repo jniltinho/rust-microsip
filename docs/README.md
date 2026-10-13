@@ -47,5 +47,5 @@ This directory holds the project's design records, evidence and guides. Start wi
 ## Later releases
 
 - macOS and Windows builds (the engine and media layers are already portable).
-- A refined visual design following the MicroSIP layout.
+- A refined visual design following the MicroSIP layout: square corners, design tokens, minimalist Material Symbols Sharp icons ([proposal, awaiting owner approval](../openspec/changes/refine-native-ui/proposal.md)).
 - A web/WASM softphone with WebRTC ([proposal](../openspec/changes/add-web-wasm-softphone/proposal.md)).

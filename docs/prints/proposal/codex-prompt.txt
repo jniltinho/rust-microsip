@@ -1,0 +1,23 @@
+You are a senior product designer. Generate UI mockup IMAGES (PNG, use your image generation tool) for a native Linux SIP softphone called "rust-microsip". Save every image in the current directory with the exact file names below. Do not write code; do not modify design.md.
+
+Inputs in this directory:
+- microsip-reference.png: the MicroSIP Lite window the layout must stay close to.
+- app-current-light.png and app-in-call-dark.png: the current plain app.
+- design.md: the approved direction, tokens (colors per theme), icon family and layout order. Follow it exactly.
+
+Style: modern, premium ("AAA"), calm and precise. ABSOLUTELY NO rounded corners anywhere (square keys, square buttons, square fields, square popups, square presence dot). Flat surfaces, 1 px hairlines, no gradients, no drop shadows, one accent blue, green Call and red End. Minimalist sharp line icons in the style of Material Symbols Sharp, always paired with text labels. Font: Noto Sans. Compact portrait window about 312x480 logical pixels, rendered at 2x (624x960) on a neutral background, no OS window chrome beyond a thin title bar reading "rust-microsip". Keep MicroSIP's element order: tab strip (Phone, Calls, Contacts with icons; Menu icon at right), number field, 3x4 keypad with letters, Back/+/C row, wide Call + narrow End, speaker and microphone rows, DND/MUTE/HOLD/XFER toggles, status bar with square presence indicator, account and "UDP · RTP" or "TLS · SRTP".
+
+Use only fictional data: account "1001@pbx.example", contacts "Ana Lima 1002", "Bruno Costa 1003", "Support 600".
+
+Images to create:
+1. ui-phone-idle-light.png — Phone tab idle, light theme, registered.
+2. ui-phone-idle-dark.png — same, dark theme.
+3. ui-in-call-light.png — established call to "Ana Lima · 1002", timer 01:24, lock icon + "Encrypted (SRTP)", MUTE toggled on (filled icon, accent top bar), green state strip on the call panel.
+4. ui-in-call-dark.png — same in dark theme, but "Unencrypted (RTP)" with an open-lock warning in amber.
+5. ui-incoming-dark.png — incoming call banner "Bruno Costa · 1003" with green Answer and red Reject, dark theme.
+6. ui-calls-light.png — Calls tab: square segmented filter All/In/Out/Missed, search field, two-line rows with direction icons (missed in red), light theme.
+7. ui-contacts-dark.png — Contacts tab with favorites star, two-line rows, Add and Import buttons, dark theme.
+8. ui-settings-light.png — Settings grouped in sections Account / Audio / Appearance (Light/Dark/System segmented) / Integration, light theme.
+9. ui-overview.png — one wide board showing images 1, 3, 4 and 6 side by side next to the MicroSIP reference for comparison, with small captions.
+
+When finished, list the files you created and one sentence per image describing it.
