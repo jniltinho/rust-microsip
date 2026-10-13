@@ -5,8 +5,12 @@ use rust_microsip_telephony::{
     g0_calls::{
         CallProbeError, MediaMeasurement,
         secure::{
-            CertificateRejection, NegativeOffer, probe_rejected_offer, probe_secure_call_pair,
-            probe_tls_certificate_rejection,
+            CertificateRejection, NegativeOffer,
+            controls::{
+                Destination, IvrCase, Window, probe_secure_hold, probe_secure_ivr,
+                probe_secure_transfer,
+            },
+            probe_rejected_offer, probe_secure_call_pair, probe_tls_certificate_rejection,
         },
     },
 };
@@ -52,6 +56,9 @@ fn private_file(path: &Path, max: u64) -> Result<Vec<u8>, CallProbeError> {
 fn measurement(m: MediaMeasurement) -> serde_json::Value {
     serde_json::json!({"sent_packets":m.sent_packets,"received_packets":m.received_packets,
         "rms":m.rms,"remote_to_own_power_ratio":m.remote_to_own_power_ratio,"lost_packets":m.lost_packets,"late_packets":m.late_packets})
+}
+fn window(w: Window) -> serde_json::Value {
+    serde_json::json!({"sent":w.sent,"received":w.received,"rms":w.rms,"ratio":w.ratio})
 }
 fn control_measurement(
     m: rust_microsip_telephony::g0_calls::secure::ControlMeasurement,
@@ -202,11 +209,65 @@ async fn run() -> Result<(), CallProbeError> {
             serde_json::json!({"negative_tls":label,"rejected_before_call":true,"typed_certificate_error_verified":true,"sip_endpoint_constructed":false})
         );
     }
+    let secure = |name: &str| -> Result<RegistrationConfig, CallProbeError> {
+        RegistrationConfig::new(
+            SocketAddr::new(ip, 5061),
+            Transport::Tls {
+                ca_pem: ca.clone(),
+                server_name: "pbx".into(),
+            },
+            name.into(),
+            SecretString::from(
+                accounts
+                    .get(name)
+                    .ok_or(CallProbeError::InvalidConfig)?
+                    .expose_secret(),
+            ),
+            Duration::from_secs(30),
+        )
+        .map_err(|_| CallProbeError::InvalidConfig)
+    };
+    let (mut ivr, mut hold, mut transfer) = (Vec::new(), Vec::new(), Vec::new());
+    for codec in [Codec::Pcma, Codec::Pcmu] {
+        for case in [IvrCase::Accepted, IvrCase::Rejected] {
+            let r =
+                probe_secure_ivr(secure("1201")?, codec, case, CancellationToken::new()).await?;
+            let row = serde_json::json!({"codec":r.codec,"case":format!("{:?}",r.case),"event_packets_sent":r.event_packets_sent,"tone":window(r.tone)});
+            println!("{}", serde_json::json!({"secure_ivr_completed":row}));
+            ivr.push(row);
+        }
+        let r = probe_secure_hold(
+            secure("1201")?,
+            secure("1202")?,
+            codec,
+            CancellationToken::new(),
+        )
+        .await?;
+        let row = serde_json::json!({"codec":r.codec,"before":r.before.map(window),"held":r.held.map(window),"resumed":r.resumed.map(window),"acked_reinvites":r.acked_reinvites});
+        println!("{}", serde_json::json!({"secure_hold_completed":row}));
+        hold.push(row);
+        for destination in [Destination::ReferenceTone, Destination::Missing] {
+            let r = probe_secure_transfer(
+                secure("1201")?,
+                secure("1202")?,
+                codec,
+                destination,
+                CancellationToken::new(),
+            )
+            .await?;
+            let row = serde_json::json!({"codec":r.codec,"destination":format!("{:?}",r.destination),"refer_status":r.refer_status,"final_status":r.final_status,
+                "notify_count":r.notifies.0,"provisional_notify_count":r.notifies.1,"before":r.before.map(window),
+                "restored":r.restored.map(|w|w.map(window)),"destination_tone":r.destination_tone.map(window)});
+            println!("{}", serde_json::json!({"secure_transfer_completed":row}));
+            transfer.push(row);
+        }
+    }
     println!(
         "{}",
         serde_json::json!({"schema_version":1,"fixture":"two-rust-endpoints-initial-sdes-srtp-srtcp",
+        "secure_ivr":ivr,"secure_hold":hold,"secure_transfer":transfer,
         "calls":rows,"seconds_per_call":16,"endpoint_processes":1,"distinct_signaling_and_media_sockets":true,
-        "synthetic_sources_hz":[440,880],"plaintext_rtp_explicit":false,"initial_srtp_tested":true,"per_endpoint_actual_packet_negatives":["wrong_key","tag_tamper","sequence_tamper","clear_rtp","replay"],"per_endpoint_actual_control_negatives":["tag_tamper","index_tamper","cleared_e_bit","replay","clear_control"],"srtcp_tested":true,"rekey_tested":true,"rekey_policy":"fresh_key_fresh_ssrc","peer_initiated_rekey_tested":false,"secure_hold_transfer_tested":false,
+        "synthetic_sources_hz":[440,880],"plaintext_rtp_explicit":false,"initial_srtp_tested":true,"per_endpoint_actual_packet_negatives":["wrong_key","tag_tamper","sequence_tamper","clear_rtp","replay"],"per_endpoint_actual_control_negatives":["tag_tamper","index_tamper","cleared_e_bit","replay","clear_control"],"srtcp_tested":true,"rekey_tested":true,"rekey_policy":"fresh_key_fresh_ssrc","peer_initiated_rekey_tested":false,"secure_dtmf_tested":true,"secure_hold_tested":true,"secure_transfer_tested":true,"peer_reinvite_answered":false,
         "human_voice_tested":false,"release_artifact_tested":false,"g0_passed":false})
     );
     Ok(())

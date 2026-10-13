@@ -26,7 +26,7 @@ for bad in ['none','0 active channels\n0 active channels\n0 active calls\n','0 a
  except RuntimeError: pass
  else: raise AssertionError('malformed counts accepted')
 prepared=json.loads((work/'prepared-source-inputs.json').read_text())
-assert prepared==json.loads((root/'tests/probes/secure_call_inputs.json').read_text())['candidate_inputs_sha256'] and len(prepared)==39
+assert prepared==json.loads((root/'tests/probes/secure_call_inputs.json').read_text())['candidate_inputs_sha256'] and len(prepared)==40
 for relative,digest in prepared.items():
  path=work/relative
  assert path.is_file() and not any(p.is_symlink() for p in (path,*path.parents))
@@ -58,7 +58,7 @@ try:
  observed=False;hardened=False
  with pathlib.Path(str(prefix)+'.log').open('w') as log:
   process=subprocess.Popen(args,env=env,stdout=log,stderr=subprocess.STDOUT)
-  deadline=time.monotonic()+160
+  deadline=time.monotonic()+420
   while process.poll() is None and time.monotonic()<deadline:
    if not hardened:
     try:
@@ -93,13 +93,32 @@ try:
    assert control['sent_reports']>=10 and control['received_reports']>0 and control['peer_echoed_sender_reports']>0
    assert control['peer_highest_sequence']>65535 and 1<=control['authenticated_sources']<=4 and control['packet_negatives_verified']
    assert control['received_after_rekey']>=200 and 1000<=control['post_rekey_rms']<=10000 and control['post_rekey_power_ratio']>=20
+ assert matrix['secure_dtmf_tested'] and matrix['secure_hold_tested'] and matrix['secure_transfer_tested'] and not matrix['peer_reinvite_answered']
+ def voice(w,frames=80): return w['sent']>=frames and w['received']>=frames and 1000<=w['rms']<=10000 and math.isfinite(w['ratio']) and w['ratio']>=20
+ ivr=matrix['secure_ivr']
+ assert len(ivr)==4 and {(r['codec'],r['case']) for r in ivr}=={(c,k) for c in ('PCMA','PCMU') for k in ('Accepted','Rejected')}
+ assert all(r['event_packets_sent']==24 and voice(r['tone']) for r in ivr)
+ hold=matrix['secure_hold']
+ assert len(hold)==2 and {r['codec'] for r in hold}=={'PCMA','PCMU'}
+ for r in hold:
+  assert all(voice(w) for w in r['before']+r['resumed'])
+  assert r['held'][0]['sent']==0 and r['held'][0]['received']==0 and r['held'][1]['sent']>=40
+  assert 0<r['acked_reinvites'][0]<r['acked_reinvites'][1]
+ transfer=matrix['secure_transfer']
+ assert len(transfer)==4 and {(r['codec'],r['destination']) for r in transfer}=={(c,d) for c in ('PCMA','PCMU') for d in ('ReferenceTone','Missing')}
+ for r in transfer:
+  assert 200<=r['refer_status']<300 and 1<=r['notify_count']<=16 and all(voice(w) for w in r['before'])
+  if r['destination']=='ReferenceTone':
+   assert 200<=r['final_status']<300 and r['restored'] is None and voice(r['destination_tone'])
+  else:
+   assert r['final_status']>=400 and r['destination_tone'] is None and all(voice(w) for w in r['restored'])
  negatives=[s for s in lines if 'negative_offer' in s]
  assert len(negatives)==3 and {s['negative_offer'] for s in negatives}=={'plaintext','missing_crypto','unsupported_suite'}
  assert all(s['response']==488 and s['unregistered'] and not s['callee_invite_observed'] for s in negatives)
  tls=[s for s in lines if 'negative_tls' in s]
  assert len(tls)==2 and {s['negative_tls'] for s in tls}=={'untrusted_ca','wrong_hostname'} and all(s['rejected_before_call'] and s['typed_certificate_error_verified'] and not s['sip_endpoint_constructed'] for s in tls)
  assert counts(pbxcli('core show channels count'))==(0,0) and 'No objects found.' in pbxcli('pjsip show contacts')
- proof={'schema_version':1,'runner_image':image,'pbx_image':pbx_image,'elf_sha256':elf_hash,'runtime_mounts_and_hardening_verified':hardened,'pbx_two_active_channels_one_call_observed':observed,'mandatory_sdes_nonoptimistic_endpoints_verified':True,'internal_network_no_published_ports':True,'four_encrypted_media_calls_validated':True,'eight_endpoint_srtcp_report_exchanges_validated':True,'peer_lsr_and_rollover_reported_by_probe':True,'srtcp_tag_index_ebit_clear_replay_negatives_validated':True,'mid_call_plaintext_reoffer_488_validated':True,'fresh_key_fresh_ssrc_rekey_with_continued_media_validated':True,'three_real_488_negative_offers_validated':True,'two_real_tls_identity_negatives_validated':True,'zero_calls_channels_contacts_before_down':True,'count_parser_positive_nonzero_malformed_controls':True}
+ proof={'schema_version':1,'runner_image':image,'pbx_image':pbx_image,'elf_sha256':elf_hash,'runtime_mounts_and_hardening_verified':hardened,'pbx_two_active_channels_one_call_observed':observed,'mandatory_sdes_nonoptimistic_endpoints_verified':True,'internal_network_no_published_ports':True,'four_encrypted_media_calls_validated':True,'eight_endpoint_srtcp_report_exchanges_validated':True,'peer_lsr_and_rollover_reported_by_probe':True,'srtcp_tag_index_ebit_clear_replay_negatives_validated':True,'mid_call_plaintext_reoffer_488_validated':True,'fresh_key_fresh_ssrc_rekey_with_continued_media_validated':True,'four_secure_rfc4733_ivr_outcomes_validated':True,'two_secure_hold_resume_calls_validated':True,'four_secure_refer_notify_outcomes_validated':True,'three_real_488_negative_offers_validated':True,'two_real_tls_identity_negatives_validated':True,'zero_calls_channels_contacts_before_down':True,'count_parser_positive_nonzero_malformed_controls':True}
  assert hardened and observed
  save('-matrix.json',matrix);save('-negatives.json',negatives+tls)
 finally:

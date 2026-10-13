@@ -5,6 +5,8 @@
 //! devices are not enabled. SRTCP is verified with bounded retained
 //! authenticated sources; this is not a production actor.
 
+#[path = "secure_controls.rs"]
+pub mod controls;
 #[path = "rtcp.rs"]
 mod rtcp;
 #[path = "sdes.rs"]
@@ -59,9 +61,10 @@ fn description<E>(_: E) -> CallProbeError {
     CallProbeError::UnsupportedSdp
 }
 
-struct Inspector(Arc<CallWire>, Arc<AtomicBool>);
+struct Inspector(Arc<CallWire>, Arc<AtomicBool>, Arc<controls::AckLog>);
 impl MessageInspector for Inspector {
     fn before_send(&self, message: SipMessage, _: Option<&SipAddr>) -> SipMessage {
+        self.2.sent(&message);
         message
     }
     fn after_received(&self, message: SipMessage, _: Option<&SipAddr>) -> SipMessage {
@@ -112,6 +115,8 @@ struct EndpointOwner {
     phase: watch::Receiver<Phase>,
     states: rsipstack::dialog::dialog::DialogStateSender,
     wire: Arc<CallWire>,
+    notifies: Arc<controls::NotifyLog>,
+    acks: Arc<controls::AckLog>,
 }
 impl EndpointOwner {
     async fn connect(
@@ -159,11 +164,17 @@ impl EndpointOwner {
             .map_err(signaling)?;
         let wire = Arc::new(CallWire::default());
         let saw_invite = Arc::new(AtomicBool::new(false));
+        let acks = Arc::new(controls::AckLog::default());
+        let notifies = Arc::new(controls::NotifyLog::default());
         let endpoint = EndpointBuilder::new()
             .with_cancel_token(owner.stop.clone())
             .with_transport_layer(transport)
             .with_user_agent("rust-microsip isolated SDES experiment")
-            .with_inspector(Box::new(Inspector(wire.clone(), saw_invite.clone())))
+            .with_inspector(Box::new(Inspector(
+                wire.clone(),
+                saw_invite.clone(),
+                acks.clone(),
+            )))
             .with_allows(vec![
                 Method::Register,
                 Method::Invite,
@@ -171,6 +182,8 @@ impl EndpointOwner {
                 Method::Bye,
                 Method::Cancel,
                 Method::Options,
+                Method::Refer,
+                Method::Notify,
             ])
             .build();
         let layer = Arc::new(DialogLayer::new(endpoint.inner.clone()));
@@ -190,6 +203,7 @@ impl EndpointOwner {
         let (phase_tx, phase) = watch::channel(Phase::default());
         let failed = phase_tx.clone();
         let stopped = owner.stop.clone();
+        let notify_log = notifies.clone();
         owner.tasks.spawn(async move {
             let mut count = 0u8;
             loop {
@@ -205,6 +219,18 @@ impl EndpointOwner {
                 if let DialogState::Updated(_, _, handle) = &event {
                     // No reset of crypto/replay state or plaintext response on renegotiation.
                     if handle.reply(StatusCode::NotAcceptableHere).await.is_err() {
+                        phase_tx.send_modify(|p| p.failed = true);
+                        stopped.cancel();
+                        break;
+                    }
+                }
+                if let DialogState::Notify(id, request, handle) = &event {
+                    let status = if notify_log.consume(id, request) {
+                        StatusCode::OK
+                    } else {
+                        StatusCode::CallTransactionDoesNotExist
+                    };
+                    if handle.reply(status).await.is_err() {
                         phase_tx.send_modify(|p| p.failed = true);
                         stopped.cancel();
                         break;
@@ -291,6 +317,8 @@ impl EndpointOwner {
             phase,
             states,
             wire,
+            notifies,
+            acks,
         })
     }
     async fn wait_phase(&mut self, terminated: bool) -> Result<(), CallProbeError> {

@@ -60,7 +60,7 @@ for relative in inputs:
     if hashlib.sha256(payload).hexdigest() != inputs[relative]:
         raise SystemExit('Application input differs from the reviewed baseline')
     target=work/relative; target.parent.mkdir(parents=True,exist_ok=True); target.write_bytes(payload)
-probe_destinations = {'srtp_adapter.rs':'crates/media/src/srtp_adapter.rs','rtcp.rs':'crates/telephony/src/rtcp.rs','sdes.rs':'crates/telephony/src/sdes.rs','secure_call.rs':'crates/telephony/src/secure_call.rs','secure_call_example.rs':'crates/telephony/examples/secure_call.rs'}
+probe_destinations = {'srtp_adapter.rs':'crates/media/src/srtp_adapter.rs','rtcp.rs':'crates/telephony/src/rtcp.rs','sdes.rs':'crates/telephony/src/sdes.rs','secure_controls.rs':'crates/telephony/src/secure_controls.rs','secure_call.rs':'crates/telephony/src/secure_call.rs','secure_call_example.rs':'crates/telephony/examples/secure_call.rs'}
 pins = json.loads((root/'tests/probes/secure_call_inputs.json').read_text())
 if set(pins['probe_files_sha256']) != set(probe_destinations):
     raise SystemExit('Unexpected probe input allowlist')
@@ -90,7 +90,7 @@ lock_bytes=lock.read_bytes()
 if hashlib.sha256(lock_bytes).hexdigest()!=pins['baseline_candidate_lock_sha256']:
     raise SystemExit('Candidate baseline lock differs from its reviewed pin')
 (work/'Cargo.lock').write_bytes(lock_bytes)
-assert len(inputs)==34 and len(probe_destinations)==5
+assert len(inputs)==34 and len(probe_destinations)==6
 prepared={p:hashlib.sha256((work/p).read_bytes()).hexdigest() for p in sorted(set(inputs)|set(probe_destinations.values()))}
 if prepared!=pins['candidate_inputs_sha256']:
     raise SystemExit('Post-modification input hashes differ from reviewed pins')

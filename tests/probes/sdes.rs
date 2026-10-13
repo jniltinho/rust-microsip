@@ -34,9 +34,103 @@ impl LocalKey {
         tag: u32,
         version: u32,
     ) -> Zeroizing<Vec<u8>> {
+        self.described(local, codec, tag, version, Flow::SendRecv, false)
+    }
+    /// A keyed offer with an explicit direction and optional RFC 4733 PT 101.
+    pub(super) fn described(
+        &self,
+        local: SocketAddr,
+        codec: Codec,
+        tag: u32,
+        version: u32,
+        flow: Flow,
+        events: bool,
+    ) -> Zeroizing<Vec<u8>> {
         let encoded = Zeroizing::new(STANDARD.encode(self.0.as_ref()));
         let family = if local.is_ipv4() { "IP4" } else { "IP6" };
-        Zeroizing::new(format!("v=0\r\no=rust-microsip 1 {version} IN {family} {}\r\ns=G0 synthetic secure RTP\r\nc=IN {family} {}\r\nt=0 0\r\nm=audio {} RTP/SAVP {}\r\na=rtpmap:{} {}/8000\r\na=crypto:{tag} AES_CM_128_HMAC_SHA1_80 inline:{}\r\na=ptime:20\r\na=sendrecv\r\n",local.ip(),local.ip(),local.port(),codec.payload_type(),codec.payload_type(),codec.name(),encoded.as_str()).into_bytes())
+        let pt = codec.payload_type();
+        let (list, event_lines) = if events {
+            (
+                format!("{pt} 101"),
+                "a=rtpmap:101 telephone-event/8000\r\na=fmtp:101 0-15\r\n",
+            )
+        } else {
+            (pt.to_string(), "")
+        };
+        Zeroizing::new(format!("v=0\r\no=rust-microsip 1 {version} IN {family} {}\r\ns=G0 synthetic secure RTP\r\nc=IN {family} {}\r\nt=0 0\r\nm=audio {} RTP/SAVP {list}\r\na=rtpmap:{pt} {}/8000\r\n{event_lines}a=crypto:{tag} AES_CM_128_HMAC_SHA1_80 inline:{}\r\na=ptime:20\r\na={}\r\n",local.ip(),local.ip(),local.port(),codec.name(),encoded.as_str(),flow.attribute()).into_bytes())
+    }
+}
+
+/// A negotiated media direction (RFC 3264).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum Flow {
+    SendRecv,
+    SendOnly,
+    RecvOnly,
+    Inactive,
+}
+impl Flow {
+    fn attribute(self) -> &'static str {
+        match self {
+            Self::SendRecv => "sendrecv",
+            Self::SendOnly => "sendonly",
+            Self::RecvOnly => "recvonly",
+            Self::Inactive => "inactive",
+        }
+    }
+}
+
+/// Parse a keyed answer that may carry one direction attribute; everything
+/// else must satisfy the strict [`parse`] subset.
+pub(super) fn parse_directed(
+    bytes: &[u8],
+    codec: Codec,
+    pbx: IpAddr,
+    expected_tag: Option<u32>,
+) -> Result<(Target, Flow), SdesError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| SdesError::Description)?;
+    let mut flow = None;
+    let mut rest = Zeroizing::new(String::with_capacity(bytes.len()));
+    for line in text.split_inclusive("\r\n") {
+        let value = match line {
+            "a=sendrecv\r\n" => Some(Flow::SendRecv),
+            "a=sendonly\r\n" => Some(Flow::SendOnly),
+            "a=recvonly\r\n" => Some(Flow::RecvOnly),
+            "a=inactive\r\n" => Some(Flow::Inactive),
+            _ => None,
+        };
+        match value {
+            Some(found) if flow.replace(found).is_some() => return Err(SdesError::Description),
+            Some(_) => (),
+            None => rest.push_str(line),
+        }
+    }
+    Ok((
+        parse(rest.as_bytes(), codec, pbx, expected_tag)?,
+        flow.unwrap_or(Flow::SendRecv),
+    ))
+}
+
+/// Require PT 101 listed and mapped to telephone-event/8000 in an answer.
+pub(super) fn telephone_events(bytes: &[u8]) -> Result<(), SdesError> {
+    let text = std::str::from_utf8(bytes).map_err(|_| SdesError::Description)?;
+    let listed = text
+        .lines()
+        .find_map(|l| l.strip_prefix("m=audio "))
+        .is_some_and(|m| m.split(' ').skip(2).any(|pt| pt == "101"));
+    let mapped = text
+        .lines()
+        .filter(|l| l.starts_with("a=rtpmap:101 "))
+        .count()
+        == 1
+        && text.lines().any(|l| {
+            l.eq_ignore_ascii_case("a=rtpmap:101 telephone-event/8000")
+                || l.eq_ignore_ascii_case("a=rtpmap:101 telephone-event/8000/1")
+        });
+    if listed && mapped {
+        Ok(())
+    } else {
+        Err(SdesError::Description)
     }
 }
 
@@ -406,6 +500,30 @@ mod tests {
                 None
             ));
         }
+    }
+    #[test]
+    fn directed_and_event_offers_round_trip_and_reject_ambiguity() -> Result<(), SdesError> {
+        let key = LocalKey(Zeroizing::new([0x52; 30]));
+        let address = "192.0.2.1:10000"
+            .parse()
+            .map_err(|_| SdesError::Description)?;
+        let pbx = "192.0.2.1".parse().map_err(|_| SdesError::Description)?;
+        let held = key.described(address, Codec::Pcma, 7, 2, Flow::SendOnly, true);
+        let (target, flow) = parse_directed(&held, Codec::Pcma, pbx, Some(7))?;
+        assert_eq!((flow, target.address.port()), (Flow::SendOnly, 10000));
+        telephone_events(&held)?;
+        assert!(telephone_events(&fixture()).is_err());
+        let twice = String::from_utf8(held.to_vec())
+            .unwrap_or_default()
+            .replace("a=sendonly\r\n", "a=sendonly\r\na=inactive\r\n");
+        assert!(parse_directed(twice.as_bytes(), Codec::Pcma, pbx, Some(7)).is_err());
+        let wrong = String::from_utf8(held.to_vec())
+            .unwrap_or_default()
+            .replace("telephone-event/8000", "telephone-event/16000");
+        assert!(telephone_events(wrong.as_bytes()).is_err());
+        // The strict parser still rejects a direction it was not asked to accept.
+        assert!(parse(&held, Codec::Pcma, pbx, Some(7)).is_err());
+        Ok(())
     }
     #[test]
     fn fresh_os_keys_are_not_the_same() -> Result<(), SdesError> {
