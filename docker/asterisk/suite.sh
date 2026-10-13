@@ -26,9 +26,11 @@ project=com.docker.compose.project=rust-microsip-lab
 export LAB_UID="$(id -u)" LAB_GID="$(id -g)"
 B="docker compose -f docker/asterisk/compose.yaml -f docker/asterisk/compose.calls-g0.yaml"
 commit=$(git rev-parse HEAD)
-# Changes (tracked or untracked) inside the Docker build context.
+# Changes (tracked or untracked) in the Docker build context and in the suite
+# scripts. A run with changes fails unless ALLOW_DIRTY=1 (development only).
 context_changes=$(git status --porcelain --untracked-files=all -- Dockerfile .dockerignore \
-    Cargo.toml Cargo.lock rust-toolchain.toml apps crates packaging docker/rust-components.sha256 | wc -l)
+    Cargo.toml Cargo.lock rust-toolchain.toml .cargo apps crates packaging \
+    docker/rust-components.sha256 docker/asterisk/suite.sh docker/asterisk/suite | wc -l)
 
 if [ "${SKIP_BUILD:-}" = 1 ]; then
     built=$(docker image inspect -f '{{index .Config.Labels "rust-microsip.commit"}}' "$image" 2>/dev/null)
@@ -121,7 +123,11 @@ EOF
 
 engine_lab() {
     out=$run/engine-lab; mkdir -p "$out"; pbx_up
-    container rust-microsip-suite-engine --rm \
+    # engine_lab prints a scenario's row only after that scenario passed and
+    # exits non-zero on the first failure.
+    timeout 900 docker run --rm --name rust-microsip-suite-engine --label "$project" \
+        --network "$net" --user "$LAB_UID:$LAB_GID" --read-only --cap-drop ALL \
+        --security-opt no-new-privileges --memory 2g --pids-limit 512 --tmpfs /tmp:rw,mode=1777 \
         --mount "type=bind,source=$PWD/$clients,target=/lab,readonly" \
         --entrypoint /usr/local/bin/engine-lab "$image" > "$out/engine-lab.log" 2>&1
     code=$?
@@ -154,8 +160,9 @@ engine_network() {
     renewed=$(contacts)
     timeout 60 sh -c "until docker logs $name 2>&1 | grep -q in_call; do sleep 0.5; done" || timeouts=$((timeouts + 1))
     in_call=$(channels)
-    docker network disconnect $net $name; sleep 40
-    docker network connect --ip "$ip" $net $name
+    docker network disconnect $net $name || timeouts=$((timeouts + 1))
+    sleep 40
+    docker network connect --ip "$ip" $net $name || timeouts=$((timeouts + 1))
     timeout 400 sh -c "until docker logs $name 2>&1 | grep -q recovered; do sleep 1; done" || timeouts=$((timeouts + 1))
     sleep 3
     recovered_contacts=$(contacts); recovered_channels=$(channels)
@@ -224,28 +231,34 @@ gui_theme() {
     report gui-theme "$result" "{\"system_theme_without_portal_brightness_pct\": $(j "$system"), \"channels_after_switch\": $(j "$during"), \"dark_in_call_brightness_pct\": $(j "$dark"), \"relaunched_brightness_pct\": $(j "$again")}"
 }
 
-# Tab cycle: the first focused control comes back (the cycle wraps) and
-# Shift+Tab returns to the control before the last one.
-tab_cycle() { # prefix
-    python3 -I - "$out/focus.txt" "$1" <<'EOF'
+# Tab cycle: the first control to repeat is the first one focused (a full
+# cycle, not a trap or a sub-loop), after at least MIN distinct controls that
+# include REQUIRED; with "back", Shift+Tab must return to the control before
+# the last one.
+tab_cycle() { # prefix, minimum distinct, back|noback, required control names...
+    python3 -I - "$out/focus.txt" "$@" <<'EOF'
 import sys
+path, prefix, minimum, back_mode, *required = sys.argv[1:]
 try:
-    lines = [l.rstrip("\n").split(" ", 1) for l in open(sys.argv[1]) if " " in l]
+    lines = [l.rstrip("\n").split(" ", 1) for l in open(path) if " " in l]
 except OSError:
     lines = []
-prefix = sys.argv[2]
 seq = [v for k, v in lines if k.startswith(prefix) and k[len(prefix):].isdigit()]
+first_repeat = next((i for i, v in enumerate(seq) if v in seq[:i]), None)
+cycle = seq[:first_repeat] if first_repeat is not None else []
+full = first_repeat is not None and seq[first_repeat] == seq[0] and len(cycle) >= int(minimum)
+names = " ".join(cycle)
+has_required = all(f"'{name}'" in names for name in required)
 back = [v for k, v in lines if k == "shift-tab"]
-wraps = len(seq) > 1 and seq[0] in seq[1:]
-reverse = not back or (len(seq) > 1 and back[0] == seq[-2])
-print("true" if wraps and reverse and "none" not in seq else "false")
+reverse = back_mode != "back" or (len(back) == 1 and len(seq) > 1 and back[0] == seq[-2])
+print("true" if full and has_required and reverse and "none" not in seq else "false")
 EOF
 }
 
 gui_a11y() {
     pbx_up; gui a11y; gui_finish; pbx_down
     problems=$(sed -n 's/^SCREENS 7 PROBLEMS \([0-9]*\)$/\1/p' "$out/screens.txt" 2>/dev/null)
-    cycle=$(tab_cycle tab)
+    cycle=$(tab_cycle tab 15 back Phone Calls Contacts Menu "Number to call" DND)
     result=fail
     [ "$(value screens_exit)" = 0 ] && [ "$problems" = 0 ] && [ "$cycle" = true ] && result=pass
     report gui-a11y "$result" "{\"screens_checked\": $(grep -c '^== ' "$out/screens.txt" 2>/dev/null), \"problems\": $(j "$problems"), \"tab_cycle_wraps_and_reverses\": $(j "$cycle")}"
@@ -260,7 +273,7 @@ gui_a11y_call() {
     for control in Call End XFER HOLD MUTE; do
         grep -q "'$control'" "$out/focus.txt" 2>/dev/null && reached=$((reached + 1))
     done
-    cycle=$(tab_cycle call)
+    cycle=$(tab_cycle call 15 noback Phone Calls Contacts Menu End XFER HOLD MUTE DND)
     result=fail
     [ "$in_call" = 1 ] && [ "$ended" = 0 ] && [ "$(value call_sweep_exit)" = 0 ] \
         && [ "$(value transfer_sweep_exit)" = 0 ] && [ $reached = 5 ] && [ "$cycle" = true ] && result=pass
@@ -289,8 +302,13 @@ results = {}
 for name in requested:
     path = os.path.join(run, name, "report.json")
     results[name] = json.load(open(path))["result"] if os.path.isfile(path) else "missing"
-ok = all(r == "pass" for r in results.values()) and leftover == 0
-summary = {"run": os.path.basename(run), "commit": commit,
+reports = [json.load(open(os.path.join(run, n, "report.json")))
+           for n in requested if results[n] != "missing"]
+dirty = any(r["build_context_changes_now"] or r["build_context_changes_at_image_build"] != 0
+            for r in reports)
+allow_dirty = os.environ.get("ALLOW_DIRTY") == "1"
+ok = all(r == "pass" for r in results.values()) and leftover == 0 and (allow_dirty or not dirty)
+summary = {"run": os.path.basename(run), "commit": commit, "uncommitted_changes": dirty,
            "passed": sum(r == "pass" for r in results.values()), "requested": len(requested),
            "leftover_lab_objects": leftover, "result": "pass" if ok else "fail", "scenarios": results}
 json.dump(summary, open(os.path.join(run, "summary.json"), "w"), indent=2)

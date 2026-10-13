@@ -102,7 +102,7 @@ SCREENS = [
     (["Add"], "Contact editor", "Add number"),
     (["Cancel", "Import"], "Import", "Preview"),
     (["Cancel", "Phone", "Menu", "Settings…"], "Settings", "Save and register"),
-    (["Cancel", "Menu", "About and licenses…"], "About", "Close"),
+    (["Cancel", "Menu", "About and licenses…"], "About", "Font license (OFL-1.1)"),
 ]
 
 
