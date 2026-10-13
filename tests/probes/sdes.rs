@@ -32,11 +32,23 @@ impl LocalKey {
         local: SocketAddr,
         codec: Codec,
         tag: u32,
+        version: u32,
     ) -> Zeroizing<Vec<u8>> {
         let encoded = Zeroizing::new(STANDARD.encode(self.0.as_ref()));
         let family = if local.is_ipv4() { "IP4" } else { "IP6" };
-        Zeroizing::new(format!("v=0\r\no=rust-microsip 1 1 IN {family} {}\r\ns=G0 synthetic secure RTP\r\nc=IN {family} {}\r\nt=0 0\r\nm=audio {} RTP/SAVP {}\r\na=rtpmap:{} {}/8000\r\na=crypto:{tag} AES_CM_128_HMAC_SHA1_80 inline:{}\r\na=ptime:20\r\na=sendrecv\r\n",local.ip(),local.ip(),local.port(),codec.payload_type(),codec.payload_type(),codec.name(),encoded.as_str()).into_bytes())
+        Zeroizing::new(format!("v=0\r\no=rust-microsip 1 {version} IN {family} {}\r\ns=G0 synthetic secure RTP\r\nc=IN {family} {}\r\nt=0 0\r\nm=audio {} RTP/SAVP {}\r\na=rtpmap:{} {}/8000\r\na=crypto:{tag} AES_CM_128_HMAC_SHA1_80 inline:{}\r\na=ptime:20\r\na=sendrecv\r\n",local.ip(),local.ip(),local.port(),codec.payload_type(),codec.payload_type(),codec.name(),encoded.as_str()).into_bytes())
     }
+}
+
+/// Strip every key line and the secure profile: a key-free plaintext offer.
+pub(super) fn plaintext(offer: &[u8]) -> Result<Zeroizing<String>, SdesError> {
+    let text = std::str::from_utf8(offer).map_err(|_| SdesError::Description)?;
+    Ok(Zeroizing::new(
+        text.split_inclusive("\r\n")
+            .filter(|l| !l.starts_with("a=crypto:"))
+            .collect::<String>()
+            .replace("RTP/SAVP", "RTP/AVP"),
+    ))
 }
 
 pub(super) struct Target {
@@ -217,6 +229,7 @@ mod tests {
                 "192.0.2.1:10000".parse().unwrap_or_else(|_| unreachable!()),
                 Codec::Pcma,
                 7,
+                1,
             )
             .to_vec()
     }
@@ -252,6 +265,21 @@ mod tests {
     #[test]
     fn rejects_plaintext_downgrade() {
         assert!(!accepted(&changed("RTP/SAVP", "RTP/AVP"), None));
+    }
+    #[test]
+    fn plaintext_reoffer_is_key_free_and_versioned_offers_differ() -> Result<(), SdesError> {
+        let clear = plaintext(&fixture())?;
+        assert!(
+            !clear.contains("inline:") && !clear.contains("SAVP") && clear.contains("RTP/AVP 8")
+        );
+        assert!(!accepted(clear.as_bytes(), None));
+        let key = LocalKey(Zeroizing::new([0x52; 30]));
+        let address = "192.0.2.1:10000"
+            .parse()
+            .map_err(|_| SdesError::Description)?;
+        let second = key.description(address, Codec::Pcma, 7, 3);
+        assert!(std::str::from_utf8(&second).is_ok_and(|t| t.contains("o=rust-microsip 1 3 ")));
+        Ok(())
     }
     #[test]
     fn requires_single_media_scoped_crypto() {

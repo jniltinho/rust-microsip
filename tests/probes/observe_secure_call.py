@@ -1,4 +1,4 @@
-"""Separate-process observation of the finite, initial TLS/SDES RTP/SRTCP experiment."""
+"""Separate-process observation of the finite TLS/SDES RTP/SRTCP/rekey experiment."""
 if not __debug__:
     raise SystemExit('Optimized Python is not permitted for evidence verification')
 
@@ -80,22 +80,26 @@ try:
  lines=[json.loads(s) for s in pathlib.Path(str(prefix)+'.log').read_text().splitlines()]
  matrix=lines[-1];rows=matrix['calls']
  assert len(rows)==4 and {(r['codec'],r['reverse']) for r in rows}=={(c,d) for c in ('PCMA','PCMU') for d in (False,True)}
- assert matrix['initial_srtp_tested'] and not matrix['g0_passed'] and matrix['srtcp_tested'] and matrix['seconds_per_call']==12
+ assert matrix['initial_srtp_tested'] and not matrix['g0_passed'] and matrix['srtcp_tested'] and matrix['seconds_per_call']==16 and matrix['rekey_tested'] and matrix['rekey_policy']=='fresh_key_fresh_ssrc' and not matrix['peer_initiated_rekey_tested']
  for row in rows:
   assert row['transport']=='tls' and all(row[k] for k in ('ack_and_termination_verified','bye_200_verified','unregistered'))
   for m in (row['first'],row['second']):
-   assert m['sent_packets']>=590 and m['received_packets']>=580
+   assert m['sent_packets']>=790 and m['received_packets']>=780
    assert math.isfinite(m['rms']) and 1000<=m['rms']<=10000 and math.isfinite(m['remote_to_own_power_ratio']) and m['remote_to_own_power_ratio']>=20
+  assert row['rekey']=={'downgrade_rejected':True,'rekey_accepted':True,'peer_key_unchanged':True}
+  caller=row['control']['second' if row['reverse'] else 'first']
+  assert caller['peer_reports_for_rekeyed_source']>0 and caller['peer_highest_sequence_rekeyed']>65535
   for control in (row['control']['first'],row['control']['second']):
    assert control['sent_reports']>=10 and control['received_reports']>0 and control['peer_echoed_sender_reports']>0
    assert control['peer_highest_sequence']>65535 and 1<=control['authenticated_sources']<=4 and control['packet_negatives_verified']
+   assert control['received_after_rekey']>=200 and 1000<=control['post_rekey_rms']<=10000 and control['post_rekey_power_ratio']>=20
  negatives=[s for s in lines if 'negative_offer' in s]
  assert len(negatives)==3 and {s['negative_offer'] for s in negatives}=={'plaintext','missing_crypto','unsupported_suite'}
  assert all(s['response']==488 and s['unregistered'] and not s['callee_invite_observed'] for s in negatives)
  tls=[s for s in lines if 'negative_tls' in s]
  assert len(tls)==2 and {s['negative_tls'] for s in tls}=={'untrusted_ca','wrong_hostname'} and all(s['rejected_before_call'] and s['typed_certificate_error_verified'] and not s['sip_endpoint_constructed'] for s in tls)
  assert counts(pbxcli('core show channels count'))==(0,0) and 'No objects found.' in pbxcli('pjsip show contacts')
- proof={'schema_version':1,'runner_image':image,'pbx_image':pbx_image,'elf_sha256':elf_hash,'runtime_mounts_and_hardening_verified':hardened,'pbx_two_active_channels_one_call_observed':observed,'mandatory_sdes_nonoptimistic_endpoints_verified':True,'internal_network_no_published_ports':True,'four_encrypted_media_calls_validated':True,'eight_endpoint_srtcp_report_exchanges_validated':True,'peer_lsr_and_rollover_reported_by_probe':True,'srtcp_tag_index_ebit_clear_replay_negatives_validated':True,'three_real_488_negative_offers_validated':True,'two_real_tls_identity_negatives_validated':True,'zero_calls_channels_contacts_before_down':True,'count_parser_positive_nonzero_malformed_controls':True}
+ proof={'schema_version':1,'runner_image':image,'pbx_image':pbx_image,'elf_sha256':elf_hash,'runtime_mounts_and_hardening_verified':hardened,'pbx_two_active_channels_one_call_observed':observed,'mandatory_sdes_nonoptimistic_endpoints_verified':True,'internal_network_no_published_ports':True,'four_encrypted_media_calls_validated':True,'eight_endpoint_srtcp_report_exchanges_validated':True,'peer_lsr_and_rollover_reported_by_probe':True,'srtcp_tag_index_ebit_clear_replay_negatives_validated':True,'mid_call_plaintext_reoffer_488_validated':True,'fresh_key_fresh_ssrc_rekey_with_continued_media_validated':True,'three_real_488_negative_offers_validated':True,'two_real_tls_identity_negatives_validated':True,'zero_calls_channels_contacts_before_down':True,'count_parser_positive_nonzero_malformed_controls':True}
  assert hardened and observed
  save('-matrix.json',matrix);save('-negatives.json',negatives+tls)
 finally:

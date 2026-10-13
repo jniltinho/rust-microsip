@@ -1,7 +1,9 @@
 //! Initial TLS/SDES synthetic-call experiment, not a production call actor.
 //! Built only after explicit copying into the inventoried candidate workspace.
-//! Re-INVITE/REFER, rekey and audio devices are not enabled. SRTCP is verified
-//! with bounded retained authenticated sources; this is not a production actor.
+//! One caller-initiated SDES rekey (fresh key and fresh SSRC) and one refused
+//! plaintext re-offer are exercised. REFER, PBX-initiated key changes and audio
+//! devices are not enabled. SRTCP is verified with bounded retained
+//! authenticated sources; this is not a production actor.
 
 #[path = "rtcp.rs"]
 mod rtcp;
@@ -176,7 +178,7 @@ impl EndpointOwner {
         let local_rtp = rtp.local_addr().map_err(media)?;
         let local_key = sdes::LocalKey::generate().map_err(description)?;
         // SDK signaling bodies necessarily copy the key: zeroization is not guaranteed there.
-        let answer_key = local_key.description(local_rtp, codec, 1);
+        let answer_key = local_key.description(local_rtp, codec, 1, 1);
         let inner = endpoint.inner.clone();
         let stopped = owner.stop.clone();
         owner.tasks.spawn(async move {
@@ -373,7 +375,34 @@ pub struct ControlMeasurement {
     pub authenticated_sources: usize,
     /// SRTCP tag/index/E-bit/clear/replay negative checks all executed.
     pub packet_negatives_verified: bool,
+    /// Authenticated RTP received after the caller switched to its new key.
+    pub received_after_rekey: u32,
+    /// Decoded RMS of authenticated RTP received after the switch only.
+    pub post_rekey_rms: f64,
+    /// Remote-to-own tone power ratio after the switch only.
+    pub post_rekey_power_ratio: f64,
+    /// Peer blocks about the post-rekey source echoing an SR sent under the new key.
+    pub peer_reports_for_rekeyed_source: u32,
+    /// Highest extended sequence the peer reports for the post-rekey source only.
+    pub peer_highest_sequence_rekeyed: u32,
 }
+
+/// Caller-side mid-call SDES renegotiation evidence; no key or SDP bytes.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RekeyEvidence {
+    /// A key-free plaintext re-offer received 488 while the keyed call continued.
+    pub downgrade_rejected: bool,
+    /// A fresh-key, fresh-SSRC re-offer received 200 with a valid SDES answer.
+    pub rekey_accepted: bool,
+    /// The PBX answer kept its own key line; a changed peer key fails closed.
+    pub peer_key_unchanged: bool,
+}
+
+/// Caller source after rekey. A new key always starts a new SSRC with ROC zero;
+/// its RTP sequence restarts near the wrap, so the new stream crosses a rollover
+/// under the new key. The lab PBX (libsrtp) resets the ROC on key change, so
+/// same-SSRC ROC continuity fails interop (see the rekey receipt's discovery runs).
+const REKEYED_SSRC: u32 = 0x2468_ace0;
 
 /// Initial secure-call result; RTP and independently observed SRTCP evidence.
 pub struct SecureCallReport {
@@ -383,6 +412,8 @@ pub struct SecureCallReport {
     pub first_control: ControlMeasurement,
     /// RTCP measurements at the second fictional endpoint.
     pub second_control: ControlMeasurement,
+    /// Mid-call refused downgrade and accepted rekey at the caller.
+    pub rekey: RekeyEvidence,
 }
 #[derive(Default)]
 struct MediaTrackers(Vec<(u32, PacketTracker)>);
@@ -417,14 +448,23 @@ fn ntp_now() -> Result<u64, CallProbeError> {
     Ok((u64::from(seconds) << 32) | fraction)
 }
 
+/// The caller receives one replacement key; both endpoints observe the switch.
+struct RekeySwitch {
+    rekey: Option<mpsc::Receiver<rust_microsip_media::srtp_adapter::MasterKey>>,
+    switched: Arc<AtomicBool>,
+}
+
 async fn measure(
     sockets: MediaSockets,
     target: sdes::Target,
     codec: Codec,
     local_key: sdes::LocalKey,
-    own_hz: f64,
-    remote_hz: f64,
-    ssrc: u32,
+    (own_hz, remote_hz): (f64, f64),
+    mut ssrc: u32,
+    RekeySwitch {
+        mut rekey,
+        switched,
+    }: RekeySwitch,
 ) -> Result<(MediaMeasurement, ControlMeasurement), CallProbeError> {
     let mut sender =
         SecureSender::new(ssrc, local_key.into_master().map_err(media)?).map_err(media)?;
@@ -442,7 +482,7 @@ async fn measure(
     tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
     let mut reports = tokio::time::interval(Duration::from_secs(1));
     reports.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    let end = tokio::time::Instant::now() + Duration::from_secs(12);
+    let end = tokio::time::Instant::now() + Duration::from_secs(16);
     let mut send = [0; 172];
     let mut receive = [0; 1515];
     let mut receive_control = [0; 1515];
@@ -451,11 +491,18 @@ async fn measure(
     let mut timestamp = u32::MAX - 3200;
     let mut tracker = MediaTrackers::default();
     let mut meter = ToneMeter::new(own_hz, remote_hz);
+    let mut after_meter = ToneMeter::new(own_hz, remote_hz);
     let mut checked_negatives = false;
     let mut sent_sr = [0u32; 16];
     let mut sr_count = 0usize;
+    // SR timestamps sent under the replacement key and source only.
+    let mut rekeyed_sr = [0u32; 16];
+    let mut rekeyed_count = 0usize;
     loop {
-        tokio::select! {biased;_=tokio::time::sleep_until(end)=>break,_=tick.tick()=>{
+        tokio::select! {biased;_=tokio::time::sleep_until(end)=>break,key=async {match rekey.as_mut() {Some(r)=>r.recv().await,None=>std::future::pending().await}}=>{
+            // Replacing the sender drops (and zeroizes) the old key; the new SSRC starts at ROC zero.
+            sender=SecureSender::new(REKEYED_SSRC,key.ok_or(CallProbeError::Signaling)?).map_err(media)?;ssrc=REKEYED_SSRC;sequence=65500;rekey=None;switched.store(true,Ordering::SeqCst);
+        },_=tick.tick()=>{
             let mut payload=[0;160];for octet in &mut payload {let phase=std::f64::consts::TAU*own_hz*f64::from(sample_index%8000)/8000.0;*octet=codec.encode_sample((8000.0*phase.sin()) as i16);sample_index=sample_index.wrapping_add(1);}
             let length=RtpHeader {marker:stats.sent_packets==0,payload_type:codec.payload_type(),sequence,timestamp,ssrc}.write(&payload,&mut send).map_err(media)?;
             let encrypted=sender.protect_rtp(&send[..length]).map_err(media)?;
@@ -467,7 +514,7 @@ async fn measure(
             let encrypted=sender.protect_rtcp(&clear).map_err(media)?;
             if encrypted.len()!=clear.len()+14 || encrypted[8..clear.len()]==clear[8..] {return Err(CallProbeError::Media);}
             if sockets.rtcp.send_to(&encrypted,target.control).await.map_err(media)?!=encrypted.len() {return Err(CallProbeError::Media);}
-            sent_sr[sr_count%16]=(ntp>>16) as u32;sr_count+=1;control.sent_reports+=1;
+            sent_sr[sr_count%16]=(ntp>>16) as u32;sr_count+=1;if ssrc==REKEYED_SSRC {rekeyed_sr[rekeyed_count%16]=(ntp>>16) as u32;rekeyed_count+=1;}control.sent_reports+=1;
         },result=sockets.rtp.recv_from(&mut receive)=>{
             let (length,source)=result.map_err(media)?;if source!=target.address {continue;}
             if length!=182 {return Err(CallProbeError::Media);}
@@ -486,7 +533,7 @@ async fn measure(
             if !checked_negatives {if receiver.unprotect_rtp(&receive[..length],now)!=Err(SecureError::Replay) {return Err(CallProbeError::Media);}checked_negatives=true;}
             let packet=RtpPacket::parse(&clear).map_err(media)?;
             if packet.header.payload_type!=codec.payload_type() || packet.payload.len()!=160 || clear[12..]==receive[12..172] {return Err(CallProbeError::Media);}
-            let Some(lost)=tracker.observe(packet.header)? else {stats.late_packets+=1;continue;};stats.lost_packets+=lost;stats.received_packets+=1;meter.observe(codec,packet.payload);
+            if switched.load(Ordering::SeqCst) {control.received_after_rekey+=1;}let Some(lost)=tracker.observe(packet.header)? else {stats.late_packets+=1;continue;};stats.lost_packets+=lost;stats.received_packets+=1;meter.observe(codec,packet.payload);if switched.load(Ordering::SeqCst) {after_meter.observe(codec,packet.payload);}
         },result=sockets.rtcp.recv_from(&mut receive_control)=>{
             let (length,source)=result.map_err(media)?;if source!=target.control {continue;}
             if !(22..=1514).contains(&length) {return Err(CallProbeError::Media);}
@@ -508,6 +555,7 @@ async fn measure(
             let parsed=rtcp::parse(&clear).map_err(media)?;
             control.received_reports+=1;
             for block in parsed.receptions {
+                if ssrc==REKEYED_SSRC && block.source==ssrc && block.last_sender_report!=0 && rekeyed_sr[..rekeyed_count.min(16)].contains(&block.last_sender_report) {control.peer_reports_for_rekeyed_source+=1;control.peer_highest_sequence_rekeyed=control.peer_highest_sequence_rekeyed.max(block.highest_sequence);}
                 if block.source==ssrc && block.last_sender_report!=0 && sent_sr[..sr_count.min(16)].contains(&block.last_sender_report) {
                     control.peer_echoed_sender_reports+=1;control.peer_highest_sequence=control.peer_highest_sequence.max(block.highest_sequence);
                 }
@@ -515,18 +563,21 @@ async fn measure(
         }}
     }
     control.authenticated_sources = receiver.authenticated_sources();
-    if stats.sent_packets < 590
-        || stats.received_packets < 580
+    if stats.sent_packets < 790
+        || stats.received_packets < 780
         || !checked_negatives
         || control.sent_reports < 10
         || control.received_reports == 0
         || control.peer_echoed_sender_reports == 0
         || control.peer_highest_sequence <= 65535
         || !control.packet_negatives_verified
+        || !switched.load(Ordering::SeqCst)
+        || control.received_after_rekey < 200
     {
         return Err(CallProbeError::Media);
     }
     (stats.rms, stats.remote_to_own_power_ratio) = meter.finish()?;
+    (control.post_rekey_rms, control.post_rekey_power_ratio) = after_meter.finish()?;
     Ok((stats, control))
 }
 
@@ -543,10 +594,12 @@ fn fixtures(first: &RegistrationConfig, second: &RegistrationConfig) -> Result<(
     Ok(())
 }
 
-/// Exercise one twelve-second TLS/SDES G.711 RTP/SRTCP call between fictional peers.
-/// No plaintext fallback, profile discovery, devices, recording or rekey is used.
+/// Exercise one sixteen-second TLS/SDES G.711 RTP/SRTCP call between fictional peers.
+/// No plaintext fallback, profile discovery, devices or recording is used.
 /// The first authentic PBX packet also drives local tamper/clear/replay negatives.
-/// This verifies initial RTP and SRTCP interoperability, not secure hold/transfer/rekey.
+/// At three seconds the caller's plaintext re-offer must get 488; at six seconds a
+/// fresh-key, fresh-SSRC re-offer must get 200 and media/SRTCP must continue.
+/// This is not secure hold/transfer/DTMF or PBX-initiated rekey evidence.
 ///
 /// # Errors
 /// Returns a sanitized error unless signaling, encrypted media and teardown pass.
@@ -565,9 +618,9 @@ pub async fn probe_secure_call_pair(
     tokio::select! {biased;_=cancel.cancelled()=>Err(CallProbeError::Cancelled),result=tokio::time::timeout(Duration::from_secs(30),async {
         let mut a=EndpointOwner::connect(first,codec,stop.clone()).await?;let mut b=EndpointOwner::connect(second,codec,stop.clone()).await?;
         let (caller,callee)=if reverse {(&mut b,&mut a)} else {(&mut a,&mut b)};
-        let offer=caller.local_key.as_ref().ok_or(CallProbeError::Media)?.description(caller.rtp.local_addr().map_err(media)?,codec,1);
+        let offer=caller.local_key.as_ref().ok_or(CallProbeError::Media)?.description(caller.rtp.local_addr().map_err(media)?,codec,1,1);
         let (dialog,response)=caller.layer.do_invite(caller.invite(callee,offer.to_vec())?,caller.states.clone()).await.map_err(signaling)?;
-        let response=response.ok_or(CallProbeError::Signaling)?;if response.status_code!=StatusCode::OK {return Err(CallProbeError::Signaling);}
+        let mut response=response.ok_or(CallProbeError::Signaling)?;if response.status_code!=StatusCode::OK {return Err(CallProbeError::Signaling);}
         let pbx=caller.server.host_with_port.host.to_string().parse().map_err(signaling)?;
         let remote=sdes::parse(&response.body,codec,pbx,Some(1)).map_err(description)?;
         let inbound=callee.incoming.recv().await.ok_or(CallProbeError::Signaling)?;
@@ -577,11 +630,36 @@ pub async fn probe_secure_call_pair(
         let caller_key=caller.local_key.take().ok_or(CallProbeError::Media)?;
         let callee_key=callee.local_key.take().ok_or(CallProbeError::Media)?;
         let (own_hz,remote_hz)=if reverse {(880.0,440.0)} else {(440.0,880.0)};
-        let (one,two)=tokio::join!(measure(MediaSockets {rtp:caller.rtp.clone(),rtcp:caller.rtcp.clone()},remote,codec,caller_key,own_hz,remote_hz,0x12345678),measure(MediaSockets {rtp:callee.rtp.clone(),rtcp:callee.rtcp.clone()},inbound.target,codec,callee_key,remote_hz,own_hz,0x87654321));
-        let one=one?;let two=two?;dialog.bye().await.map_err(signaling)?;caller.wire.wait(4).await;callee.wire.wait(2).await;
+        let (rekey_tx,rekey_rx)=mpsc::channel(1);let switched=Arc::new(AtomicBool::new(false));
+        let address=caller.rtp.local_addr().map_err(media)?;let initial=Zeroizing::new(std::mem::take(&mut response.body));let remote_address=remote.address;let remote_control=remote.control;
+        let renegotiate=async {
+            let mut evidence=RekeyEvidence::default();let started=tokio::time::Instant::now();
+            let sdp=|| Some(vec![Header::ContentType("application/sdp".into())]);
+            tokio::time::sleep_until(started+Duration::from_secs(3)).await;
+            let clear=sdes::plaintext(&sdes::LocalKey::generate().map_err(description)?.description(address,codec,1,2)).map_err(description)?;
+            let refused=dialog.reinvite(sdp(),Some(clear.as_bytes().to_vec())).await.map_err(signaling)?.ok_or(CallProbeError::Signaling)?;
+            if refused.status_code!=StatusCode::NotAcceptableHere {return Err(CallProbeError::Signaling);}
+            evidence.downgrade_rejected=true;
+            tokio::time::sleep_until(started+Duration::from_secs(6)).await;
+            let key=sdes::LocalKey::generate().map_err(description)?;
+            let accepted=dialog.reinvite(sdp(),Some(key.description(address,codec,1,3).to_vec())).await.map_err(signaling)?.ok_or(CallProbeError::Signaling)?;
+            if accepted.status_code!=StatusCode::OK {return Err(CallProbeError::Signaling);}
+            let answer=sdes::parse(&accepted.body,codec,pbx,Some(1)).map_err(description)?;
+            if answer.address!=remote_address || answer.control!=remote_control {return Err(CallProbeError::UnsupportedSdp);}
+            evidence.rekey_accepted=true;
+            // Compare key lines without decoding or logging them.
+            let line=|body:&[u8]|Zeroizing::new(body.split(|b|*b==b'\n').find(|l|l.starts_with(b"a=crypto:")).map(<[u8]>::to_vec));
+            if line(&accepted.body)!=line(&initial) {return Err(CallProbeError::UnsupportedSdp);}
+            evidence.peer_key_unchanged=true;
+            rekey_tx.send(key.into_master().map_err(media)?).await.map_err(media)?;
+            Ok::<RekeyEvidence,CallProbeError>(evidence)
+        };
+        let (one,two,rekey)=tokio::join!(measure(MediaSockets {rtp:caller.rtp.clone(),rtcp:caller.rtcp.clone()},remote,codec,caller_key,(own_hz,remote_hz),0x12345678,RekeySwitch {rekey:Some(rekey_rx),switched:switched.clone()}),measure(MediaSockets {rtp:callee.rtp.clone(),rtcp:callee.rtcp.clone()},inbound.target,codec,callee_key,(remote_hz,own_hz),0x87654321,RekeySwitch {rekey:None,switched:switched.clone()}),renegotiate);
+        let one=one?;let two=two?;let rekey=rekey?;
+        if one.1.peer_reports_for_rekeyed_source==0 || one.1.peer_highest_sequence_rekeyed<=65535 {return Err(CallProbeError::Media);}dialog.bye().await.map_err(signaling)?;caller.wire.wait(4).await;callee.wire.wait(2).await;
         caller.wait_phase(true).await?;callee.wait_phase(true).await?;caller.unregister().await?;callee.unregister().await?;
         let ((first,first_control),(second,second_control))=if reverse {(two,one)} else {(one,two)};
-        Ok(SecureCallReport {call:CallProbeReport {transport:"tls",codec:codec.name(),reverse,first,second,ack_and_termination_verified:true,bye_200_verified:true,unregistered:true},first_control,second_control})
+        Ok(SecureCallReport {call:CallProbeReport {transport:"tls",codec:codec.name(),reverse,first,second,ack_and_termination_verified:true,bye_200_verified:true,unregistered:true},first_control,second_control,rekey})
     })=>result.map_err(|_|CallProbeError::Timeout)?,}
 }
 
@@ -678,10 +756,10 @@ pub async fn probe_rejected_offer(
     let stop = cancel.child_token();
     tokio::select! {biased;_=cancel.cancelled()=>Err(CallProbeError::Cancelled),result=tokio::time::timeout(Duration::from_secs(30),async {
         let mut a=EndpointOwner::connect(first,Codec::Pcma,stop.clone()).await?;let mut b=EndpointOwner::connect(second,Codec::Pcma,stop.clone()).await?;
-        let good=a.local_key.as_ref().ok_or(CallProbeError::Media)?.description(a.rtp.local_addr().map_err(media)?,Codec::Pcma,1);
+        let good=a.local_key.as_ref().ok_or(CallProbeError::Media)?.description(a.rtp.local_addr().map_err(media)?,Codec::Pcma,1,1);
         let text=Zeroizing::new(std::str::from_utf8(&good).map_err(description)?.to_owned());
         let bad=Zeroizing::new(match kind {
-            NegativeOffer::Plaintext=>text.split_inclusive("\r\n").filter(|l|!l.starts_with("a=crypto:")).collect::<String>().replace("RTP/SAVP","RTP/AVP"),
+            NegativeOffer::Plaintext=>sdes::plaintext(&good).map_err(description)?.to_string(),
             NegativeOffer::MissingCrypto=>text.split_inclusive("\r\n").filter(|l|!l.starts_with("a=crypto:")).collect(),
             NegativeOffer::UnsupportedSuite=>text.replace("AES_CM_128_HMAC_SHA1_80","UNSUPPORTED_TEST_SUITE"),
         });

@@ -1,0 +1,410 @@
+{
+  "schema_version": 1,
+  "date": "2026-10-13",
+  "baseline_commit": "de92e00a20417bbb0f77a46ed8c32e66b62d74c9",
+  "scope": "isolated TLS/SDES RTP+SRTCP call with one caller-initiated mid-call rekey and one refused plaintext re-offer; not application adoption, G0 or release",
+  "rekey_policy": "fresh SDES key and fresh SSRC with ROC zero; the new source's RTP sequence restarts near the wrap so it crosses a rollover under the new key (gated on the PBX-reported extended sequence for that source only); PBX-initiated key change fails closed (not exercised)",
+  "candidate_inputs_sha256": {
+    ".dockerignore": "1c337db6a565b9660051d6abdf6fc284c35236980b132cf3226cd44f9f83f4c8",
+    "Cargo.lock": "fc8a65223dddf4d8e5d537b2adc60730d15e316d1014389ba5abdfa6fc8f420f",
+    "Cargo.toml": "408ad02e6a0702c0eee6a5a38c71dfe77eb655f403f75a431f454772d84258c8",
+    "Dockerfile": "fd51f502308441aed781838742f232de0f0289002298cf13a9175f5947210d37",
+    "LICENSE": "fb981668c18a279e285fc4d83fba1e836cc84dd4daa73c9697d3cfd2d8aca6e0",
+    "NOTICE": "5c5f7e404d9d7bd06f2cb5872fc4738938834d32d456e9cf9cfe693b1e5d3b7b",
+    "apps/rust-microsip/Cargo.toml": "00b94efb6e6c9dc4139339868e6377c07460563d013ee73db81c4371c8e9c5d5",
+    "apps/rust-microsip/src/lib.rs": "4a84070d47191fc96c4eb574d408ab9743cea273f849e113926d6904152ff12b",
+    "apps/rust-microsip/src/main.rs": "0ab1f230546f5f68930967eff40704eafa4460a2da5a373ea3445feb0e8ff99c",
+    "apps/rust-microsip/tests/cli.rs": "ee1eced47f1762dfd6200f569e999689538ae0ab175db31bf199493a15d7e32a",
+    "crates/media/Cargo.toml": "57fbb2d8c40f6e4c5254c68792ebf7a27414eaf0cf3428e56b163d6901f1b6e5",
+    "crates/media/src/dtmf.rs": "ae5ab40f793790b1274e248e4f16cc188cfb65200e8e7107958e9bdf568e56b6",
+    "crates/media/src/lib.rs": "56d6e9ede5ce4d0cb61c925e180dad32aa9ac429dc69ba3db9c5880056f970e5",
+    "crates/media/src/srtp_adapter.rs": "c355cb6fb7349f52489af87e76cccf8ef330eff070716fe8e8e8047ea17fbdd4",
+    "crates/media/tests/media.rs": "668479cf732ce3b509bad00a0d91e514d88413d36565cf4004159baacdb76e8f",
+    "crates/telephony/Cargo.toml": "60ab21aa1e51ac301acc1b0285fa983c90a6784a92c315ba6ff3efe401cdbd1a",
+    "crates/telephony/examples/g0_calls.rs": "ca22786c6c6f2dd5d07bd55cc27947cfa90b4fd197674aa11f275b1315c685e0",
+    "crates/telephony/examples/g0_controls.rs": "829b64caa3104a3191b1e7ca3756b6e193ff5eee29c6855f066fc7dd38c5ef71",
+    "crates/telephony/examples/g0_hold.rs": "251febaa4eb1d53c7a44dc32657013fa19d30d654c7e15658719a92fb22b07c1",
+    "crates/telephony/examples/g0_registration.rs": "154b57676c9100539945d2bc54e67ca0da9560d6e43b80fb670fb476ebc25544",
+    "crates/telephony/examples/g0_transfer.rs": "f747c0e41e630ce3dc7eefd18caef912bcf905fc51f0ae16ff5c7b0002fad489",
+    "crates/telephony/examples/secure_call.rs": "eca2328d04ceb001d6143e1cd5a99c739ce1b40ba755d535ae8eb7988b895ebb",
+    "crates/telephony/src/g0_calls.rs": "3410b5b63f69834559a16d330772282667e59ed931a8b3c4cd8af8af9563da04",
+    "crates/telephony/src/g0_controls.rs": "65aa6ea1471cd36c2b33978a3ff38969e6218fb507f83256b2f0467944dfaefb",
+    "crates/telephony/src/g0_hold.rs": "4219a6ca5d939f00a23c0b5cd451f4d334ac208d5dd95855409d1c6bdd2cbbe9",
+    "crates/telephony/src/g0_transfer.rs": "3c93307f3172ded13a84a92ca9cabc2eb75452ed740ed123863f1bdf6086122f",
+    "crates/telephony/src/lib.rs": "6e3af2c714d1a1e10794a70d9a7d8b2ffea0f5adbbd29e794634ca4b86f5e8ef",
+    "crates/telephony/src/rtcp.rs": "132cbe71acf8ba0b3e5c09c8a6186a53d131a0ac163be2a72b6885ce6a73d47f",
+    "crates/telephony/src/sdes.rs": "e4c178fa1d5a6a716a346a43b35cb4d429a6ada822b40bc189f5ce6f83607467",
+    "crates/telephony/src/secure_call.rs": "b5ad878b0c8aa6163fb1bcfa807005d083605147c801da6b3a2ff95039b3009d",
+    "crates/telephony/tests/registration.rs": "8c4b7afa28ed124f8c9cd20e117593db1d69930bc825a42604ff3c3f8fb06f38",
+    "docker/rust-components.sha256": "eb634d18b9aad27e880e947c8b376d799dfb0041aaa33891c0af28b4364fc301",
+    "packaging/check-g0-dependencies.py": "3ee841cac01ff8f6c9aa382e72af0db2219d9a8d318afd0a4428a3613104a92c",
+    "packaging/collect-cargo-notices.py": "c24200067b52f0ba8d0236c89d672a4905d38f628285270666c29aa0e5ed1697",
+    "packaging/export-scaffold.sh": "9c6d25817e326591d3ea5d3b0f9929cbb67764a7a5c4ab38063ccf33367c947a",
+    "packaging/tests/test_cargo_notices.py": "963f988e89cd08f962f8c53bbcd704948399f84eed5f6f6ce2b147eba47dee88",
+    "packaging/tests/test_g0_dependencies.py": "72d1f1b38e95ce3b51c7dd1b5ea0a973da3b6480fe806b9fb3328cbbd093bc23",
+    "packaging/verify.sh": "b646b4732c1dc96e170cea1f3959b14a4076f1a3288640442aa63d8d62ca6c9b",
+    "rust-toolchain.toml": "4958c3ef154e69bd2e5a74474652755d6f7cd148d7a6f7902985b2c5bd36a55d"
+  },
+  "probe_and_harness_sha256": {
+    "tests/probes/secure_call_inputs.json": "65cc4a4dc0dba9aa949312686f7f0e461a1b5144fc31debc1fc3bb71d8d917d6",
+    "tests/probes/prepare_secure_call.py": "e7556a5439a4b40b873ac47083c4614427c84901d2dfe7192d38b5ca904bb52c",
+    "tests/probes/verify_secure_dependencies.py": "6e48a52eda6f632e0af76edd769bec4b2b55155325a5f04d4f20e8d7c797dad5",
+    "tests/probes/observe_secure_call.py": "110290aac1f1edd2897f5342fb1140ed006bb908e5de1982b7e43fb0cce7371a",
+    "packaging/check-context.sh": "bdc6d2c4599219bffe4ce6aac987a27c7ba28fa30bb1578bdc1391413d5fffc3"
+  },
+  "runner_image": "sha256:6d9354607e1546df5b168aebfad43a8b581ec2a071d4d70ca1a1073ca8d287c0",
+  "pbx_image": "sha256:28fb6dc0530bd9c7b286834dbb7f72cdb555472649b1efde0712399747290131",
+  "elf_sha256": "cf7aad4a2ec73db379aaac5943f68c3f7b804024173040b564e94ab1fbccd6ee",
+  "elf_matches_build": true,
+  "exact_graph": {
+    "selected_registry_packages": 100,
+    "preserved_notices": 195,
+    "verified_archive_source_files": 4548
+  },
+  "runtime_proof": {
+    "schema_version": 1,
+    "runner_image": "sha256:6d9354607e1546df5b168aebfad43a8b581ec2a071d4d70ca1a1073ca8d287c0",
+    "pbx_image": "sha256:28fb6dc0530bd9c7b286834dbb7f72cdb555472649b1efde0712399747290131",
+    "elf_sha256": "cf7aad4a2ec73db379aaac5943f68c3f7b804024173040b564e94ab1fbccd6ee",
+    "runtime_mounts_and_hardening_verified": true,
+    "pbx_two_active_channels_one_call_observed": true,
+    "mandatory_sdes_nonoptimistic_endpoints_verified": true,
+    "internal_network_no_published_ports": true,
+    "four_encrypted_media_calls_validated": true,
+    "eight_endpoint_srtcp_report_exchanges_validated": true,
+    "peer_lsr_and_rollover_reported_by_probe": true,
+    "srtcp_tag_index_ebit_clear_replay_negatives_validated": true,
+    "mid_call_plaintext_reoffer_488_validated": true,
+    "fresh_key_fresh_ssrc_rekey_with_continued_media_validated": true,
+    "three_real_488_negative_offers_validated": true,
+    "two_real_tls_identity_negatives_validated": true,
+    "zero_calls_channels_contacts_before_down": true,
+    "count_parser_positive_nonzero_malformed_controls": true,
+    "zero_project_containers_after_down": true,
+    "zero_project_networks_after_down": true
+  },
+  "matrix": {
+    "calls": [
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "control": {
+          "first": {
+            "authenticated_sources": 1,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 2,
+            "peer_highest_sequence": 65949,
+            "peer_highest_sequence_rekeyed": 65949,
+            "peer_reports_for_rekeyed_source": 1,
+            "post_rekey_power_ratio": 1672.775121821715,
+            "post_rekey_rms": 5675.283447266192,
+            "received_after_rekey": 499,
+            "received_reports": 2,
+            "sent_reports": 16
+          },
+          "second": {
+            "authenticated_sources": 2,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 3,
+            "peer_highest_sequence": 66250,
+            "peer_highest_sequence_rekeyed": 0,
+            "peer_reports_for_rekeyed_source": 0,
+            "post_rekey_power_ratio": 1768.0942909924856,
+            "post_rekey_rms": 5665.928340379592,
+            "received_after_rekey": 499,
+            "received_reports": 3,
+            "sent_reports": 16
+          }
+        },
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1670.000676693146,
+          "rms": 5675.246123297209,
+          "sent_packets": 800
+        },
+        "rekey": {
+          "downgrade_rejected": true,
+          "peer_key_unchanged": true,
+          "rekey_accepted": true
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1768.1221805967798,
+          "rms": 5665.928089907248,
+          "sent_packets": 800
+        },
+        "transport": "tls",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMA",
+        "control": {
+          "first": {
+            "authenticated_sources": 2,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 3,
+            "peer_highest_sequence": 66250,
+            "peer_highest_sequence_rekeyed": 0,
+            "peer_reports_for_rekeyed_source": 0,
+            "post_rekey_power_ratio": 1672.775121821715,
+            "post_rekey_rms": 5675.283447266192,
+            "received_after_rekey": 499,
+            "received_reports": 3,
+            "sent_reports": 16
+          },
+          "second": {
+            "authenticated_sources": 1,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 2,
+            "peer_highest_sequence": 65949,
+            "peer_highest_sequence_rekeyed": 65949,
+            "peer_reports_for_rekeyed_source": 1,
+            "post_rekey_power_ratio": 1768.0942909924856,
+            "post_rekey_rms": 5665.928340379592,
+            "received_after_rekey": 499,
+            "received_reports": 2,
+            "sent_reports": 16
+          }
+        },
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1670.000676693146,
+          "rms": 5675.246123297209,
+          "sent_packets": 800
+        },
+        "rekey": {
+          "downgrade_rejected": true,
+          "peer_key_unchanged": true,
+          "rekey_accepted": true
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1768.1221805967798,
+          "rms": 5665.928089907248,
+          "sent_packets": 800
+        },
+        "transport": "tls",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "control": {
+          "first": {
+            "authenticated_sources": 1,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 2,
+            "peer_highest_sequence": 65948,
+            "peer_highest_sequence_rekeyed": 65948,
+            "peer_reports_for_rekeyed_source": 1,
+            "post_rekey_power_ratio": 1673.370572791387,
+            "post_rekey_rms": 5635.895827528887,
+            "received_after_rekey": 499,
+            "received_reports": 2,
+            "sent_reports": 16
+          },
+          "second": {
+            "authenticated_sources": 2,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 3,
+            "peer_highest_sequence": 66249,
+            "peer_highest_sequence_rekeyed": 0,
+            "peer_reports_for_rekeyed_source": 0,
+            "post_rekey_power_ratio": 1626.76994507402,
+            "post_rekey_rms": 5650.819865285019,
+            "received_after_rekey": 499,
+            "received_reports": 3,
+            "sent_reports": 16
+          }
+        },
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1670.4049494731837,
+          "rms": 5635.863248873237,
+          "sent_packets": 800
+        },
+        "rekey": {
+          "downgrade_rejected": true,
+          "peer_key_unchanged": true,
+          "rekey_accepted": true
+        },
+        "reverse": false,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1626.653971051535,
+          "rms": 5650.812373455697,
+          "sent_packets": 800
+        },
+        "transport": "tls",
+        "unregistered": true
+      },
+      {
+        "ack_and_termination_verified": true,
+        "bye_200_verified": true,
+        "codec": "PCMU",
+        "control": {
+          "first": {
+            "authenticated_sources": 2,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 3,
+            "peer_highest_sequence": 66249,
+            "peer_highest_sequence_rekeyed": 0,
+            "peer_reports_for_rekeyed_source": 0,
+            "post_rekey_power_ratio": 1673.370572791387,
+            "post_rekey_rms": 5635.895827528887,
+            "received_after_rekey": 499,
+            "received_reports": 3,
+            "sent_reports": 16
+          },
+          "second": {
+            "authenticated_sources": 1,
+            "packet_negatives_verified": true,
+            "peer_echoed_sender_reports": 2,
+            "peer_highest_sequence": 65948,
+            "peer_highest_sequence_rekeyed": 65948,
+            "peer_reports_for_rekeyed_source": 1,
+            "post_rekey_power_ratio": 1626.76994507402,
+            "post_rekey_rms": 5650.819865285019,
+            "received_after_rekey": 499,
+            "received_reports": 2,
+            "sent_reports": 16
+          }
+        },
+        "first": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1670.4049494731837,
+          "rms": 5635.863248873237,
+          "sent_packets": 800
+        },
+        "rekey": {
+          "downgrade_rejected": true,
+          "peer_key_unchanged": true,
+          "rekey_accepted": true
+        },
+        "reverse": true,
+        "second": {
+          "late_packets": 0,
+          "lost_packets": 0,
+          "received_packets": 800,
+          "remote_to_own_power_ratio": 1626.653971051535,
+          "rms": 5650.812373455697,
+          "sent_packets": 800
+        },
+        "transport": "tls",
+        "unregistered": true
+      }
+    ],
+    "distinct_signaling_and_media_sockets": true,
+    "endpoint_processes": 1,
+    "fixture": "two-rust-endpoints-initial-sdes-srtp-srtcp",
+    "g0_passed": false,
+    "human_voice_tested": false,
+    "initial_srtp_tested": true,
+    "peer_initiated_rekey_tested": false,
+    "per_endpoint_actual_control_negatives": [
+      "tag_tamper",
+      "index_tamper",
+      "cleared_e_bit",
+      "replay",
+      "clear_control"
+    ],
+    "per_endpoint_actual_packet_negatives": [
+      "wrong_key",
+      "tag_tamper",
+      "sequence_tamper",
+      "clear_rtp",
+      "replay"
+    ],
+    "plaintext_rtp_explicit": false,
+    "rekey_policy": "fresh_key_fresh_ssrc",
+    "rekey_tested": true,
+    "release_artifact_tested": false,
+    "schema_version": 1,
+    "seconds_per_call": 16,
+    "secure_hold_transfer_tested": false,
+    "srtcp_tested": true,
+    "synthetic_sources_hz": [
+      440,
+      880
+    ]
+  },
+  "negatives": [
+    {
+      "callee_invite_observed": false,
+      "negative_offer": "plaintext",
+      "response": 488,
+      "unregistered": true
+    },
+    {
+      "callee_invite_observed": false,
+      "negative_offer": "missing_crypto",
+      "response": 488,
+      "unregistered": true
+    },
+    {
+      "callee_invite_observed": false,
+      "negative_offer": "unsupported_suite",
+      "response": 488,
+      "unregistered": true
+    },
+    {
+      "negative_tls": "untrusted_ca",
+      "rejected_before_call": true,
+      "sip_endpoint_constructed": false,
+      "typed_certificate_error_verified": true
+    },
+    {
+      "negative_tls": "wrong_hostname",
+      "rejected_before_call": true,
+      "sip_endpoint_constructed": false,
+      "typed_certificate_error_verified": true
+    }
+  ],
+  "log_sha256": {
+    "rekey-final2-checks.log": "0934d16538b26bc1d742e555df0b69df68096ef9c3c2f4007a293408749a6f83",
+    "rekey-final2-graph.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "rekey-final2-observer.log": "fc80a2712f58fc0ab0215be7cbe4ee45af872577eb33324ebf04a9034c555910",
+    "rekey-final2-work-runtime.log": "42901250b99f81043e34d7614cf81209f023126bb0462ef76ffcd7ee01105494"
+  },
+  "unpinned_discovery_runs": {
+    "note": "disposable scratch builds, one PBX each, single PCMA call; diagnostic only, not release evidence",
+    "same_ssrc_roc_continued": {
+      "reinvite_status": 200,
+      "answer_key_changed": false,
+      "callee_packets_after_switch": 0,
+      "log_sha256": "93211cee7d1f57798594b94a668e223e75ab18d21584514f15750297b550a5cc"
+    },
+    "same_ssrc_roc_reset": {
+      "reinvite_status": 200,
+      "answer_key_changed": false,
+      "callee_packets_after_switch": 349,
+      "log_sha256": "be5ec9c9d4737fe8d4f5b1f69f5a19d2019edf069c85b6ae5c2efe2c45f3d7fe"
+    },
+    "new_ssrc_roc_zero_sequence_continued": {
+      "reinvite_status": 200,
+      "answer_key_changed": false,
+      "callee_packets_after_switch": 349,
+      "log_sha256": "853dea6dddbf0f9036b1cdca357e375d5b7c8890337fd9b0c23edaa0728b33fb"
+    }
+  }
+}

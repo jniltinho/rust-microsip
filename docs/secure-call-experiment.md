@@ -51,7 +51,8 @@ python3 tests/probes/observe_secure_call.py
 
 The observer snapshots actual images and ELF, runs only the disposable PBX and
 an explicitly mounted probe binary, verifies internal networking/hardening,
-validates the four-case RTP/SRTCP matrix plus three real 488 and two typed certificate
+validates the four-case RTP/SRTCP matrix (each call also refuses a mid-call
+plaintext re-offer and performs one fresh-key, fresh-SSRC rekey) plus three real 488 and two typed certificate
 negatives, and checks cleanup. Logs, keys, fixtures, executable and caches stay
 under ignored `artifacts/`. The runner uses the existing toolchain image rather
 than a production runtime image. The Rust notice inventory is not an inventory
@@ -61,5 +62,5 @@ For a fresh explicit-copy regression, pass a neutral directory name to both
 preparation and dependency verification, and change `candidate` accordingly.
 Pass the same name to the runtime observer; it is not a general remote-account
 CLI. Do not point Docker at a repository-wide build context or
-mount a home directory. A successful run does not complete G0, rekey, secure call
+mount a home directory. A successful run does not complete G0, PBX-initiated rekey, secure call
 controls, audio-device/human tests, production hardening or release acceptance.
