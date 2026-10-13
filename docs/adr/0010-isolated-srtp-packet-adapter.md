@@ -80,4 +80,6 @@ SRTP stream with out-of-band ROC is not implemented. No complete key-erasure,
 compiler constant-time, independent-vulnerability-audit or human-audio claim is
 made. SDK internal behavior is version-specific and remains review-sensitive.
 
-G0, tasks 1.7/5.4, secure PBX calls and every usable-release gate remain open.
+An [initial TLS/SDES call experiment](0011-isolated-initial-tls-sdes-calls.md) now
+connects this primitive to the PBX, without adopting it in the application.
+G0, tasks 1.7/5.4, secure-control/SRTCP coverage and every usable-release gate remain open.

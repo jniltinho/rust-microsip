@@ -32,6 +32,9 @@ done
 mkdir -p "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts" "$scratch/tests/probes"
 cp tests/probes/srtp_candidate.rs "$scratch/tests/probes/srtp_candidate.rs"
 cp tests/probes/srtp_adapter.rs "$scratch/tests/probes/srtp_adapter.rs"
+for name in secure_call_inputs.json sdes.rs secure_call.rs secure_call_example.rs prepare_secure_call.py observe_secure_call.py verify_secure_dependencies.py; do
+    cp "tests/probes/$name" "$scratch/tests/probes/$name"
+done
 for path in base/private.txt .env .env.local profile.sqlite3 sample.AppImage .git/private.txt dist/private.txt artifacts/private.txt apps/rust-microsip/src/private.env crates/telephony/src/private.env crates/telephony/examples/private.env tests/probes/private.env; do
     printf '%s\n' 'synthetic-private-context-marker' > "$scratch/$path"
 done
@@ -49,7 +52,7 @@ if ! grep -Eq '^#[0-9]+ [0-9.]+ CONTEXT_REJECTED:' "$temporary/negative.log"; th
     exit 1
 fi
 grep -E '^#[0-9]+ [0-9.]+ CONTEXT_REJECTED:' "$temporary/negative.log"
-for sentinel in base/private.txt .env tests/probes/private.env tests/probes/srtp_candidate.rs tests/probes/srtp_adapter.rs; do
+for sentinel in base/private.txt .env tests/probes/private.env tests/probes/srtp_candidate.rs tests/probes/srtp_adapter.rs tests/probes/sdes.rs tests/probes/secure_call.rs tests/probes/secure_call_example.rs tests/probes/prepare_secure_call.py tests/probes/observe_secure_call.py tests/probes/verify_secure_dependencies.py tests/probes/secure_call_inputs.json; do
     if ! grep -E '^#[0-9]+ [0-9.]+ CONTEXT_REJECTED:' "$temporary/negative.log" | grep -Fq "'$sentinel'"; then
         echo "ERROR: sentinel not identified by the audit: $sentinel" >&2
         exit 1

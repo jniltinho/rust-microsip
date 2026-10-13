@@ -20,10 +20,13 @@ The [isolated SRTP pre-adoption diagnostic](receipts/g0-srtp-candidate-2026-10-1
 is separate from the application workspace and its lockfile. Its inventory and
 four local positive tests do **not** approve SRTP: the duplicate-packet rejection
 test fails for unadapted rustrtc 0.4.7. The probe is outside normal Cargo targets
-and the Docker context; no secure call/profile has been implemented yet. An
+and the Docker context; the application still has no secure call/profile. An
 [isolated per-SSRC packet adapter](receipts/g0-srtp-adapter-2026-10-13.md) now has
 29 passing tests and separate SRTP/SRTCP replay windows. It is not the complete
-secure-call owner or evidence of TLS/SDES/PBX interoperability.
+secure-call owner. A separate [initial TLS/SDES experiment](receipts/g0-secure-call-2026-10-13.md)
+now verifies four encrypted G.711 PBX calls and negatives, without adopting the
+SDK/secure profile in the application. See [ADR 0011](adr/0011-isolated-initial-tls-sdes-calls.md)
+for strict scope, key-erasure limits and remaining secure-control gates.
 
 ## Pinned inputs and isolation
 
@@ -53,7 +56,7 @@ The second command makes a temporary copy of individually enumerated own files o
 
 The local exporter does not remove leftovers from previous runs; reserve `dist/` for builds and use an empty destination when comparing or distributing artifacts. Checksums provide local integrity, not authorship/provenance signatures.
 
-Rust tests verify real process contracts, exit codes, conflicting arguments, non-UTF-8 input, no secret-marker echo, and environment/configuration-independent diagnostics. Adapter tests cover redaction, validation, cancellation and a finite unreachable-registrar deadline. See the [registration receipt](receipts/g0-rust-registration-2026-10-12.md) and [lab guide](../docker/asterisk/README.md) for actual PBX execution. The [media receipt](receipts/g0-rust-media-2026-10-12.md) records 12 synthetic five-second calls, exhaustive functional G.711 comparisons and bounded RTP tests. Silence, local echo and wrong-tone controls must fail. The [DTMF receipt](receipts/g0-rust-dtmf-2026-10-12.md) adds allocation-free RFC 4733 primitives, negotiated event-mask/sender tests and 12 actual positive/negative IVR cases. The [hold receipt](receipts/g0-rust-hold-2026-10-12.md) adds twelve synthetic hold/resume/rejected-offer calls and current-source pair-call/IVR regressions. The [transfer receipt](receipts/g0-rust-transfer-2026-10-12.md) adds 24 real synthetic REFER/NOTIFY cases, destination-tone validation and preserved original-call audio after a 404. These separate experiments do not establish production SIP-06/SIP-08, human voice, SRTP, resampling or jitter-buffer readiness.
+Rust tests verify real process contracts, exit codes, conflicting arguments, non-UTF-8 input, no secret-marker echo, and environment/configuration-independent diagnostics. Adapter tests cover redaction, validation, cancellation and a finite unreachable-registrar deadline. See the [registration receipt](receipts/g0-rust-registration-2026-10-12.md) and [lab guide](../docker/asterisk/README.md) for actual PBX execution. The [media receipt](receipts/g0-rust-media-2026-10-12.md) records 12 synthetic five-second calls, exhaustive functional G.711 comparisons and bounded RTP tests. Silence, local echo and wrong-tone controls must fail. The [DTMF receipt](receipts/g0-rust-dtmf-2026-10-12.md) adds allocation-free RFC 4733 primitives, negotiated event-mask/sender tests and 12 actual positive/negative IVR cases. The [hold receipt](receipts/g0-rust-hold-2026-10-12.md) adds twelve synthetic hold/resume/rejected-offer calls and current-source pair-call/IVR regressions. The [transfer receipt](receipts/g0-rust-transfer-2026-10-12.md) adds 24 real synthetic REFER/NOTIFY cases, destination-tone validation and preserved original-call audio after a 404. These separate experiments do not establish production SIP-06/SIP-08, human voice, production SRTP, resampling or jitter-buffer readiness.
 
 ## Next steps
 
