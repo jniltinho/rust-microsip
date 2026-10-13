@@ -35,6 +35,13 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("external_signaling_port=15061", config)
         self.assertNotIn("local_net=172.", config)
 
+    def test_contact_proof_disables_rewriting_only_in_internal_fixture(self):
+        config = lab.pjsip_config(self.accounts, "internal", verify_contact=True)
+        self.assertEqual(config.count("rewrite_contact=no"), 8)
+        self.assertNotIn("rewrite_contact=yes", config)
+        with self.assertRaises(ValueError):
+            lab.pjsip_config(self.accounts, "host", verify_contact=True)
+
     def test_rejects_unknown_profile_and_secret_injection(self):
         with self.assertRaises(ValueError):
             lab.pjsip_config(self.accounts, "production")
@@ -75,6 +82,11 @@ class SecretDirectoryTests(unittest.TestCase):
             root = Path(tmp)
             lab.generate(root)
             self.assertTrue((root / "issuer/ca.key").is_file())
+            self.assertTrue((root / "issuer/untrusted-ca.key").is_file())
+            self.assertTrue((root / "clients/untrusted-ca.crt").is_file())
+            self.assertNotEqual((root / "clients/ca.crt").read_bytes(),
+                                (root / "clients/untrusted-ca.crt").read_bytes())
+            self.assertFalse((root / "clients/untrusted-ca.key").exists())
             self.assertFalse((root / "pbx/ca.key").exists())
             self.assertFalse((root / "clients/pbx.key").exists())
             for path in root.rglob("*"):

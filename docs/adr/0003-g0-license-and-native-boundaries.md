@@ -2,6 +2,8 @@
 
 Date: 2026-10-12. Status: accepted engineering boundary for pre-adoption evaluation; not a release/legal certification or G0 approval. Baseline: scaffold `1bfbe7d`, isolated PBX `7104510`.
 
+This is the pre-adoption snapshot at the baseline above. Subsequent experimental SIP dependency incorporation is documented in [ADR 0004](0004-experimental-sip-adapter.md) and its selected registry/notice inventory; the workspace is no longer dependency-free. The ordinary CLI scaffold still has no external crates or account access.
+
 ## Decision
 
 Keep own application code **GPL-3.0-or-later**, as approved. Evaluate only dependencies with a documented compatible licensing path and retained notices. Do not copy code/assets from the local reference trees. Do not substitute the separate PBX's GPL-2.0 licensing for the client's license. No app dependency is approved for production merely because its crate declares a familiar license. An adoption-time block applies **anywhere in the selected build tree**, including transitive dependencies; a parent that cannot disable a blocked component inherits its block.

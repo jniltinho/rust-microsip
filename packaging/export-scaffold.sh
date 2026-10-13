@@ -5,6 +5,7 @@ binary=target/x86_64-unknown-linux-gnu/release/rust-microsip
 cp "$binary" /out/rust-microsip
 cp LICENSE NOTICE /out/
 cp -r /opt/rust-licenses /out/toolchain-licenses
+cp -r /tmp/g0-cargo-notices /out/cargo-licenses
 readelf -d "$binary" > /out/elf-dynamic.txt
 readelf --version-info "$binary" > /out/elf-versions.txt
 dpkg-query -W -f='${Package}\t${Version}\n' > /out/builder-packages.txt
@@ -20,6 +21,8 @@ root = pathlib.Path('/work')
 files = [root / name for name in ('Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'LICENSE', 'NOTICE', 'Dockerfile', '.dockerignore', 'docker/rust-components.sha256')]
 files += sorted((root / 'apps').rglob('*.rs'))
 files += sorted((root / 'apps').rglob('Cargo.toml'))
+files += sorted((root / 'crates').rglob('*.rs'))
+files += sorted((root / 'crates').rglob('Cargo.toml'))
 files += sorted((root / 'packaging').glob('*.sh'))
 files += sorted((root / 'packaging').rglob('*.py'))
 sources = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
@@ -47,8 +50,16 @@ sbom = {
     'components': [{'type': 'library', 'name': 'Rust standard library', 'version': rust_version,
         'properties': [{'name': 'rust-microsip:license-inventory',
             'value': 'incomplete; Rust and third-party terms in toolchain-licenses/generated-notices/COPYRIGHT-library.html and licenses/; no single license expression asserted'}]}],
-    'properties': [{'name': 'rust-microsip:scope', 'value': 'scaffold; no external Cargo crates; runtime libraries listed separately by readelf; full G0/release SBOM pending'}],
+    'properties': [{'name': 'rust-microsip:scope', 'value': 'CLI scaffold plus selected workspace/G0 build inventory; not an ELF link map; full G0/release SBOM pending'}],
 }
+inventory = json.loads(pathlib.Path('/out/cargo-licenses/inventory.json').read_text())
+sbom['components'] += [{
+    'type': 'library', 'name': p['name'], 'version': p['version'],
+    'purl': f"pkg:cargo/{p['name']}@{p['version']}",
+    'hashes': [{'alg': 'SHA-256', 'content': p['archive_sha256']}],
+    'licenses': [{'expression': p['declared_license']}],
+    'properties': [{'name': 'rust-microsip:scope', 'value': 'selected workspace/G0 dev/build graph; not necessarily linked into CLI scaffold'}],
+} for p in inventory['packages']]
 pathlib.Path('/out/scaffold-sbom.cdx.json').write_text(json.dumps(sbom, indent=2) + '\n')
 PY
 (cd /out && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z | xargs -0 sha256sum > SHA256SUMS)

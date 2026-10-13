@@ -72,6 +72,13 @@ def generate(root):
                          "-CA", str(issuer / "ca.crt"), "-CAkey", str(issuer / "ca.key"),
                          "-set_serial", str(secrets.randbits(128) or 1),
                          "-extfile", str(stage / "server.ext"), "-out", str(pbx / "pbx.crt")])
+        # A valid but unrelated CA makes the Rust TLS-negative test exercise
+        # certificate-chain verification, not merely malformed PEM handling.
+        commands.append(["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256", "-days", "3",
+                         "-subj", "/CN=Untrusted Disposable Lab CA",
+                         "-addext", "basicConstraints=critical,CA:TRUE",
+                         "-keyout", str(issuer / "untrusted-ca.key"),
+                         "-out", str(stage / "clients/untrusted-ca.crt")])
         for command in commands:
             subprocess.run(["openssl", *command], check=True, stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, timeout=30)
@@ -107,11 +114,13 @@ def validate_accounts(accounts):
         raise ValueError("invalid fictional accounts")
 
 
-def pjsip_config(accounts, profile):
+def pjsip_config(accounts, profile, verify_contact=False):
     """Render separate transport/security fixtures; never weaken secure endpoints."""
     validate_accounts(accounts)
     if profile not in ("internal", "host"):
         raise ValueError("unsupported lab profile")
+    if not isinstance(verify_contact, bool) or (verify_contact and profile != "internal"):
+        raise ValueError("Contact verification is internal-lab only")
     config = "[global]\ntype=global\nuser_agent=Disposable-Lab\nendpoint_identifier_order=username\n\n"
     for protocol, port in (("udp", 5060), ("tcp", 5060), ("tls", 5061)):
         config += f"[transport-{protocol}]\ntype=transport\nprotocol={protocol}\nbind=0.0.0.0:{port}\n"
@@ -132,7 +141,8 @@ def pjsip_config(accounts, profile):
         config += (f"[{name}]\ntype=endpoint\ntransport=transport-{protocol}\ncontext=lab-only\n"
                    f"auth=auth-{name}\naors={name}\ndisallow=all\nallow=alaw,ulaw\n"
                    f"media_encryption={encryption}\nmedia_encryption_optimistic=no\n"
-                   "direct_media=no\nrtp_symmetric=yes\nforce_rport=yes\nrewrite_contact=yes\n"
+                   "direct_media=no\nrtp_symmetric=yes\nforce_rport=yes\n"
+                   f"rewrite_contact={'no' if verify_contact else 'yes'}\n"
                    "dtmf_mode=rfc4733\nice_support=no\nallow_transfer=yes\n\n"
                    f"[auth-{name}]\ntype=auth\nauth_type=userpass\nusername={name}\n"
                    f"password={accounts[name]}\nrealm=lab.invalid\n\n"
@@ -159,6 +169,9 @@ def dialplan():
 def configure_pbx():
     """All mutable PBX state lives in an ephemeral, private tmpfs."""
     os.umask(0o077)
+    verify_contact = os.environ.get("LAB_VERIFY_CONTACT", "0")
+    if verify_contact not in ("0", "1"):
+        raise ValueError("invalid Contact verification mode")
     for directory in ("config", "db", "cache", "spool", "log", "data"):
         (RUNTIME / directory).mkdir(mode=0o700, exist_ok=True)
     directories = {
@@ -172,7 +185,7 @@ def configure_pbx():
         "asterisk.conf": "[directories]\n" + "".join(f"{key} => {value}\n" for key, value in directories.items())
         + "\n[options]\nverbose=0\ndebug=0\nnocolor=yes\nmaxcalls=8\n",
         "modules.conf": "[modules]\nautoload=no\n" + "".join(f"load={name}.so\n" for name in MODULES),
-        "pjsip.conf": pjsip_config(load_accounts(), os.environ.get("LAB_PROFILE", "internal")),
+        "pjsip.conf": pjsip_config(load_accounts(), os.environ.get("LAB_PROFILE", "internal"), verify_contact == "1"),
         "extensions.conf": dialplan(),
         "rtp.conf": "[general]\nrtpstart=10000\nrtpend=10019\nicesupport=no\nstrictrtp=yes\n",
         "manager.conf": "[general]\nenabled=no\n",

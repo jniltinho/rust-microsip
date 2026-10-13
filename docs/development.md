@@ -2,7 +2,7 @@
 
 ## Status and commands
 
-See [implementation approval](implementation-approval.md). The first slice is a single-binary workspace, not the design's final workspace. GUI, SIP, audio, SQLite, IPC, control CLI, MCP, and AppImage do not exist yet. Starting without options returns exit code 1 and reports unavailability; invalid arguments return 2 without echoing possible passwords. Help, version, and static diagnostics return 0.
+See [implementation approval](implementation-approval.md). The workspace contains a single CLI scaffold and an experimental telephony library/example, not the design's final workspace. The shipping scaffold has no SIP/account access; the isolated example proves registration only. GUI, calls, audio, SQLite, IPC, control CLI, MCP, and AppImage do not exist yet. Starting without options returns exit code 1 and reports unavailability; invalid arguments return 2 without echoing possible passwords. Help, version, and static diagnostics return 0.
 
 ```sh
 docker buildx build --platform linux/amd64 --target artifacts --output type=local,dest=dist .
@@ -26,7 +26,7 @@ The local exporter writes files owned by its invoking user. It neither installs 
 - Versioned `Cargo.lock`, `--locked` fetching, `--frozen` compilation/tests in `RUN --network=none` stages, executed as UID 10001 without host mounts.
 - Allowlisted Docker context in `.dockerignore`: `base/`, `.git`, `.env` files, databases, AppImages, artifacts, and personal settings are not sent.
 
-The scaffold still has no external crates. Docker verification also tests the pre-adoption selected-dependency deny boundary; it does not replace source/license, vulnerability or full native audits. `std` is linked into the ELF, which is **dynamic** with respect to glibc/libgcc_s. Candidate dependencies and complete native/dlopen auditing remain part of G0. Standalone Rust component notices accompany the export, including the distribution-generated `COPYRIGHT.html`, `COPYRIGHT-library.html`, and `licenses/` tree; missing required notices fail the builder. `scaffold-sbom.cdx.json` is a preliminary inventory without a single std license expression, not the future release SBOM. `elf-dynamic.txt` and `elf-versions.txt` describe this ELF only.
+The CLI scaffold itself has no external crates; the experimental adapter does. Docker verification checks the selected dependency deny boundary, registry source/lock checksums, reviewed provider pins, known permissive license expressions and preserved archive notices. It does not replace vulnerability, complete license/source or native audits. `cargo-licenses/inventory.json` includes the selected Linux workspace graph (including G0 dev/build dependencies), with exact archive/notice hashes and features; it is not an ELF link map. The [registration inventory](inventory/g0-registration-cargo.json) records this slice. `std` is linked into the ELF, which is **dynamic** with respect to glibc/libgcc_s. Complete native/dlopen auditing remains part of G0. Rust component notices accompany the export, including generated `COPYRIGHT.html`, `COPYRIGHT-library.html`, and `licenses/`; missing required notices fail the builder. `scaffold-sbom.cdx.json` is a preliminary workspace/build inventory, not the future release SBOM. `elf-dynamic.txt` and `elf-versions.txt` describe the CLI ELF only.
 
 Pinned versions need periodic security review. Reproducibility here means auditable inputs, not proven bit-for-bit identity. `-C target-cpu=native` is not used.
 
@@ -44,7 +44,7 @@ The second command makes a temporary copy of individually enumerated own files o
 
 The local exporter does not remove leftovers from previous runs; reserve `dist/` for builds and use an empty destination when comparing or distributing artifacts. Checksums provide local integrity, not authorship/provenance signatures.
 
-Rust tests verify real process contracts, exit codes, conflicting arguments, non-UTF-8 input, no secret-marker echo, and environment/configuration-independent diagnostics. RED/GREEN evidence is in the [initial receipt](receipts/g0-scaffold-2026-10-12.md) and [English rebuild receipt](receipts/g0-scaffold-english-2026-10-12.md). No call tests were run in this slice.
+Rust tests verify real process contracts, exit codes, conflicting arguments, non-UTF-8 input, no secret-marker echo, and environment/configuration-independent diagnostics. Adapter tests cover redaction, validation, cancellation and a finite unreachable-registrar deadline. See the [registration receipt](receipts/g0-rust-registration-2026-10-12.md) and [lab guide](../docker/asterisk/README.md) for actual PBX execution. No call/audio tests have passed yet.
 
 ## Next steps
 

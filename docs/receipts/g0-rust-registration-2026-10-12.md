@@ -1,0 +1,40 @@
+# Experimental Rust registration receipt — 2026-10-12
+
+Status: **registration sub-milestone only; task 1.6, G0 and release remain open**. Baseline `8fb57a2`; source/lock identities below identify the tested working tree before its commit. No actual call, RTP, SRTP, desktop or microphone test is asserted.
+
+## Identity and boundaries
+
+- [ADR 0004](../adr/0004-experimental-sip-adapter.md): isolated experimental library, not the production actor, configuration resolver or control CLI. The ordinary binary still provides only help/version/static diagnostics.
+- Exact registry pins: rsipstack 0.7.3, rustls 0.23.45, ring 0.17.14, Tokio 1.53.2, tokio-util 0.7.20, thiserror 2.0.21, secrecy 0.10.3, zeroize 1.9.1; dev/example libc 0.2.190 and serde_json 1.0.154. No audio-codec or rustrtc adoption.
+- Cargo.lock SHA-256: `be9b25754f9f66838f8d88ee85d68b0c430a5c4ef4db8bf413ff1d34c15a5f41`; 92 registry lock entries, including non-Linux entries not compiled here.
+- Adapter source SHA-256: `8a43fdeb3fbcabcdff26abe7387b77a4600214848ef2d3fb9ecd45f65aecba02`.
+- Example source SHA-256: `154b57676c9100539945d2bc54e67ca0da9560d6e43b80fb670fb476ebc25544`.
+- Rust runner ELF SHA-256: `6b244f83f299a2d5d415ec2ff9070f3fe3addbe320c37b336cddb379515df777`.
+- Runner image: `sha256:2d1c03043ad49d6018b9a98e0677a1f66775d231b8597cf751767d51f836847f`; PBX wrapper: `sha256:41203a8a6fd7dca56247f373ff13f4f365c7fbe59d3fa56469e64ec37d863c7f`. Both are local image identities, not registry attestations. The PBX retains its [pinned andrius upstream](../adr/0002-disposable-asterisk-lab.md).
+- [Selected Cargo inventory](../inventory/g0-registration-cargo.json) SHA-256: `815e71745bd2170de871dc0a2304a0350fd2a5dd8c4f078579674bc1ba22ff4a`; 73 selected Linux registry packages and 143 original notice files. Includes example dev/build dependencies, not an exact ELF link map or complete release SBOM.
+
+## Executed tests
+
+1. Rust TDD RED: tests could not import the not-yet-implemented adapter API (exit 101). GREEN: seven adapter tests pass for validation/redaction, invalid TLS inputs, pre-cancellation, a finite silent-registrar deadline, concrete UDP Contact/in-flight cancellation, and rejecting altered Contact/Call-ID or decreasing CSeq. The silent UDP socket is exclusively bound by the test; no installed/local SIP service is contacted. Ten scaffold process tests and one doctest still pass. fmt, clippy all targets with warnings denied, rustdoc warnings denied, frozen example compilation and offline lock regeneration/comparison pass in Docker without a host Cargo installation.
+2. One ad-hoc hardened container run failed the doctest because its temporary filesystem was mounted without executable permission. The same doctest passed with an explicit executable `/tmp`; normal Docker builder verification also passed. This was not recorded as an application test success or hidden by disabling doctests.
+3. Dependency TDD RED reproduced accepted path/git provider replacements and unreviewed C backend aliases. GREEN: selected-tree parser rejects protected source suffixes, unreviewed versions/providers/features, blocked codec/fonts and mixed runtimes; recognizes proc-macro markers and requires ring for rustls. Registry archive source/checksum/notice collection includes dev/build nodes, rejects unreviewed paths/git, checksum mismatch, unsafe archive members and absent notices. Seventeen Python tests pass normally and under `-O`; validation does not rely on assertions.
+4. Twelve Asterisk fixture unit tests pass, including issuer/client key separation, the newly generated valid unrelated CA and internal-only Contact-proof policy. Original Python registration fixture suite still exits 0. Generation uses only fresh ignored fictional data; no personal profile or installed AppImage is accessed.
+5. The **real Rust adapter**, not the Python probe, exits 0 against Asterisk with this sanitized result:
+
+   | Transport | Observed 401 challenges | Register | Explicit refresh | Unregister | Wrong password |
+   | --- | --- | --- | --- | --- | --- |
+   | UDP | 3 | 200 | 200 | 200 | rejected |
+   | TCP | 3 | 200 | 200 | 200 | rejected |
+   | TLS | 3 | 200 | 200 | 200 | rejected |
+
+   Each transport also reports `contact_verified=true`, `call_id_stable=true` and `cseq_increased=true`, derived from bounded outgoing REGISTER inspection plus strictly advancing checkpoints after each successful operation. Retransmissions may reuse CSeq within a phase. The internal Rust overlay disables PBX Contact rewriting; an independent Asterisk endpoint query confirms `rewrite_contact=false`. A valid but unrelated CA and a wrong server hostname each fail the transport/TLS operation. No fallback/custom verifier is installed. TLS is established before constructing authentication credentials or sending SIP bytes. The fixture still explicitly reports `calls_tested=false`, `g0_passed=false`.
+6. An independent Asterisk contact query after the probe found no 1001/1101/1201 contacts and retained all three 1002/1102/1202 peer contacts. This corroborates unregistration, not just client-returned status. The Python peer still does **not answer calls**.
+7. The actual normalized Rust overlay passes the internal Compose safety contract. Runtime inspection found two non-root/read-only PBX/peer containers, zero published ports and one private read-only bind each. Final teardown leaves zero project-labelled containers/networks. No host networking, devices, HOME, Docker socket or production settings are mounted.
+8. Both normal/build and dev-inclusive selected cargo trees pass the deny boundary. Positive/negative clean-copy context audit and offline artifact export pass. The negative control explicitly identifies synthetic `.env` and `base/private.txt`; no actual `base/` is copied/read. Private source/example sentinels also stay excluded. Export checksums verify the CLI scaffold, toolchain notices, Cargo notices, preliminary SBOM and source manifest. Source-manifest SHA-256: `8cdf466a82dbfd5c652d34bef0a06c4b8c66a8a7b78494c287939b6d209ce982`. No AppImage/release was produced.
+9. codebase-memory MCP was used for scoped search, trace, snippet and coverage checks. The final checked adapter/example/tests, collector/checker and PBX helpers had `metadata_match` and no recorded coverage gap at index generation `2026-10-13T00:13:52Z`. The Rust macro/async call trace was incomplete/misresolved despite this best-effort signal; exact own source and execution tests, not an exhaustive graph claim, support this receipt. Ignored dependency research was inspected directly, not presented as indexed project code.
+
+Local logs remain ignored under `artifacts/`, including `g0-registration-red.log`, `g0-provider-red.log`, `g0-registration-build-final-scope.log`, `g0-rust-final-reviewed-runtime.log`, `g0-rust-final-reviewed-contacts.txt`, `g0-python-regression-proof.log` and `g0-registration-context-final-scope.log`. Raw logs/fictional credentials are not publication artifacts.
+
+## Required follow-up
+
+Read-only Claude [round 1](../reviews/claude-rust-registration-round-1.md) requested stronger Contact/refresh evidence; [round 2](../reviews/claude-rust-registration-round-2.md) approved only this revised experimental sub-milestone. The latter's explicit residuals remain tracked: independent TCP/TLS socket-peer verification, authenticated-retry callback counts, a positive/retransmission WireEvidence unit control, poison handling and dedicated Rust-overlay identity regression. `contact_verified` compares inspected headers with the transport-reported address; it does not prove incoming-call reachability. Full renewal scheduling/407 coverage, cancellation during established calls, hostile-network parser/channel limits and upstream credential-copy lifetime remain unproved. Independent-endpoint PCMA/PCMU calls, DTMF/hold/REFER/SRTP, device/audio/desktop/IPC stack, host/VM SDP/ACL/NAT, vulnerabilities and exact-artifact human headset tests remain mandatory. Task 1.6 is intentionally unchecked; all 54 main tasks and linked CLI/MCP release gates retain their original acceptance criteria.

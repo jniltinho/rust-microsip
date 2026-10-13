@@ -11,7 +11,8 @@ MAX_BYTES = 1024 * 1024
 BLOCKED = frozenset({
     "audio-codec", "rsip", "aws-lc-rs", "aws-lc-sys", "openssl", "openssl-sys",
     "openssl-src", "boring", "boring-sys", "bssl-sys", "srtp-sys",
-    "epaint_default_fonts",
+    "epaint-default-fonts", "aws-lc-fips-sys", "libsrtp", "libsrtp-sys",
+    "mbedtls-sys", "wolfssl-sys",
 })
 
 
@@ -26,10 +27,13 @@ def verify(tree):
         if line.count("|") != 1:
             raise ValueError("invalid dependency tree")
         package, raw_features = line.split("|")
-        match = re.fullmatch(r"([A-Za-z0-9_-]+) v([0-9][A-Za-z0-9.+-]*)(?: \([^\r\n]*\))?", package)
+        match = re.fullmatch(r"([A-Za-z0-9_-]+) v([0-9][A-Za-z0-9.+-]*)(?: \(([^\r\n]*)\))?", package)
         if match is None:
             raise ValueError("invalid dependency tree")
-        name, version = match.groups()
+        name, version, source = match.groups()
+        name = name.replace("_", "-")
+        if name in {"ring", "rustls", "rustrtc"} and source is not None:
+            raise ValueError("unreviewed provider source")
         raw_features = raw_features.removesuffix(" (*)")
         if raw_features and re.fullmatch(r"[A-Za-z0-9_+./,:-]+", raw_features) is None:
             raise ValueError("invalid dependency tree")

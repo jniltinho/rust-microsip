@@ -53,6 +53,7 @@ FROM toolchain AS source
 COPY --chown=builder:builder Cargo.toml Cargo.lock rust-toolchain.toml LICENSE NOTICE Dockerfile .dockerignore ./
 COPY --chown=builder:builder docker/rust-components.sha256 docker/
 COPY --chown=builder:builder apps/ apps/
+COPY --chown=builder:builder crates/ crates/
 COPY --chown=builder:builder packaging/ packaging/
 
 # Only this stage may access the registry when external crates are introduced.
@@ -79,9 +80,10 @@ root = Path("/context")
 allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
-    "apps/rust-microsip/Cargo.toml", "docker/rust-components.sha256",
+    "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "docker/rust-components.sha256",
     "packaging/verify.sh", "packaging/export-scaffold.sh",
     "packaging/check-g0-dependencies.py", "packaging/tests/test_g0_dependencies.py",
+    "packaging/collect-cargo-notices.py", "packaging/tests/test_cargo_notices.py",
 }
 files = [p for p in root.rglob("*") if p.is_file()]
 unexpected = []
@@ -89,6 +91,7 @@ for path in files:
     relative = str(path.relative_to(root))
     is_source = path.suffix == ".rs" and str(path.parent.relative_to(root)) in {
         "apps/rust-microsip/src", "apps/rust-microsip/tests",
+        "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
     }
     if relative not in allowed and not is_source:
         unexpected.append(relative)
@@ -98,3 +101,14 @@ marker = "synthetic-" + "private-context-marker"
 if any(marker in p.read_text(errors="replace") for p in files):
     raise SystemExit("CONTEXT_REJECTED: synthetic private content")
 PY
+
+# Lab-only probe: same adapter source/lock as the workspace, not a client release.
+FROM verify AS g0-registration-build
+RUN --network=none cargo build -p rust-microsip-telephony --example g0_registration --release --frozen --target x86_64-unknown-linux-gnu
+FROM ubuntu:24.04@sha256:f610ab94648195aa356059f5b41d6085c9d4d903c072430cdd1af7bdb646106b AS g0-registration-runner
+COPY --from=g0-registration-build /work/target/x86_64-unknown-linux-gnu/release/examples/g0_registration /usr/local/bin/g0-registration
+COPY --from=g0-registration-build /tmp/g0-cargo-notices /usr/share/rust-microsip-g0/cargo-licenses
+COPY --from=g0-registration-build /opt/rust-licenses /usr/share/rust-microsip-g0/toolchain-licenses
+COPY --from=g0-registration-build /work/LICENSE /work/NOTICE /usr/share/rust-microsip-g0/
+USER 10001:10001
+ENTRYPOINT ["/usr/local/bin/g0-registration"]

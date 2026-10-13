@@ -13,8 +13,11 @@ trap 'exit 143' TERM
 for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml LICENSE NOTICE \
     apps/rust-microsip/Cargo.toml apps/rust-microsip/src/main.rs apps/rust-microsip/src/lib.rs \
     apps/rust-microsip/tests/cli.rs docker/rust-components.sha256 \
+    crates/telephony/Cargo.toml crates/telephony/src/lib.rs crates/telephony/tests/registration.rs \
+    crates/telephony/examples/g0_registration.rs \
     packaging/verify.sh packaging/export-scaffold.sh \
-    packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py; do
+    packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py \
+    packaging/collect-cargo-notices.py packaging/tests/test_cargo_notices.py; do
     if [ -L "$path" ] || [ ! -f "$path" ]; then
         echo "ERROR: missing or symlinked test source: $path" >&2
         exit 1
@@ -23,7 +26,7 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     cp "$path" "$scratch/$path"
 done
 mkdir -p "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts"
-for path in base/private.txt .env .env.local profile.sqlite3 sample.AppImage .git/private.txt dist/private.txt artifacts/private.txt apps/rust-microsip/src/private.env; do
+for path in base/private.txt .env .env.local profile.sqlite3 sample.AppImage .git/private.txt dist/private.txt artifacts/private.txt apps/rust-microsip/src/private.env crates/telephony/src/private.env crates/telephony/examples/private.env; do
     printf '%s\n' 'synthetic-private-context-marker' > "$scratch/$path"
 done
 docker buildx build --platform linux/amd64 --target context-audit "$scratch"
@@ -49,6 +52,7 @@ done
 mv "$temporary/dockerignore.safe" "$scratch/.dockerignore"
 rm -rf "$scratch/base" "$scratch/.git" "$scratch/dist" "$scratch/artifacts"
 rm -f "$scratch/.env" "$scratch/.env.local" "$scratch/profile.sqlite3" "$scratch/sample.AppImage" "$scratch/apps/rust-microsip/src/private.env"
+rm -f "$scratch/crates/telephony/src/private.env" "$scratch/crates/telephony/examples/private.env"
 # Build without base/, including offline verification; no host Cargo required.
 docker buildx build --platform linux/amd64 --target artifacts \
     --output "type=local,dest=$root/dist" "$scratch"

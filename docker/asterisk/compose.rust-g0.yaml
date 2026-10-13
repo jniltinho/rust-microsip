@@ -1,0 +1,11 @@
+# Opt-in Rust registration proof. Does not publish ports or claim call coverage.
+services:
+  pbx:
+    environment:
+      LAB_VERIFY_CONTACT: "1"
+  test-runner:
+    image: rust-microsip-g0-registration:0.1.0-lab.1
+    build:
+      context: ../..
+      target: g0-registration-runner
+    command: !reset []

@@ -16,9 +16,23 @@ class DependencyBoundaryTests(unittest.TestCase):
         checker.verify("rustls v0.23.45|ring,tls12,std\nring v0.17.14|alloc\nrustrtc v0.4.7|\naes v0.9.3|\n")
 
     def test_blocks_static_and_dynamic_unreviewed_crypto_providers(self):
-        for name in ("aws-lc-rs", "aws-lc-sys", "openssl-sys", "openssl-src", "boring-sys", "srtp-sys"):
+        for name in ("aws-lc-rs", "aws-lc-sys", "openssl-sys", "openssl-src", "boring-sys", "srtp-sys",
+                     "aws-lc-fips-sys", "libsrtp", "libsrtp-sys", "mbedtls-sys", "wolfssl-sys", "openssl_sys"):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 checker.verify(f"{name} v1.0.0|\n")
+
+    def test_rejects_protected_provider_source_replacement(self):
+        for package in ("ring v0.17.14", "rustls v0.23.45", "rustrtc v0.4.7"):
+            for source in ("/work/replaced", "https://example.invalid/replaced#deadbeef"):
+                with self.subTest(package=package, source=source), self.assertRaises(ValueError):
+                    checker.verify(f"{package} ({source})|ring\nring v0.17.14|\n")
+
+    def test_accepts_proc_macro_marker_and_duplicate_tree_node(self):
+        checker.verify("thiserror-impl v2.0.21 (proc-macro)|\nring v0.17.14|alloc\nring v0.17.14|alloc (*)\n")
+
+    def test_rustls_requires_reviewed_ring_node(self):
+        with self.assertRaises(ValueError):
+            checker.verify("rustls v0.23.45|ring,std\n")
 
     def test_blocks_unreviewed_codec_direct_or_transitive(self):
         for version in ("0.4.9", "0.5.0"):
