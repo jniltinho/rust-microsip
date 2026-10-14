@@ -43,7 +43,8 @@ affiliated with or endorsed by MicroSIP.
 
 Status: **pre-release** ([latest](https://github.com/jniltinho/rust-microsip/releases)). Calls, audio and
 desktop integration are tested against a disposable Asterisk lab and on clean Ubuntu 24.04/26.04, Fedora 44
-and Arch Linux desktops. A Windows build is in progress. See the [roadmap](docs/README.md).
+and Arch Linux desktops. Windows has preview packages (MSI and zip) whose calls are not tested yet. See the
+[roadmap](docs/README.md).
 
 ## Screenshots
 
@@ -81,6 +82,10 @@ Download from the [releases page](https://github.com/jniltinho/rust-microsip/rel
 - `rust-microsip-<version>-x86_64`: the same program as a plain ELF.
 
 Verify the download with `sha256sum --check --strict SHA256SUMS`.
+
+**Windows (preview)**: `rust-microsip-<version>-x86_64.msi` installs for your user only, with no
+administrator rights. `rust-microsip-<version>-windows-x86_64.zip` is a portable copy. Both are
+unsigned, so SmartScreen may warn you; check them with `Get-FileHash <file> -Algorithm SHA256` first.
 
 Requirements: x86_64 Linux with glibc 2.39 or newer (Ubuntu 24.04, Fedora 40, Debian 13, Arch and
 later), `libasound.so.2` and, on X11, `libxkbcommon-x11`. Standard GNOME and KDE desktops already have
@@ -137,7 +142,7 @@ Only Docker with BuildKit is needed; Rust runs inside a pinned builder image, ne
 make dist                  # ELF, AppImage, SHA256SUMS, notices and SBOM in dist/
 make check                 # fmt, clippy, tests, rustdoc
 make suite                 # end-to-end calls against a disposable Asterisk lab
-make windows               # Windows test build (preview)
+make windows               # Windows exes, per-user MSI and portable zip (preview)
 ```
 
 The [development guide](docs/DEVELOPMENT.md) covers the layout, the lab and the release process.

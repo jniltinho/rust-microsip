@@ -37,6 +37,7 @@ scan over the artifacts (zip members and the MSI payload unpacked) and publishes
   build manifest)
 - `rust-microsip-X.Y.Z-windows-x86_64.zip` (portable: both exes, LICENSE, NOTICE and
   THIRD-PARTY-NOTICES.txt for the Windows dependency graph)
+- `rust-microsip-X.Y.Z-windows-sbom.cdx.json` (CycloneDX inventory of the Windows dependency graph)
 - `rust-microsip-X.Y.Z-x86_64.msi` (per-user, no elevation, `%LOCALAPPDATA%\Programs\rust-microsip`
   with a Start Menu shortcut; a newer version replaces an older one)
 - `SHA256SUMS`

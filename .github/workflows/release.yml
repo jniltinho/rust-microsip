@@ -107,7 +107,8 @@ jobs:
           cp dist/rust-microsip "release/rust-microsip-$VERSION-x86_64"
           cp dist/rust-microsip-*-x86_64.AppImage "release/rust-microsip-$VERSION-x86_64.AppImage"
           cp dist/scaffold-sbom.cdx.json "release/rust-microsip-$VERSION-sbom.cdx.json"
-          cp "dist-windows/rust-microsip-$VERSION-windows-x86_64.zip" "dist-windows/rust-microsip-$VERSION-x86_64.msi" release/
+          cp "dist-windows/rust-microsip-$VERSION-windows-x86_64.zip" "dist-windows/rust-microsip-$VERSION-x86_64.msi" \
+            "dist-windows/rust-microsip-$VERSION-windows-sbom.cdx.json" release/
           tar -C dist -czf "release/rust-microsip-$VERSION-licenses.tar.gz" \
             LICENSE NOTICE cargo-licenses toolchain-licenses build-manifest.json toolchain.txt
           (cd release && sha256sum -- * > SHA256SUMS)
