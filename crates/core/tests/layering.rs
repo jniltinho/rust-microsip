@@ -50,6 +50,7 @@ const ALLOWED: &[(&str, &[&str])] = &[
         &[
             "rust-microsip-core",
             "rust-microsip-control",
+            "rust-microsip-platform-windows",
             "rustix",
             "serde_json",
             "zbus",
@@ -59,6 +60,16 @@ const ALLOWED: &[(&str, &[&str])] = &[
     (
         "rust-microsip-control",
         &["rust-microsip-core", "serde", "serde_json", "thiserror"],
+    ),
+    (
+        "rust-microsip-platform-windows",
+        &[
+            "rust-microsip-core",
+            "rust-microsip-control",
+            "thiserror",
+            "windows",
+            "windows-sys",
+        ],
     ),
     (
         "rust-microsip",
@@ -229,4 +240,74 @@ fn the_rules_reject_injected_violations() {
         ),
         ["ui.rs:2 names net::", "ui.rs:2 names UdpSocket"]
     );
+}
+
+/// The Windows adapter may use `unsafe`; it must keep every documented-unsafe
+/// denial. Every other package inherits `unsafe_code = "forbid"`.
+const UNSAFE_CRATE: &str = "crates/platform-windows/Cargo.toml";
+
+/// Unsafe-policy problems in one manifest (design W2 of add-windows-port).
+fn unsafe_policy(manifest: &str, text: &str) -> Vec<String> {
+    let has = |line: &str| text.lines().any(|l| l.trim() == line);
+    let mut out = Vec::new();
+    if manifest == UNSAFE_CRATE {
+        for required in [
+            "unsafe_code = \"allow\"",
+            "undocumented_unsafe_blocks = \"deny\"",
+            "multiple_unsafe_ops_per_block = \"deny\"",
+            "missing_docs = \"deny\"",
+        ] {
+            if !has(required) {
+                out.push(format!("{manifest} lacks {required}"));
+            }
+        }
+    } else if !(has("[lints]") && has("workspace = true")) || text.contains("unsafe_code") {
+        out.push(format!(
+            "{manifest} must use the workspace lints (unsafe forbidden)"
+        ));
+    }
+    out
+}
+
+#[test]
+fn unsafe_is_confined_to_the_windows_adapter() -> std::io::Result<()> {
+    let root = root();
+    let workspace = std::fs::read_to_string(root.join("Cargo.toml"))?;
+    assert!(workspace.contains("unsafe_code = \"forbid\""));
+    let mut found = Vec::new();
+    let mut manifests = vec!["apps/rust-microsip/Cargo.toml".to_owned()];
+    for entry in std::fs::read_dir(root.join("crates"))? {
+        manifests.push(format!(
+            "crates/{}/Cargo.toml",
+            entry?.file_name().to_string_lossy()
+        ));
+    }
+    for manifest in &manifests {
+        let text = std::fs::read_to_string(root.join(manifest))?;
+        found.extend(unsafe_policy(manifest, &text));
+    }
+    assert!(found.is_empty(), "unsafe policy: {found:?}");
+    // Negative controls: a relaxed crate and an adapter missing a denial.
+    assert!(
+        !unsafe_policy(
+            "crates/x/Cargo.toml",
+            "[lints.rust]\nunsafe_code = \"allow\"\n"
+        )
+        .is_empty()
+    );
+    assert!(
+        !unsafe_policy(
+            "crates/x/Cargo.toml",
+            "[lints]\nworkspace = true\n[lints.rust]\nunsafe_code = \"allow\"\n"
+        )
+        .is_empty()
+    );
+    assert!(
+        !unsafe_policy(
+            UNSAFE_CRATE,
+            "unsafe_code = \"allow\"\nmissing_docs = \"deny\"\n"
+        )
+        .is_empty()
+    );
+    Ok(())
 }

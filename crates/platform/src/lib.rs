@@ -1,4 +1,4 @@
-//! Desktop integration (Linux; Windows stand-ins in `windows.rs`): single instance with protected local IPC, the
+//! Desktop integration (Linux here; Windows in `rust-microsip-platform-windows`, re-exported): single instance with protected local IPC, the
 //! authenticated control socket for the CLI and MCP server,
 //! strict `sip:`/`tel:` link parsing, incoming-call notifications, the tray icon and
 //! Secret Service password storage.
@@ -6,12 +6,10 @@
 //! Nothing here executes shell commands or installs files: the desktop entry
 //! is only rendered, and installing it is a user-level opt-in left to the caller.
 
-mod caller;
 #[cfg(unix)]
 mod control;
 #[cfg(unix)]
 mod instance;
-mod ipc;
 #[cfg(unix)]
 mod notify;
 #[cfg(unix)]
@@ -21,11 +19,9 @@ mod secrets;
 #[cfg(unix)]
 mod tray;
 mod uri;
-#[cfg(windows)]
-mod windows;
 
-pub use caller::sanitize_caller;
-pub use ipc::{Ack, InstanceError, MAX_LINE, Request};
+pub use rust_microsip_control::caller::sanitize_caller;
+pub use rust_microsip_control::instance::{Ack, InstanceError, MAX_LINE, Request};
 pub use uri::{MAX_URI_LEN, UriError, parse_dial_uri};
 
 #[cfg(unix)]
@@ -39,18 +35,18 @@ pub use instance::{Acquired, Listener, acquire, acquire_owner, default_runtime_d
 pub use notify::{CallAction, Delivery, NotificationAction, Notifier, NotifierStatus};
 #[cfg(unix)]
 pub use private_file::{PrivateFileError, read_own_file, read_private_file};
-#[cfg(unix)]
-pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};
-#[cfg(unix)]
-pub use tray::{Tray, TrayAction, TrayStatus};
 #[cfg(windows)]
-pub use windows::{
+pub use rust_microsip_platform_windows::{
     Acquired, CallAction, ControlClient, ControlServer, ControlSocketError, Delivery, GLOBAL_RATE,
     Incoming, Listener, MAX_CONNECTIONS, NotificationAction, Notifier, NotifierStatus,
     OPERATION_TIMEOUT, PER_CONNECTION_RATE, PrivateFileError, REPLY_DEADLINE, SecretBytes,
     SecretError, SecretStore, Tray, TrayAction, TrayStatus, acquire, acquire_owner,
     default_runtime_dir, read_own_file, read_private_file,
 };
+#[cfg(unix)]
+pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};
+#[cfg(unix)]
+pub use tray::{Tray, TrayAction, TrayStatus};
 
 /// Callback run after a request or action is queued, e.g. to wake the UI loop.
 pub type Waker = std::sync::Arc<dyn Fn() + Send + Sync>;

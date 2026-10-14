@@ -3139,10 +3139,22 @@ version = "0.1.0-rc.1"
 dependencies = [
  "rust-microsip-control",
  "rust-microsip-core",
+ "rust-microsip-platform-windows",
  "rustix 1.1.5",
  "serde_json",
  "thiserror 2.0.21",
  "zbus",
+]
+
+[[package]]
+name = "rust-microsip-platform-windows"
+version = "0.1.0-rc.1"
+dependencies = [
+ "rust-microsip-control",
+ "rust-microsip-core",
+ "thiserror 2.0.21",
+ "windows",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

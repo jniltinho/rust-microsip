@@ -7,7 +7,7 @@
 //! only way to answer.
 
 use crate::Waker;
-use crate::sanitize_caller;
+use rust_microsip_control::caller::sanitize_caller;
 use rust_microsip_core::CallId;
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};

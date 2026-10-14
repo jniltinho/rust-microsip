@@ -1,0 +1,54 @@
+[package]
+name = "rust-microsip-platform-windows"
+description = "Windows desktop integration: named pipes, toasts, tray, Credential Manager, DACLs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+rust-microsip-core = { path = "../core" }
+rust-microsip-control = { path = "../control" }
+thiserror = "=2.0.21"
+
+[target.'cfg(windows)'.dependencies]
+# Both already in the reviewed graph through wgpu/winit/cpal.
+windows-sys = { version = "=0.61.2", features = [
+    "Win32_Foundation",
+    "Win32_Security",
+    "Win32_Security_Authorization",
+    "Win32_Security_Credentials",
+    "Win32_Storage_FileSystem",
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_System_Threading",
+    "Win32_System_Memory",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Registry",
+    "Win32_System_Shutdown",
+    "Win32_UI_Shell",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Graphics_Gdi",
+] }
+windows = { version = "=0.62.2", features = [
+    "Data_Xml_Dom",
+    "Foundation",
+    "UI_Notifications",
+] }
+
+# The workspace lints, except that unsafe is allowed here (and only here,
+# checked by crates/core/tests/layering.rs) with every block documented.
+[lints.rust]
+unsafe_code = "allow"
+missing_docs = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+todo = "deny"
+unimplemented = "deny"
+dbg_macro = "deny"
+undocumented_unsafe_blocks = "deny"
+multiple_unsafe_ops_per_block = "deny"

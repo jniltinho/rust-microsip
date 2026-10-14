@@ -129,7 +129,7 @@ allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
     "apps/rust-microsip/Cargo.toml", "apps/rust-microsip/build.rs", "apps/rust-microsip/windows/rust-microsip.manifest", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256", "docker/rust-components-windows.sha256",
-    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml", "crates/platform/Cargo.toml", "crates/control/Cargo.toml",
+    "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml", "crates/platform/Cargo.toml", "crates/platform-windows/Cargo.toml", "crates/control/Cargo.toml",
     "packaging/reviewed-licenses.json",
     "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
     "apps/rust-microsip/assets/source.json",
@@ -148,7 +148,7 @@ for path in files:
         "apps/rust-microsip/src", "apps/rust-microsip/src/bin", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
         "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui", "apps/rust-microsip/src/mcp", "apps/rust-microsip/examples",
-        "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src", "crates/platform/src/control", "crates/control/src", "apps/rust-microsip/src/ui/state",
+        "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src", "crates/platform/src/control", "crates/platform-windows/src", "crates/control/src", "apps/rust-microsip/src/ui/state",
     }
     # Reviewed, commit-pinned third-party license texts only.
     is_source = is_source or relative.startswith(("packaging/third-party-notices/", "packaging/appimage/runtime-licenses/"))

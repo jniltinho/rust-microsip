@@ -1,5 +1,6 @@
-//! Portable parts of the single-instance protocol, shared by the Unix
-//! socket and the Windows named-pipe implementations.
+//! Single-instance protocol: one line each way between a later launch and
+//! the profile owner, shared by the Unix socket and the Windows named-pipe
+//! adapters.
 
 use rust_microsip_core::DialTarget;
 use std::io;
@@ -16,21 +17,16 @@ pub enum Request {
     /// Show a dial confirmation for this target; never dial automatically.
     Dial(DialTarget),
 }
-#[cfg_attr(
-    not(unix),
-    expect(
-        dead_code,
-        reason = "the Windows named pipes (add-windows-port W-B) will use them"
-    )
-)]
 impl Request {
-    pub(crate) fn encode(&self) -> String {
+    /// The wire line for this request, newline included.
+    pub fn encode(&self) -> String {
         match self {
             Self::Activate => "v1 activate\n".to_owned(),
             Self::Dial(target) => format!("v1 dial {}\n", target.as_str()),
         }
     }
-    pub(crate) fn decode(line: &str) -> Option<Self> {
+    /// Parse one wire line (without the newline); `None` when invalid.
+    pub fn decode(line: &str) -> Option<Self> {
         match line.strip_prefix("v1 ")? {
             "activate" => Some(Self::Activate),
             rest => {

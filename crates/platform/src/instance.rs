@@ -19,7 +19,7 @@
 //! or `v1 service` when the headless service owns the profile.
 
 use crate::Waker;
-pub use crate::ipc::{Ack, InstanceError, MAX_LINE, Request};
+pub use rust_microsip_control::instance::{Ack, InstanceError, MAX_LINE, Request};
 use std::fs::{self, DirBuilder, File, OpenOptions, TryLockError};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};

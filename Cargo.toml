@@ -8,6 +8,7 @@ members = [
     "crates/config",
     "crates/storage",
     "crates/platform",
+    "crates/platform-windows",
     "crates/control",
 ]
 resolver = "3"

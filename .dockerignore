@@ -127,6 +127,12 @@ crates/storage/src/**
 !crates/storage/tests/
 crates/storage/tests/**
 !crates/storage/tests/*.rs
+!crates/platform-windows/
+crates/platform-windows/**
+!crates/platform-windows/Cargo.toml
+!crates/platform-windows/src/
+crates/platform-windows/src/**
+!crates/platform-windows/src/*.rs
 !crates/platform/
 crates/platform/**
 !crates/platform/Cargo.toml

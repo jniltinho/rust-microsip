@@ -10,6 +10,9 @@
 //! `Read`/`Write`. Sockets and peer credentials live in the platform crate;
 //! policies, the ledger and execution live in the owner.
 
+pub mod caller;
+pub mod instance;
+
 use rust_microsip_core::DialTarget;
 use serde::{Deserialize, Serialize};
 use std::io::{self, BufRead, Read, Write};
