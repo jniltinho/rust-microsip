@@ -15,6 +15,14 @@
 - [ ] 3.3 Restyle Calls and Contacts lists, filters, empty states, incoming-call banner, Settings sections, contact editor, Import and About; verify keyboard selection and the Tab cycle.
 - [ ] 3.4 Add density and scale preferences; verify 1024x768 at 100/150/200% with every action reachable (UIR-06).
 
+## 5. MicroSIP parity (owner request, 2026-10-14)
+
+- [ ] 5.1 Capture the real MicroSIP on Windows (and the Wine reference where Windows is unavailable) for every screen: Phone idle, Phone with a registered account (status icon Online), Logs/Calls with entries, Contacts, Settings/Account dialogs and the tray menu; verify captures with provenance (version, SHA-256, conditions) and no personal data.
+- [ ] 5.2 Make the Calls tab match MicroSIP's Logs: one row per call with direction/outcome icon, name or number, date/time and duration columns, double-click to call back, context menu (call, copy, add to contacts, delete), search; verify against the 5.1 captures and the reducer tests.
+- [ ] 5.3 Reorganize Settings into MicroSIP-like sections (Account, Audio devices with test and levels, Ringing/Notifications, Links/Integration, Agent access, About) with aligned labels, grouped panels and clear save/apply behaviour, AAA+ polish in both themes; verify keyboard navigation, AT-SPI names and contrast.
+- [ ] 5.4 Add the status bar with a registration status icon (Online, Offline, Registering, Error, DND) and text as in MicroSIP; verify every state in the lab (registered, wrong password, network loss, DND).
+- [ ] 5.5 Produce the side-by-side comparison of every 5.1 screen against rust-microsip in both themes, with a list of remaining differences; verify owner review.
+
 ## 4. Acceptance
 
 - [ ] 4.1 Add per-screen, per-theme, per-scale captures with baseline comparison to the lab suite; verify a deliberate token change fails the comparison (UIR-06).

@@ -24,3 +24,6 @@
 # Development-only Python bytecode is not source.
 __pycache__/
 *.py[cod]
+
+# Agent worktrees (local only)
+.claude/worktrees/

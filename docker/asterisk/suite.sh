@@ -221,14 +221,15 @@ gui_frozen_exit() {
 
 gui_theme() {
     pbx_up; gui theme
-    wait_phase "$out" dark-in-call 180; during=$(channels); ack dark-in-call
+    wait_phase "$out" light-in-call 180; during=$(channels); ack light-in-call
     gui_finish; pbx_down
-    system=$(value system_theme_brightness); dark=$(value dark_in_call_brightness); again=$(value relaunched_brightness)
+    default=$(value default_theme_brightness); light=$(value light_in_call_brightness); again=$(value relaunched_brightness)
     result=fail
-    # Dark but rendered: a black, unrendered capture would be near 0%.
-    [ "$during" = 1 ] && [ "${system:-0}" -gt 60 ] && [ "${dark:-0}" -gt 5 ] && [ "${dark:-100}" -lt 40 ] \
-        && [ "${again:-0}" -gt 5 ] && [ "${again:-100}" -lt 40 ] && result=pass
-    report gui-theme "$result" "{\"system_theme_without_portal_brightness_pct\": $(j "$system"), \"channels_after_switch\": $(j "$during"), \"dark_in_call_brightness_pct\": $(j "$dark"), \"relaunched_brightness_pct\": $(j "$again")}"
+    # Dark by default but rendered (a black, unrendered capture would be near 0%),
+    # light after the switch during the call, and light again after a relaunch.
+    [ "$during" = 1 ] && [ "${default:-0}" -gt 5 ] && [ "${default:-100}" -lt 40 ] && [ "${light:-0}" -gt 60 ] \
+        && [ "${again:-0}" -gt 60 ] && result=pass
+    report gui-theme "$result" "{\"default_theme_brightness_pct\": $(j "$default"), \"channels_after_switch\": $(j "$during"), \"light_in_call_brightness_pct\": $(j "$light"), \"relaunched_brightness_pct\": $(j "$again")}"
 }
 
 # Tab cycle: the first control to repeat is the first one focused (a full

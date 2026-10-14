@@ -73,13 +73,13 @@ case "$scenario" in
         timeout 60 sh -c 'until [ -e /capture/pbx-frozen ]; do sleep 0.2; done'
         stop_app frozen
         pgrep -x rust-microsip > /dev/null && echo "left_running=1" >> /capture/results.txt ;;
-    theme) # ND-03/04: dark theme from Settings during a call, then persistence.
-        start_app app; shot system-theme
-        echo "system_theme_brightness=$(brightness system-theme)" >> /capture/results.txt
+    theme) # ND-03/04: dark by default; light from Settings during a call, then persistence.
+        start_app app; shot default-theme
+        echo "default_theme_brightness=$(brightness default-theme)" >> /capture/results.txt
         dial 600
-        $tool press Menu "Settings…" Dark >> /capture/atspi-steps.txt
-        xdotool key Escape; sleep 2; shot dark-in-call; checkpoint dark-in-call
-        echo "dark_in_call_brightness=$(brightness dark-in-call)" >> /capture/results.txt
+        $tool press Menu "Settings…" Light >> /capture/atspi-steps.txt
+        xdotool key Escape; sleep 2; shot light-in-call; checkpoint light-in-call
+        echo "light_in_call_brightness=$(brightness light-in-call)" >> /capture/results.txt
         sleep 2; stop_app app
         start_app relaunch; shot relaunched; phase relaunched
         echo "relaunched_brightness=$(brightness relaunched)" >> /capture/results.txt

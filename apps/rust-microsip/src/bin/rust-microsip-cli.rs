@@ -4,7 +4,7 @@
 // The included file's `windows_subsystem` is a crate-level attribute meant
 // for the window binary only.
 #![cfg_attr(
-    windows,
+    all(windows, not(test)),
     expect(unused_attributes, reason = "subsystem applies to rust-microsip.exe")
 )]
 

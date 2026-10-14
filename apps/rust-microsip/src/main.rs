@@ -13,7 +13,7 @@
 //! account is not registered automatically and settings cannot be saved.
 // Windows: the window starts without a console; `rust-microsip-cli.exe`
 // (same code, console subsystem) serves the CLI, `mcp --stdio` and `service`.
-#![cfg_attr(windows, windows_subsystem = "windows")]
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
 mod bridge;
 mod service;

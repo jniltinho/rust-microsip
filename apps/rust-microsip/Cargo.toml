@@ -25,6 +25,11 @@ wgpu = { version = "=30.0.0", default-features = false, features = ["std", "park
 secrecy = "=0.10.3"
 tokio = { version = "=1.53.2", default-features = false, features = ["rt", "rt-multi-thread", "signal", "io-std"] }
 
+# Windows renders through DX12 (WARP on GPU-less machines); Vulkan and GL
+# are usually absent there.
+[target.'cfg(windows)'.dependencies]
+wgpu = { version = "=30.0.0", default-features = false, features = ["dx12"] }
+
 [dev-dependencies]
 rmcp = { version = "=3.5.1", default-features = false, features = ["client"] }
 tokio = { version = "=1.53.2", default-features = false, features = ["process", "macros"] }
