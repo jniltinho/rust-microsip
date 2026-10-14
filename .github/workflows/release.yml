@@ -88,12 +88,17 @@ jobs:
           sh packaging/release/check-gates.sh "$VERSION"
       - name: Build artifacts
         run: docker buildx build --progress plain --platform linux/amd64 --target artifacts --output type=local,dest=dist .
+      - name: Build Windows artifacts (portable zip and per-user MSI)
+        run: docker buildx build --progress plain --platform linux/amd64 --target windows-artifacts --output type=local,dest=dist-windows .
       - name: Check artifacts
         run: |
           (cd dist && sha256sum --check --strict SHA256SUMS)
+          (cd dist-windows && sha256sum --check --strict SHA256SUMS)
           sh packaging/appimage/verify.sh dist/rust-microsip-*-x86_64.AppImage dist/rust-microsip
-          command -v unsquashfs || { sudo apt-get update && sudo apt-get install -y --no-install-recommends squashfs-tools; }
-          sh packaging/release/scan-publication.sh dist
+          { command -v unsquashfs && command -v msiextract; } || { sudo apt-get update \
+            && sudo apt-get install -y --no-install-recommends squashfs-tools msitools; }
+          rm -rf dist-windows/tests dist-windows/upgrade-test
+          sh packaging/release/scan-publication.sh dist dist-windows
       - name: Assemble release assets
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -102,6 +107,7 @@ jobs:
           cp dist/rust-microsip "release/rust-microsip-$VERSION-x86_64"
           cp dist/rust-microsip-*-x86_64.AppImage "release/rust-microsip-$VERSION-x86_64.AppImage"
           cp dist/scaffold-sbom.cdx.json "release/rust-microsip-$VERSION-sbom.cdx.json"
+          cp "dist-windows/rust-microsip-$VERSION-windows-x86_64.zip" "dist-windows/rust-microsip-$VERSION-x86_64.msi" release/
           tar -C dist -czf "release/rust-microsip-$VERSION-licenses.tar.gz" \
             LICENSE NOTICE cargo-licenses toolchain-licenses build-manifest.json toolchain.txt
           (cd release && sha256sum -- * > SHA256SUMS)

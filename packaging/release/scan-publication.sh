@@ -201,7 +201,7 @@ while IFS=$tab read -r id label; do
 done < "$work/toml"
 echo "repository: $(wc -l < "$work/index-paths") index path(s), $(wc -l < "$work/history-paths") history-only path(s), $(ls "$work/blobs" | wc -l) unique blob(s) scanned"
 
-# --- Artifact directories (AppImages are unpacked without executing them) ---
+# --- Artifact directories (AppImages, zips and MSIs are unpacked without executing them) ---
 scan_tree() { # label, directory
     find "$2" -type f | sed "s|^$2/||" > "$work/files"
     grep -E "$forbidden_path" "$work/files" | grep -v -E "$allowed_path|\.AppImage$" > "$work/bad" || true
@@ -235,6 +235,16 @@ print(shoff + size * count)' "$image")
         unsquashfs -q -n -o "$offset" -d "$work/appimage" "$image" > /dev/null
         scan_tree "$label/${image#"$artifacts"/}" "$work/appimage"
     done > "$work/appimage.log"
+    # Windows packages: zip members and the MSI payload (msitools) are scanned unpacked.
+    find "$artifacts" -type f \( -name '*.zip' -o -name '*.msi' \) | while IFS= read -r package; do
+        rm -rf "$work/package"; mkdir "$work/package"
+        case $package in
+            *.zip) python3 -I -m zipfile -e "$package" "$work/package" ;;
+            *) command -v msiextract > /dev/null || { echo "FAIL [msitools-missing] $label/${package#"$artifacts"/}"; continue; }
+               msiextract -C "$work/package" "$package" > /dev/null ;;
+        esac
+        scan_tree "$label/${package#"$artifacts"/}" "$work/package"
+    done >> "$work/appimage.log"
     cat "$work/appimage.log"
     failures=$((failures + $(grep -c '^FAIL' "$work/appimage.log" || true)))
 done

@@ -50,11 +50,14 @@ verify: ## The CI verify stage: offline fmt, clippy, tests, rustdoc and licence 
 dist: ## Release artifacts (ELF, AppImage, SHA256SUMS, notices, SBOM) into DIST=dist
 	docker buildx build --platform linux/amd64 --target artifacts --output type=local,dest=$(DIST) .
 
-windows: ## Windows test build (both exes, portable zip, SHA256SUMS) into DIST=dist/windows, cross-compiled in Docker
+WIN_OUT = $(if $(filter dist,$(DIST)),dist/windows,$(DIST))
+WIN_VERSION = $$(awk '/^\[workspace.package\]/ { s = 1; next } /^\[/ { s = 0 } s && /^version = / { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)
+
+windows: ## Windows test build (both exes, portable zip, per-user MSI, third-party notices, SHA256SUMS) into DIST=dist/windows, cross-compiled in Docker
 	RMS_TOOLCHAIN_STAGE=windows-toolchain CARGO_TARGET_DIR=target/windows scripts/cargo-docker.sh \
 		cargo build -p rust-microsip --release --target x86_64-pc-windows-gnu --locked
-	python3 packaging/windows/zip.py target/windows/x86_64-pc-windows-gnu/release $(if $(filter dist,$(DIST)),dist/windows,$(DIST)) \
-		$$(awk '/^\[workspace.package\]/ { s = 1; next } /^\[/ { s = 0 } s && /^version = / { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)
+	RMS_TOOLCHAIN_STAGE=windows-toolchain RMS_DOCKER_NET=none scripts/cargo-docker.sh \
+		sh packaging/windows/package.sh target/windows/x86_64-pc-windows-gnu/release $(WIN_OUT) $(WIN_VERSION)
 
 dist-check: ## Check the artifacts in DIST=dist (checksums, AppImage wraps the same ELF, publication scan)
 	cd $(DIST) && sha256sum --check --strict SHA256SUMS

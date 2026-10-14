@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Per-user MSI (add-windows-port W10, task 4.2), built with wixl by msi.sh. No elevation: it
+     installs to %LOCALAPPDATA%\Programs\rust-microsip with a Start Menu shortcut. Component GUIDs
+     and the UpgradeCode are fixed; ProductCode/PackageCode are UUIDv5 of the version (msi.sh).
+     The shortcut's AppUserModelID row (toasts) is added by msibuild afterwards. -->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="$(var.ProductCode)" Name="rust-microsip" Language="1033" Version="$(var.Version)"
+           Manufacturer="rust-microsip" UpgradeCode="89EC7264-AC86-4468-B794-280D599B22D6">
+    <Package Id="$(var.PackageCode)" InstallerVersion="500" Compressed="yes" InstallScope="perUser"
+             Description="rust-microsip SIP softphone" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of rust-microsip is already installed." />
+    <Media Id="1" Cabinet="rust_microsip.cab" EmbedCab="yes" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="LocalAppDataFolder">
+        <Directory Id="ProgramsDir" Name="Programs">
+          <Directory Id="INSTALLDIR" Name="rust-microsip">
+            <Component Id="App" Guid="B062760B-56CD-4B45-83A0-88BAA9EE29F1">
+              <File Id="rust_microsip.exe" Name="rust-microsip.exe" Source="$(var.SourceDir)/rust-microsip.exe" />
+              <File Id="rust_microsip_cli.exe" Name="rust-microsip-cli.exe" Source="$(var.SourceDir)/rust-microsip-cli.exe" />
+              <File Id="LICENSE.txt" Name="LICENSE.txt" Source="$(var.SourceDir)/LICENSE.txt" />
+              <File Id="NOTICE.txt" Name="NOTICE.txt" Source="$(var.SourceDir)/NOTICE.txt" />
+              <File Id="THIRD_PARTY_NOTICES.txt" Name="THIRD-PARTY-NOTICES.txt" Source="$(var.SourceDir)/THIRD-PARTY-NOTICES.txt" />
+              <RegistryValue Root="HKCU" Key="Software\rust-microsip" Name="InstallDir" Type="string"
+                             Value="[INSTALLDIR]" KeyPath="yes" />
+              <RemoveFolder Id="RemoveInstallDir" On="uninstall" />
+            </Component>
+          </Directory>
+        </Directory>
+      </Directory>
+      <Directory Id="ProgramMenuFolder">
+        <Component Id="StartMenu" Guid="240608F7-6703-42E4-A8CB-E92A68077198">
+          <Shortcut Id="StartMenuShortcut" Name="rust-microsip" Description="SIP softphone"
+                    Target="[INSTALLDIR]rust-microsip.exe" WorkingDirectory="INSTALLDIR" />
+          <RegistryValue Root="HKCU" Key="Software\rust-microsip" Name="StartMenuShortcut" Type="integer"
+                         Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </Directory>
+    <Feature Id="Main" Level="1">
+      <ComponentRef Id="App" />
+      <ComponentRef Id="StartMenu" />
+    </Feature>
+  </Product>
+</Wix>

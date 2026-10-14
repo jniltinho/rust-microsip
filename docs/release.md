@@ -26,15 +26,23 @@ uploads binaries. Tagging is the owner's decision.
    AppImage into the clean VMs of the acceptance checklist; their notes say they are not a release.
    Any other suffix is refused.
 
-The workflow then builds `docker buildx build --target artifacts`, checks `SHA256SUMS`, verifies that
-the AppImage wraps the identical ELF, runs the publication scan over the artifacts and publishes:
+The workflow then builds `docker buildx build --target artifacts` and `--target windows-artifacts`,
+checks both `SHA256SUMS`, verifies that the AppImage wraps the identical ELF, runs the publication
+scan over the artifacts (zip members and the MSI payload unpacked) and publishes:
 
 - `rust-microsip-X.Y.Z-x86_64` (ELF; needs glibc ≥ 2.39, `libasound.so.2` and, on X11, `libxkbcommon-x11`)
 - `rust-microsip-X.Y.Z-x86_64.AppImage`
 - `rust-microsip-X.Y.Z-sbom.cdx.json`
 - `rust-microsip-X.Y.Z-licenses.tar.gz` (LICENSE, NOTICE, Rust dependency and toolchain notices,
   build manifest)
+- `rust-microsip-X.Y.Z-windows-x86_64.zip` (portable: both exes, LICENSE, NOTICE and
+  THIRD-PARTY-NOTICES.txt for the Windows dependency graph)
+- `rust-microsip-X.Y.Z-x86_64.msi` (per-user, no elevation, `%LOCALAPPDATA%\Programs\rust-microsip`
+  with a Start Menu shortcut; a newer version replaces an older one)
 - `SHA256SUMS`
+
+The Windows packages are unsigned: say so in the release notes, with the SmartScreen prompt and the
+`Get-FileHash` check.
 
 ## Steps
 

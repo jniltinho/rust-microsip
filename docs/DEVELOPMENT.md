@@ -84,6 +84,7 @@ The root `Makefile` wraps everything; `make help` lists the targets. Each target
 | `make verify` | the CI `verify` stage: the same checks offline in Docker plus the licence/notice policy |
 | `make dist` | `docker buildx build --target artifacts --output dist/` (ELF, AppImage, `SHA256SUMS`, notices, SBOM) |
 | `make dist-check` | checksums, AppImage wraps the identical ELF, publication scan of the artifacts |
+| `make windows` | Windows cross build in the `windows-toolchain` image: both exes, `THIRD-PARTY-NOTICES.txt`, the per-user MSI (wixl), the portable zip and `SHA256SUMS` in `dist/windows/`. Rebuild the image (`docker rmi rust-microsip-windows-toolchain:dev`) after the Dockerfile changes |
 | `make scan` | `packaging/release/scan-publication.sh` (run before every push) |
 | `make selftest` | the scanner's negative controls |
 | `make context` | Docker context allowlist audit with a negative control |

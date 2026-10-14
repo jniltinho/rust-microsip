@@ -20,6 +20,7 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     crates/telephony/src/g0_transfer.rs crates/telephony/examples/g0_transfer.rs \
     crates/media/src/dtmf.rs crates/media/Cargo.toml crates/media/src/lib.rs crates/media/tests/media.rs \
     packaging/verify.sh packaging/export-scaffold.sh packaging/windows/collect-tests.py packaging/windows/zip.py \
+    packaging/windows/msi.sh packaging/windows/package.sh packaging/windows/notices.py packaging/windows/rust-microsip.wxs packaging/windows/MsiShortcutProperty.idt \
     packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py \
     packaging/collect-cargo-notices.py packaging/tests/test_cargo_notices.py \
     packaging/reviewed-licenses.json \

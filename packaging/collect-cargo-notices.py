@@ -19,12 +19,19 @@ import tarfile
 import tomllib
 
 REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
+# The Windows packages pass x86_64-pc-windows-gnu (add-windows-port task 4.3).
+TARGET = os.environ.get("RMS_NOTICE_TARGET", "x86_64-unknown-linux-gnu")
 PROTECTED = {
     ("rsipstack", "0.7.3"): "fd6577026d74d23d0eb114d158ea1a036275129e9b2a791be1679baad6821948",
     ("rustls", "0.23.45"): "0d41d731c7d2f962d1ccc364cec258de3c0e93b38c2fb3ba97ac74513048d634",
     ("ring", "0.17.14"): "a4689e6c2294d81e88dc6261c768b63bc4fcdb852be6d1352498b114f61383b7",
     ("rustrtc", "0.4.7"): "7fc50a0fd78b4b7a61fab57d1e4ee915eb9a8d710c22333f231cf8fc79f3befe",
     ("version_check", "0.9.5"): "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
+}
+# Exact archives whose unpacked size exceeds the default bound (the generated
+# Windows API bindings); their notices are still read member by member.
+LARGE_ARCHIVES = {
+    ("windows", "0.62.2"): "527fadee13e0c05939a6a05d5bd6eec6cd2e3dbd648b9f8e447c6518133d8580",
 }
 # Path-patched copies of registry crates (vendor/README.md): exact identity,
 # the original archive checksum, the directory and the pinned notice files.
@@ -132,12 +139,13 @@ def verified_notices(archive, checksum, prefix, allow_empty=False):
     """Read bounded regular notice members without extracting archive paths."""
     if len(archive) > 16 * 1024 * 1024 or hashlib.sha256(archive).hexdigest() != checksum:
         raise ValueError("archive identity mismatch")
+    limit = (128 if checksum in LARGE_ARCHIVES.values() else 64) * 1024 * 1024
     notices = {}
     with tarfile.open(fileobj=io.BytesIO(archive), mode="r|gz") as source:
         total = 0
         for index, member in enumerate(source):
             total += member.size
-            if index >= 10000 or member.size < 0 or total > 64 * 1024 * 1024:
+            if index >= 10000 or member.size < 0 or total > limit:
                 raise ValueError("excessive archive contents")
             parts = member.name.split("/")
             if (parts[0] != prefix or any(p in {"", ".", ".."} for p in parts)
@@ -255,7 +263,7 @@ def collect(metadata, lock, cache, output, tree=None, reviewed=None, supplements
                      "license_choice": choice, "license_basis": "reviewed-exception" if choice else "allowlist-or-legacy",
                      "notice_sources": sorted({"upstream-pinned" if r in upstream else "archive" for r in hashes}),
                      "features": sorted(selected[package["id"]]["features"]), "notices_sha256": hashes})
-    return {"schema_version": 1, "target": "x86_64-unknown-linux-gnu",
+    return {"schema_version": 1, "target": TARGET,
             "scope": "selected workspace graph including G0 example dev/build dependencies; not an ELF-link map or release approval",
             "packages": sorted(rows, key=lambda row: (row["name"], row["version"])),
             "metadata_only_not_built": sorted(metadata_only, key=lambda row: (row["name"], row["version"]))}
@@ -270,7 +278,7 @@ if __name__ == "__main__":
         output.mkdir(exist_ok=False, parents=True)
         metadata = json.loads(subprocess.check_output([
             "cargo", "metadata", "--frozen", "--format-version", "1",
-            "--filter-platform", "x86_64-unknown-linux-gnu"]))
+            "--filter-platform", TARGET]))
         report = collect(metadata, tomllib.loads(Path("Cargo.lock").read_text()),
                          Path(os.environ["CARGO_HOME"]) / "registry/cache", output, tree,
                          load_reviewed(HERE / "reviewed-licenses.json"),

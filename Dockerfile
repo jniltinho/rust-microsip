@@ -50,13 +50,13 @@ ENV PATH="/opt/rust/bin:${PATH}" CARGO_HOME=/home/builder/.cargo
 WORKDIR /work
 USER builder
 
-# Windows cross toolchain (add-windows-port W1): mingw-w64 from the same
+# Windows cross toolchain (add-windows-port W1): mingw-w64 and msitools (wixl) from the same
 # snapshot and the checksummed Rust std for x86_64-pc-windows-gnu.
 FROM toolchain AS windows-toolchain
 USER root
 RUN apt-get update --error-on=any \
     && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-        gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64 \
+        gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64 msitools wixl faketime \
     && rm -rf /var/lib/apt/lists/*
 COPY docker/rust-components-windows.sha256 /tmp/rust-components-windows.sha256
 RUN set -eu; cd /tmp; \
@@ -112,8 +112,10 @@ RUN --network=none set -eu; \
     cargo build -p rust-microsip --release --target x86_64-pc-windows-gnu --frozen; \
     cargo test --workspace --lib --bins --tests --target x86_64-pc-windows-gnu --frozen --no-run --message-format=json \
         | python3 packaging/windows/collect-tests.py /out/windows/tests; \
-    cp target/x86_64-pc-windows-gnu/release/rust-microsip.exe target/x86_64-pc-windows-gnu/release/rust-microsip-cli.exe /out/windows/; \
-    cd /out/windows && find . -type f -name '*.exe' | sort | xargs sha256sum > SHA256SUMS
+    version=$(awk '/^\[workspace.package\]/ { s = 1; next } /^\[/ { s = 0 } s && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml); \
+    sh packaging/windows/package.sh target/x86_64-pc-windows-gnu/release /out/windows "$version"; \
+    sh packaging/windows/msi.sh target/x86_64-pc-windows-gnu/release /out/windows/upgrade-test 99.0.0 NOTICE; \
+    cd /out/windows && find . -type f ! -name SHA256SUMS | sort | xargs sha256sum > SHA256SUMS
 
 FROM scratch AS windows-artifacts
 COPY --from=windows-build /out/windows/ /
@@ -160,7 +162,7 @@ allowed = {
     "packaging/reviewed-licenses.json",
     "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
     "apps/rust-microsip/assets/source.json",
-    "packaging/verify.sh", "packaging/export-scaffold.sh", "packaging/windows/collect-tests.py", "packaging/windows/zip.py",
+    "packaging/verify.sh", "packaging/export-scaffold.sh", "packaging/windows/collect-tests.py", "packaging/windows/zip.py", "packaging/windows/msi.sh", "packaging/windows/package.sh", "packaging/windows/notices.py", "packaging/windows/rust-microsip.wxs", "packaging/windows/MsiShortcutProperty.idt",
     "packaging/appimage/build-appimage.sh", "packaging/appimage/verify.sh",
     "packaging/appimage/pins.txt", "packaging/appimage/rust-microsip.desktop",
     "apps/rust-microsip/assets/icons/rust-microsip.svg", "apps/rust-microsip/assets/icons/rust-microsip-256.png",

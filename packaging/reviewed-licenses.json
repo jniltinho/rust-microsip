@@ -40,6 +40,14 @@
     "reason": "MIT option selected from disjunctive expression; selected text retained with the other packaged texts; source: G0 native UI dependency review (2026-10-13)"
   },
   {
+    "name": "clipboard-win",
+    "version": "5.4.1",
+    "archive_sha256": "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4",
+    "declared_expression": "BSL-1.0",
+    "chosen_license": "BSL-1.0",
+    "reason": "BSL-1.0 only; permissive and GPL-3.0-or-later compatible; complete Boost text retained; Windows-only clipboard dependency of egui-winit; source: Windows packaging dependency review (2026-10-14)"
+  },
+  {
     "name": "codespan-reporting",
     "version": "0.13.1",
     "archive_sha256": "af491d569909a7e4dee0ad7db7f5341fef5c614d5b8ec8cf765732aba3cff681",
@@ -78,6 +86,14 @@
     "declared_expression": "Apache-2.0 AND MIT",
     "chosen_license": "Apache-2.0 AND MIT",
     "reason": "conjunctive expression; every listed license and bundled notice retained; source: G0 native UI dependency review (2026-10-13)"
+  },
+  {
+    "name": "error-code",
+    "version": "3.4.0",
+    "archive_sha256": "0b5343afd4a8365a643ac588dab4cf234a190c7f6c88c9f6dd6ffe00837661b7",
+    "declared_expression": "BSL-1.0",
+    "chosen_license": "BSL-1.0",
+    "reason": "BSL-1.0 only; permissive and GPL-3.0-or-later compatible; complete Boost text retained; Windows-only clipboard dependency of egui-winit; source: Windows packaging dependency review (2026-10-14)"
   },
   {
     "name": "fallible-iterator",

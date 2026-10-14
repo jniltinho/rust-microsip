@@ -136,3 +136,44 @@ jobs:
           if ($LASTEXITCODE -ne 4) { throw "status without an owner must exit 4, got $LASTEXITCODE" }
           # The runner's wrapper would otherwise propagate that expected exit code.
           exit 0
+      - name: Per-user MSI install, upgrade and uninstall
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:LOCALAPPDATA 'Programs\rust-microsip'
+          $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'rust-microsip.lnk'
+          $data = Join-Path $env:APPDATA 'rust-microsip'
+          $uninstall = 'Software\Microsoft\Windows\CurrentVersion\Uninstall'
+          function Msi([string] $arguments) {
+            $p = Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
+            if ($p.ExitCode -ne 0) { throw "msiexec $arguments exited $($p.ExitCode)" }
+          }
+          function Entries([string] $hive) {
+            @(Get-ChildItem "${hive}:\$uninstall" -ErrorAction SilentlyContinue |
+              Get-ItemProperty | Where-Object DisplayName -eq 'rust-microsip')
+          }
+          # User data must survive upgrade and uninstall.
+          New-Item -ItemType Directory -Force $data | Out-Null
+          Set-Content (Join-Path $data 'keep.txt') 'fictional user data'
+
+          $msi = (Get-ChildItem bin -Filter 'rust-microsip-*-x86_64.msi').FullName
+          Msi "/i `"$msi`" /qn /l*v `"$PWD\install.log`""
+          foreach ($f in 'rust-microsip.exe', 'rust-microsip-cli.exe', 'LICENSE.txt', 'NOTICE.txt') {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "not installed: $f" }
+          }
+          if (-not (Test-Path $lnk)) { throw 'no Start Menu shortcut' }
+          if ((Entries HKCU).Count -ne 1 -or (Entries HKLM).Count -ne 0) { throw 'not a single per-user registration' }
+          $version = & (Join-Path $dir 'rust-microsip-cli.exe') --version
+          if ($version -notmatch '^rust-microsip ') { throw "installed CLI: $version" }
+
+          $upgrade = (Get-ChildItem bin/upgrade-test -Filter '*.msi').FullName
+          Msi "/i `"$upgrade`" /qn /l*v `"$PWD\upgrade.log`""
+          $entries = Entries HKCU
+          if ($entries.Count -ne 1 -or $entries[0].DisplayVersion -ne '99.0.0') { throw 'upgrade did not replace the old version' }
+
+          Msi "/x $($entries[0].PSChildName) /qn /l*v `"$PWD\uninstall.log`""
+          if ((Test-Path $dir) -or (Test-Path $lnk) -or (Entries HKCU).Count -ne 0) { throw 'uninstall left files or registration' }
+          if (-not (Test-Path (Join-Path $data 'keep.txt'))) { throw 'uninstall removed user data' }
+      - name: MSI logs
+        if: failure()
+        shell: pwsh
+        run: Get-ChildItem *.log | ForEach-Object { Write-Host "== $($_.Name)"; Get-Content $_ -Tail 80 }

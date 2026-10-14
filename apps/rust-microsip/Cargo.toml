@@ -21,9 +21,12 @@ serde_json = "=1.0.154"
 # Official MCP SDK; no macros (tools and schemas are written explicitly).
 rmcp = { version = "=3.5.1", default-features = false, features = ["server", "transport-io"] }
 eframe = { version = "=0.36.2", default-features = false, features = ["wgpu_no_default_features", "wayland", "x11", "accesskit"] }
-wgpu = { version = "=30.0.0", default-features = false, features = ["std", "parking_lot", "vulkan", "gles", "wgsl"] }
+wgpu = { version = "=30.0.0", default-features = false, features = ["std", "parking_lot", "wgsl"] }
 secrecy = "=0.10.3"
 tokio = { version = "=1.53.2", default-features = false, features = ["rt", "rt-multi-thread", "signal", "io-std"] }
+
+[target.'cfg(unix)'.dependencies]
+wgpu = { version = "=30.0.0", default-features = false, features = ["vulkan", "gles"] }
 
 # Windows renders through DX12 (WARP on GPU-less machines); Vulkan and GL
 # are usually absent there.

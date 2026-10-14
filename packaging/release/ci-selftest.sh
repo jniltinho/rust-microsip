@@ -128,6 +128,22 @@ expect_block "database in artifact directory" forbidden-path "$work/dist"
 rm "$work/dist/profile.sqlite3"
 printf 'token=%s\n' "$fake_token" | iconv -f UTF-8 -t UTF-16LE > "$work/dist/notes.txt"
 expect_block "UTF-16 token in artifact directory" token "$work/dist"
+rm "$work/dist/notes.txt"
+# Compressed Windows packages are scanned unpacked (zip members, MSI payload).
+zip_with() { python3 -I -c 'import sys, zipfile
+with zipfile.ZipFile(sys.argv[1], "w", zipfile.ZIP_DEFLATED) as z: z.writestr(sys.argv[2], sys.argv[3])' "$work/dist/rust-microsip.zip" "$@"; }
+zip_with rust-microsip/README.txt "see ${fake_home}project"
+expect_block "personal home path inside a zip member" personal-home "$work/dist"
+zip_with rust-microsip/.env fictional
+expect_block "forbidden path inside a zip" forbidden-path "$work/dist"
+zip_with rust-microsip/notes.txt "token=$fake_token"
+expect_block "token inside a zip member" token "$work/dist"
+rm "$work/dist/rust-microsip.zip"
+if ! command -v msiextract > /dev/null; then
+    echo fictional > "$work/dist/rust-microsip.msi"
+    expect_block "MSI without msitools fails closed" msitools-missing "$work/dist"
+    rm "$work/dist/rust-microsip.msi"
+fi
 
 [ "${1:-}" = --no-docker ] && { echo "docker checks skipped"; exit 0; }
 fresh_copy

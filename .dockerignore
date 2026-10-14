@@ -66,6 +66,10 @@ packaging/**
 !packaging/windows/
 packaging/windows/**
 !packaging/windows/*.py
+!packaging/windows/msi.sh
+!packaging/windows/package.sh
+!packaging/windows/rust-microsip.wxs
+!packaging/windows/MsiShortcutProperty.idt
 !packaging/appimage/
 packaging/appimage/**
 !packaging/appimage/build-appimage.sh
