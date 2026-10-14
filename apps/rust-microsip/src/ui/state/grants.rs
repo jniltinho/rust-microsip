@@ -434,18 +434,20 @@ pub fn write_private(
     Ok(path)
 }
 
-/// Grant files hold secrets: refused on Windows until the platform adapter
-/// can create owner-only (DACL) files (add-windows-port task 2.6).
+/// Write `content` to a new file `name` in `dir`, both restricted to this
+/// user by a protected DACL (Windows); never overwrites. Returns the path.
 ///
 /// # Errors
-/// Always [`std::io::ErrorKind::Unsupported`].
+/// I/O failures, including an existing file or a directory that cannot be
+/// made private.
 #[cfg(not(unix))]
 pub fn write_private(
-    _dir: &std::path::Path,
-    _name: &str,
-    _content: &str,
+    dir: &std::path::Path,
+    name: &str,
+    content: &str,
 ) -> std::io::Result<std::path::PathBuf> {
-    Err(std::io::ErrorKind::Unsupported.into())
+    rust_microsip_platform::make_private_dir(dir)?;
+    rust_microsip_platform::write_private_file(dir, name, content.as_bytes())
 }
 
 impl UiState {

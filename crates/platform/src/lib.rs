@@ -41,7 +41,7 @@ pub use rust_microsip_platform_windows::{
     Incoming, Listener, MAX_CONNECTIONS, NotificationAction, Notifier, NotifierStatus,
     OPERATION_TIMEOUT, PER_CONNECTION_RATE, PrivateFileError, REPLY_DEADLINE, SecretBytes,
     SecretError, SecretStore, Tray, TrayAction, TrayStatus, acquire, acquire_owner,
-    default_runtime_dir, read_own_file, read_private_file,
+    default_runtime_dir, make_private_dir, read_own_file, read_private_file, write_private_file,
 };
 #[cfg(unix)]
 pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};

@@ -410,6 +410,19 @@ fn open_store_with_config(
 ) -> Result<(Store, BTreeMap<String, String>), String> {
     let path = store_path(env)
         .ok_or_else(|| "no data directory (XDG_DATA_HOME/HOME) is available".to_owned())?;
+    // Windows: the data and configuration folders get an owner-only DACL
+    // before anything is opened (Unix uses 0700/0600 inside storage/config).
+    #[cfg(windows)]
+    for dir in [
+        path.parent().map(std::path::Path::to_path_buf),
+        config_home(env).map(|d| d.join("rust-microsip")),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        rust_microsip_platform::make_private_dir(&dir)
+            .map_err(|e| format!("{} cannot be made private: {e}", dir.display()))?;
+    }
     let store = Store::open(&path).map_err(|e| e.to_string())?;
     let values = store.load_config().map_err(|e| e.to_string())?;
     Ok((store, values))

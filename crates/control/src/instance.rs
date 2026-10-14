@@ -58,7 +58,7 @@ pub enum Ack {
 pub enum InstanceError {
     /// `XDG_RUNTIME_DIR` is unset or not absolute; there is no private fallback.
     #[cfg_attr(unix, error("XDG_RUNTIME_DIR is not set to an absolute path"))]
-    #[cfg_attr(not(unix), error("it is not available on this platform yet"))]
+    #[cfg_attr(not(unix), error("LOCALAPPDATA is not set to an absolute path"))]
     NoRuntimeDir,
     /// The runtime directory or socket is not a private object owned by this user.
     #[error("{0} is not private to the current user (expected owner-only access)")]

@@ -86,7 +86,7 @@ pub fn run(raw: &[String]) -> ExitCode {
     };
     let Ok(dir) = default_runtime_dir() else {
         return fail(
-            "rust-microsip: runtime_unavailable: XDG_RUNTIME_DIR is not set",
+            "rust-microsip: runtime_unavailable: no per-user runtime directory (XDG_RUNTIME_DIR, or LOCALAPPDATA on Windows)",
             4,
         );
     };
