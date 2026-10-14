@@ -5,14 +5,18 @@
 //! window is hidden), so anything driven from the UI loop stalls. This thread
 //! takes the engine's events first: it shows and closes the incoming-call
 //! notification and sends its Answer/Reject straight to the engine, forwards
-//! tray clicks, and passes everything on to the window. A tray Quit still
+//! tray clicks, and passes everything on to the window. A recent call chosen
+//! in the tray is dialed from here too (when no call is active), so it works
+//! while the window is hidden or, on Wayland, minimized. A tray Quit still
 //! goes through the window (it may need to confirm hanging up, and the window
 //! records history), so it waits until the window draws again; SIGTERM has
 //! its own fallback in `main`.
 
 use rust_microsip::ui::External;
-use rust_microsip_core::{CallId, CallPhase, Command, Direction, Event};
-use rust_microsip_platform::{CallAction, Notifier, Tray, TrayAction, Waker};
+use rust_microsip_core::{CallId, CallPhase, Command, DialTarget, Direction, Event};
+use rust_microsip_platform::{
+    CallAction, Notifier, RecentCall, Tray, TrayAction, TrayStatus, Waker,
+};
 use rust_microsip_telephony::engine::EngineHandle;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -34,6 +38,8 @@ pub struct Bridge {
     ticks: Arc<AtomicU64>,
     stop: Arc<AtomicBool>,
     nudge: SyncSender<()>,
+    recent: mpsc::Sender<Vec<RecentCall>>,
+    tray_available: Arc<AtomicBool>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -67,7 +73,9 @@ impl Bridge {
         tray.set_waker(nudger(&nudge));
         let (events_tx, events) = mpsc::channel();
         let (external_tx, external) = mpsc::channel();
+        let (recent, recent_rx) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
+        let tray_available = Arc::new(AtomicBool::new(false));
         let worker = Worker {
             engine,
             notifier,
@@ -77,6 +85,9 @@ impl Bridge {
             events: events_tx,
             external: external_tx,
             ringing: None,
+            active: None,
+            recent: recent_rx,
+            tray_available: Arc::clone(&tray_available),
         };
         let thread = std::thread::Builder::new()
             .name("rust-microsip-bridge".into())
@@ -88,6 +99,8 @@ impl Bridge {
             ticks,
             stop,
             nudge,
+            recent,
+            tray_available,
             thread: Some(thread),
         })
     }
@@ -100,6 +113,18 @@ impl Bridge {
     /// Requests for the window (tray clicks) since the last call.
     pub fn external(&self) -> Vec<External> {
         self.external.try_iter().collect()
+    }
+
+    /// Replace the recent calls in the tray menu (applied by the thread).
+    pub fn set_recent(&self, items: Vec<RecentCall>) {
+        if self.recent.send(items).is_ok() {
+            let _ = self.nudge.try_send(());
+        }
+    }
+
+    /// Whether the tray icon is shown, so closing the window can hide it.
+    pub fn tray_available(&self) -> bool {
+        self.tray_available.load(Ordering::SeqCst)
     }
 
     /// Record that the window loop ran (it is not stalled); also called when
@@ -129,6 +154,10 @@ struct Worker {
     external: mpsc::Sender<External>,
     // ponytail: one ringing call; the engine handles one call at a time.
     ringing: Option<CallId>,
+    /// A call that has not ended (any direction or phase).
+    active: Option<CallId>,
+    recent: Receiver<Vec<RecentCall>>,
+    tray_available: Arc<AtomicBool>,
 }
 
 impl Worker {
@@ -156,10 +185,18 @@ impl Worker {
                     let _ = self.engine.send(command);
                 }
             }
+            if let Some(items) = self.recent.try_iter().last() {
+                self.tray.set_recent(items);
+            }
+            self.tray_available.store(
+                self.tray.status() == TrayStatus::Available,
+                Ordering::SeqCst,
+            );
             while let Some(action) = self.tray.try_recv() {
                 let request = match action {
                     TrayAction::Show => External::Activate,
                     TrayAction::Quit => External::QuitRequest,
+                    TrayAction::Dial(number) => self.redial(&number),
                 };
                 wake |= self.external.send(request).is_ok();
             }
@@ -169,10 +206,32 @@ impl Worker {
         }
     }
 
-    /// Mirror incoming-call state into the desktop notification.
+    /// Dial a recent call chosen in the tray, unless a call is active; the
+    /// window is then shown with the number. A malformed number only shows
+    /// the window.
+    fn redial(&mut self, number: &str) -> External {
+        let Ok(target) = DialTarget::parse(number) else {
+            return External::Activate;
+        };
+        if self.active.is_none()
+            && let Err(notice) = self.engine.send(Command::Dial(target.clone()))
+        {
+            let _ = self.events.send(vec![Event::Notice(notice)]);
+        }
+        External::Dial(target)
+    }
+
+    /// Mirror incoming-call state into the desktop notification and track
+    /// whether a call is active.
     fn observe(&mut self, events: &[Event]) {
         for event in events {
             let Event::Call(call) = event else { continue };
+            let ended = matches!(call.phase, CallPhase::Ended(_));
+            if !ended {
+                self.active = Some(call.id);
+            } else if self.active == Some(call.id) {
+                self.active = None;
+            }
             let ringing = call.direction == Direction::Incoming && call.phase == CallPhase::Ringing;
             if ringing && self.ringing != Some(call.id) {
                 let _ = self.notifier.incoming_call(call.id, &call.remote);

@@ -39,6 +39,8 @@ pub const MAX_NUMBER_CHARS: usize = 64;
 pub const NOTICE_TTL: Duration = Duration::from_secs(5);
 /// Most recent history entries listed.
 pub const HISTORY_LIMIT: u32 = 200;
+/// Calls offered for redial in the tray menu.
+pub const RECENT_LIMIT: u32 = 5;
 /// Most contacts listed per search.
 pub const CONTACTS_LIMIT: u32 = 500;
 const DEFAULT_EXPIRES: u32 = 300;
@@ -536,6 +538,8 @@ pub struct UiState {
     pub call: Option<ActiveCall>,
     /// Listed history entries, newest first.
     pub history: Vec<HistoryEntry>,
+    /// The newest calls regardless of filter and search, for the tray menu.
+    pub recent: Vec<HistoryEntry>,
     /// History list filter.
     pub history_filter: HistoryFilter,
     /// History search text (remote party substring).
@@ -616,6 +620,7 @@ impl UiState {
             registration: RegistrationState::Disabled,
             call: None,
             history: Vec::new(),
+            recent: Vec::new(),
             history_filter: HistoryFilter::All,
             history_search: String::new(),
             contacts: Vec::new(),
@@ -727,6 +732,9 @@ impl UiState {
 
     fn refresh_history(&mut self, now: Instant) {
         let Some(store) = &self.store else { return };
+        if let Ok(list) = store.recent_calls(RECENT_LIMIT, HistoryFilter::All, None) {
+            self.recent = list;
+        }
         let search = Some(self.history_search.as_str()).filter(|s| !s.trim().is_empty());
         match store.recent_calls(HISTORY_LIMIT, self.history_filter, search) {
             Ok(list) => self.history = list,

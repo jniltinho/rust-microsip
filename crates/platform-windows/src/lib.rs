@@ -26,7 +26,7 @@ pub use pipes::{
     MAX_CONNECTIONS, PER_CONNECTION_RATE, REPLY_DEADLINE, acquire, acquire_owner,
     default_runtime_dir,
 };
-pub use tray::{Tray, TrayAction, TrayStatus};
+pub use tray::{MAX_RECENT, RecentCall, Tray, TrayAction, TrayStatus};
 
 /// Callback run after a request or action is queued (same as the Unix crate).
 pub type Waker = std::sync::Arc<dyn Fn() + Send + Sync>;

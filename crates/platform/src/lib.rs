@@ -38,15 +38,15 @@ pub use private_file::{PrivateFileError, read_own_file, read_private_file};
 #[cfg(windows)]
 pub use rust_microsip_platform_windows::{
     Acquired, CallAction, ControlClient, ControlServer, ControlSocketError, Delivery, GLOBAL_RATE,
-    Incoming, Listener, MAX_CONNECTIONS, NotificationAction, Notifier, NotifierStatus,
-    OPERATION_TIMEOUT, PER_CONNECTION_RATE, PrivateFileError, REPLY_DEADLINE, SecretBytes,
-    SecretError, SecretStore, Tray, TrayAction, TrayStatus, acquire, acquire_owner,
+    Incoming, Listener, MAX_CONNECTIONS, MAX_RECENT, NotificationAction, Notifier, NotifierStatus,
+    OPERATION_TIMEOUT, PER_CONNECTION_RATE, PrivateFileError, REPLY_DEADLINE, RecentCall,
+    SecretBytes, SecretError, SecretStore, Tray, TrayAction, TrayStatus, acquire, acquire_owner,
     default_runtime_dir, make_private_dir, read_own_file, read_private_file, write_private_file,
 };
 #[cfg(unix)]
 pub use secrets::{OPERATION_TIMEOUT, SecretBytes, SecretError, SecretStore};
 #[cfg(unix)]
-pub use tray::{Tray, TrayAction, TrayStatus};
+pub use tray::{MAX_RECENT, RecentCall, Tray, TrayAction, TrayStatus};
 
 /// Callback run after a request or action is queued, e.g. to wake the UI loop.
 pub type Waker = std::sync::Arc<dyn Fn() + Send + Sync>;

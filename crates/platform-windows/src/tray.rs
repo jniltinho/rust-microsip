@@ -1,4 +1,5 @@
-//! Notification-area icon with Show/Quit (design W5).
+//! Notification-area icon with Show, the recent calls set with
+//! [`Tray::set_recent`], and Quit (design W5).
 //!
 //! A dedicated thread owns a hidden window and its message loop; the icon is
 //! added with `Shell_NotifyIconW` and re-added when Explorer restarts
@@ -32,6 +33,10 @@ const QUEUE: usize = 8;
 const CALLBACK: u32 = WM_APP + 1;
 const SHOW: usize = 1;
 const QUIT: usize = 2;
+/// Command id of the first recent call; the others follow.
+const RECENT: usize = 10;
+/// Most recent calls shown in the menu.
+pub const MAX_RECENT: usize = 5;
 /// `NIN_SELECT | NINF_KEY` (not exported by windows-sys).
 const NIN_KEYSELECT: u32 = NIN_SELECT + 1;
 
@@ -47,12 +52,23 @@ pub enum TrayStatus {
 }
 
 /// A click on the tray icon or its menu.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrayAction {
     /// Left click or "Show rust-microsip": bring the window to the front.
     Show,
     /// "Quit": quit like the window's close button (asks during a call).
     Quit,
+    /// A recent call was chosen: call this number again. Not validated here.
+    Dial(String),
+}
+
+/// One recent call in the tray menu.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RecentCall {
+    /// Plain-text menu label, e.g. `"Missed: 1003"`.
+    pub label: String,
+    /// The number [`TrayAction::Dial`] carries when this item is chosen.
+    pub number: String,
 }
 
 type Shared<T> = Arc<Mutex<T>>;
@@ -66,6 +82,7 @@ pub struct Tray {
     status: Shared<TrayStatus>,
     waker: Shared<Option<Waker>>,
     stop: Shared<Stop>,
+    recent: Shared<Vec<RecentCall>>,
 }
 
 /// Hand-off between [`Tray::drop`] and the thread that owns the window,
@@ -96,9 +113,11 @@ impl Tray {
         let status = Arc::new(Mutex::new(TrayStatus::Connecting));
         let waker: Shared<Option<Waker>> = Arc::default();
         let stop: Shared<Stop> = Arc::default();
+        let recent: Shared<Vec<RecentCall>> = Arc::default();
         let notify = Notify {
             tx,
             waker: Arc::clone(&waker),
+            recent: Arc::clone(&recent),
         };
         let (st, sp) = (Arc::clone(&status), Arc::clone(&stop));
         let spawned = thread::Builder::new()
@@ -112,7 +131,15 @@ impl Tray {
             status,
             waker,
             stop,
+            recent,
         }
+    }
+
+    /// Replace the recent calls in the menu (most recent first; at most
+    /// [`MAX_RECENT`] are shown). The menu is built when it opens.
+    pub fn set_recent(&self, mut items: Vec<RecentCall>) {
+        items.truncate(MAX_RECENT);
+        *lock(&self.recent) = items;
     }
 
     /// Current availability.
@@ -176,6 +203,8 @@ fn wide(s: &str) -> Vec<u16> {
 struct Notify {
     tx: SyncSender<TrayAction>,
     waker: Shared<Option<Waker>>,
+    /// Read when the menu opens.
+    recent: Shared<Vec<RecentCall>>,
 }
 
 impl Notify {
@@ -311,7 +340,8 @@ fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESU
             match (lparam & 0xffff) as u32 {
                 WM_LBUTTONUP | NIN_SELECT | NIN_KEYSELECT => notify.send(TrayAction::Show),
                 WM_RBUTTONUP | WM_CONTEXTMENU => {
-                    if let Some(action) = show_menu(hwnd) {
+                    let recent = lock(&notify.recent).clone();
+                    if let Some(action) = show_menu(hwnd, &recent) {
                         notify.send(action);
                     }
                 }
@@ -344,13 +374,17 @@ fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESU
     }
 }
 
-/// "Show rust-microsip", separator, "Quit" at the cursor; the chosen action.
-fn show_menu(hwnd: HWND) -> Option<TrayAction> {
+/// "Show rust-microsip", the recent calls, separator, "Quit" at the cursor;
+/// the chosen action.
+fn show_menu(hwnd: HWND, recent: &[RecentCall]) -> Option<TrayAction> {
     let menu = create_popup_menu();
     if menu.is_null() {
         return None;
     }
     append_menu(menu, MF_STRING, SHOW, &wide("Show rust-microsip"));
+    for (index, call) in recent.iter().enumerate() {
+        append_menu(menu, MF_STRING, RECENT + index, &wide(&escape(&call.label)));
+    }
     append_menu(menu, MF_SEPARATOR, 0, &[0]);
     append_menu(menu, MF_STRING, QUIT, &wide("Quit"));
     let point = cursor_pos();
@@ -360,11 +394,23 @@ fn show_menu(hwnd: HWND) -> Option<TrayAction> {
     // KB135788: make the next click on the icon work.
     post(hwnd, WM_NULL);
     destroy_menu(menu);
-    match usize::try_from(chosen).ok()? {
+    action(usize::try_from(chosen).ok()?, recent)
+}
+
+/// The action of menu command `id`, for the menu built from `recent`.
+fn action(id: usize, recent: &[RecentCall]) -> Option<TrayAction> {
+    match id {
         SHOW => Some(TrayAction::Show),
         QUIT => Some(TrayAction::Quit),
-        _ => None,
+        _ => recent
+            .get(id.checked_sub(RECENT)?)
+            .map(|call| TrayAction::Dial(call.number.clone())),
     }
+}
+
+/// Menu text treats `&` as a mnemonic marker; show it literally.
+fn escape(label: &str) -> String {
+    label.replace('&', "&&")
 }
 
 // --- Win32 wrappers: one unsafe call each ----------------------------------
@@ -528,6 +574,41 @@ mod tests {
         assert_eq!(mask_len(16, 16), 32);
         assert_eq!(mask_len(17, 1), 4);
         assert_eq!(mask_len(1, 3), 6);
+    }
+
+    #[test]
+    fn menu_ids_map_to_actions() {
+        let recent = vec![
+            RecentCall {
+                label: "Missed: 1003".into(),
+                number: "1003".into(),
+            },
+            RecentCall {
+                label: "\u{2197} Ana & Co".into(),
+                number: "1002".into(),
+            },
+        ];
+        assert_eq!(action(SHOW, &recent), Some(TrayAction::Show));
+        assert_eq!(action(QUIT, &recent), Some(TrayAction::Quit));
+        assert_eq!(
+            action(RECENT, &recent),
+            Some(TrayAction::Dial("1003".into()))
+        );
+        assert_eq!(
+            action(RECENT + 1, &recent),
+            Some(TrayAction::Dial("1002".into()))
+        );
+        assert_eq!(action(RECENT + 2, &recent), None);
+        assert_eq!(action(0, &recent), None);
+        assert_eq!(action(5, &recent), None);
+        assert_eq!(escape("Ana & Co"), "Ana && Co");
+    }
+
+    #[test]
+    fn set_recent_keeps_the_newest_five() {
+        let tray = Tray::session(1, 1, &[0, 0, 0, 0]);
+        tray.set_recent(vec![RecentCall::default(); 7]);
+        assert_eq!(lock(&tray.recent).len(), MAX_RECENT);
     }
 
     #[test]

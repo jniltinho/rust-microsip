@@ -68,6 +68,15 @@ pub trait Backend {
     fn control_requests(&self) -> Vec<rust_microsip_platform::Incoming> {
         Vec::new()
     }
+    /// Whether a tray icon is shown; the close button then hides the window
+    /// to the tray instead of quitting.
+    fn tray_available(&self) -> bool {
+        false
+    }
+    /// Replace the tray menu's recent calls: `(label, number)`, newest first.
+    fn set_recent_calls(&self, items: Vec<(String, String)>) {
+        let _ = items;
+    }
 }
 
 /// Blocking work the window hands to the backend.
@@ -147,7 +156,8 @@ pub enum JobResult {
 }
 
 /// A request from outside the window. A dial request only fills the number:
-/// the user still confirms with Call.
+/// the user still confirms with Call (a recent call chosen in the tray is
+/// dialed by the backend before this request arrives).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum External {
     /// Bring the window to the front.
@@ -300,6 +310,10 @@ pub struct SoftphoneApp {
     state: UiState,
     applied_theme: Theme,
     focus_number: bool,
+    /// The recent calls last handed to [`Backend::set_recent_calls`].
+    tray_recent: Vec<(String, String)>,
+    /// winit runs on Wayland, which cannot hide a window: minimize instead.
+    wayland: bool,
 }
 
 impl SoftphoneApp {
@@ -344,6 +358,8 @@ impl SoftphoneApp {
             applied_theme,
             state,
             focus_number: true,
+            tray_recent: Vec::new(),
+            wayland: cfg!(target_os = "linux") && wayland_session(),
         }
     }
 
@@ -397,15 +413,26 @@ impl SoftphoneApp {
                 self.dispatch(ctx, Action::SelectTab(Tab::Phone));
                 self.focus_number = true;
             }
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(true));
             ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(false));
             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
         }
         if ctx.input(|i| i.viewport().close_requested()) && !self.state.quitting {
-            // During a call this asks "Hang up and quit?" instead of closing.
-            self.dispatch(ctx, Action::Quit);
-            if !self.state.quitting {
+            if self.backend.tray_available() {
                 ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.hide(ctx);
+            } else {
+                // During a call this asks "Hang up and quit?" instead of closing.
+                self.dispatch(ctx, Action::Quit);
+                if !self.state.quitting {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                }
             }
+        }
+        let recent = calls::tray_recent(&self.state);
+        if recent != self.tray_recent {
+            self.tray_recent = recent.clone();
+            self.backend.set_recent_calls(recent);
         }
         if self
             .state
@@ -417,6 +444,21 @@ impl SoftphoneApp {
         }
         if let Some(left) = self.state.notice_remaining(now) {
             ctx.request_repaint_after(left);
+        }
+    }
+
+    /// Close button with a tray: keep running in the tray. X11 and Windows
+    /// unmap the window, and eframe keeps running [`eframe::App::logic`] for
+    /// it, so tray clicks raise it again. winit cannot hide a Wayland window
+    /// and eframe runs no frames for a minimized one there, so it is
+    /// minimized: the dock or taskbar restores it, tray clicks only take
+    /// effect once it is drawn again (a chosen recent call is still dialed
+    /// at once, by the backend).
+    fn hide(&self, ctx: &egui::Context) {
+        if self.wayland {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Minimized(true));
+        } else {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Visible(false));
         }
     }
 
@@ -563,6 +605,16 @@ impl eframe::App for SoftphoneApp {
             });
         self.draw(ui);
     }
+}
+
+/// Whether winit picks its Wayland backend: it does whenever
+/// `WAYLAND_DISPLAY` (or else `WAYLAND_SOCKET`) is set and not empty.
+fn wayland_session() -> bool {
+    std::env::var("WAYLAND_DISPLAY")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .or_else(|| std::env::var("WAYLAND_SOCKET").ok())
+        .is_some_and(|v| !v.is_empty())
 }
 
 /// The palette of the theme `ui` is drawn in.
@@ -1894,6 +1946,120 @@ mod tests {
         assert!(!output.shapes.is_empty());
         output.drop_without_applying_deltas();
         assert_eq!(*sent.borrow(), 0);
+    }
+
+    /// Every recent-call list the window handed to the backend.
+    type Pushed = Rc<RefCell<Vec<Vec<(String, String)>>>>;
+
+    struct TrayFake {
+        tray: bool,
+        recent: Pushed,
+    }
+    impl Backend for TrayFake {
+        fn send(&self, _: Command) -> Result<(), Notice> {
+            Ok(())
+        }
+        fn poll(&self) -> Vec<Event> {
+            Vec::new()
+        }
+        fn tray_available(&self) -> bool {
+            self.tray
+        }
+        fn set_recent_calls(&self, items: Vec<(String, String)>) {
+            self.recent.borrow_mut().push(items);
+        }
+    }
+
+    fn tray_app(ctx: &egui::Context, tray: bool, store: Option<Store>) -> (SoftphoneApp, Pushed) {
+        let recent = Rc::default();
+        let backend = TrayFake {
+            tray,
+            recent: Rc::clone(&recent),
+        };
+        let app = SoftphoneApp::with_context(
+            ctx,
+            Box::new(backend),
+            UiSettings::default(),
+            Box::new(|_, _| Ok(())),
+            Storage {
+                store,
+                warning: None,
+                recover_interrupted: false,
+                control: None,
+            },
+        );
+        (app, recent)
+    }
+
+    /// Commands the window sent after a close request.
+    fn close_window(ctx: &egui::Context, app: &mut SoftphoneApp) -> Vec<egui::ViewportCommand> {
+        let mut input = egui::RawInput::default();
+        if let Some(root) = input.viewports.get_mut(&egui::ViewportId::ROOT) {
+            root.events.push(egui::ViewportEvent::Close);
+        }
+        let output = ctx.run_ui(input, |ui| app.poll(ui.ctx()));
+        let commands = output
+            .viewport_output
+            .get(&egui::ViewportId::ROOT)
+            .map(|v| v.commands.clone())
+            .unwrap_or_default();
+        output.drop_without_applying_deltas();
+        commands
+    }
+
+    #[test]
+    fn close_hides_to_the_tray_only_when_one_is_shown() {
+        use egui::ViewportCommand as Cmd;
+        let ctx = egui::Context::default();
+        let (mut app, _) = tray_app(&ctx, true, None);
+        app.wayland = false;
+        let commands = close_window(&ctx, &mut app);
+        assert!(commands.contains(&Cmd::CancelClose));
+        assert!(commands.contains(&Cmd::Visible(false)));
+        assert!(!app.state.quitting);
+        app.wayland = true;
+        let commands = close_window(&ctx, &mut app);
+        assert!(commands.contains(&Cmd::Minimized(true)));
+        assert!(!commands.contains(&Cmd::Visible(false)));
+        assert!(!app.state.quitting);
+
+        let ctx = egui::Context::default();
+        let (mut app, _) = tray_app(&ctx, false, None);
+        let commands = close_window(&ctx, &mut app);
+        assert!(app.state.quitting);
+        assert!(commands.contains(&Cmd::Close));
+        assert!(!commands.contains(&Cmd::Visible(false)));
+    }
+
+    #[test]
+    fn tray_lists_the_newest_five_calls_with_contact_names() {
+        let ctx = egui::Context::default();
+        let mut store = Store::open_in_memory().ok();
+        if let Some(store) = store.as_mut() {
+            seed(store, state::utc_now());
+        }
+        let (mut app, recent) = tray_app(&ctx, true, store);
+        // A filtered, searched Calls list must not change the tray menu.
+        app.state.history_filter = rust_microsip_storage::HistoryFilter::Missed;
+        app.dispatch(&ctx, Action::SearchHistory);
+        app.poll(&ctx);
+        app.poll(&ctx);
+        let pushed = recent.borrow();
+        assert_eq!(pushed.len(), 1, "pushed once, then only on change");
+        let labels: Vec<_> = pushed[0]
+            .iter()
+            .map(|(l, n)| (l.as_str(), n.as_str()))
+            .collect();
+        assert_eq!(
+            labels,
+            vec![
+                ("\u{2197} Ana Lima", "1002"),
+                ("Missed: 1003", "1003"),
+                ("\u{2199} Support desk", "600"),
+                ("\u{2197} 1003", "1003"),
+                ("\u{2197} Support desk", "600"),
+            ]
+        );
     }
 
     /// Fictional history and contacts (lab extensions, invented names).

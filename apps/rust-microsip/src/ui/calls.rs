@@ -80,6 +80,27 @@ pub(super) fn row_name(call: &CallRecord, name: Option<&str>, age: &str) -> Stri
     text
 }
 
+/// `(label, number)` of the newest calls for the tray menu, newest first:
+/// `"↗ Ana Lima"` (outgoing), `"↙ 1002"` (incoming) or `"Missed: 1003"`,
+/// named after a listed contact when one has the number. Calls whose remote
+/// party is not a valid dial target are left out.
+pub(super) fn tray_recent(st: &UiState) -> Vec<(String, String)> {
+    st.recent
+        .iter()
+        .map(|entry| &entry.call)
+        .filter(|call| rust_microsip_core::DialTarget::parse(&call.remote).is_ok())
+        .map(|call| {
+            let who = contact_name(st, &call.remote).unwrap_or(&call.remote);
+            let label = match (kind(call), call.direction) {
+                (Kind::Missed, _) => format!("Missed: {who}"),
+                (_, Direction::Outgoing) => format!("\u{2197} {who}"),
+                (_, Direction::Incoming) => format!("\u{2199} {who}"),
+            };
+            (label, call.remote.clone())
+        })
+        .collect()
+}
+
 /// Contact name for a number, when a listed contact has it.
 // ponytail: linear scan of the listed contacts per row; index by number if
 // lists grow past a few hundred entries.

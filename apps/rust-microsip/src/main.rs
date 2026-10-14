@@ -34,8 +34,8 @@ use rust_microsip_control::{ControlError, ErrorCode, Operation, OwnerMode, Respo
 use rust_microsip_core::{Command, Event, FRAME_SAMPLES, MediaIo, Notice};
 use rust_microsip_platform::{
     Ack, Acquired, ControlClient, ControlServer, ControlSocketError, Incoming, InstanceError,
-    Listener, Notifier, Request, SecretStore, Tray, Waker, acquire, default_runtime_dir,
-    parse_dial_uri,
+    Listener, Notifier, RecentCall, Request, SecretStore, Tray, Waker, acquire,
+    default_runtime_dir, parse_dial_uri,
 };
 use rust_microsip_storage::{DEFAULT_RETENTION_DAYS, Store};
 use rust_microsip_telephony::engine::{EngineHandle, TrustAnchors};
@@ -119,6 +119,21 @@ impl Backend for EngineBackend {
             }
         }
         out
+    }
+    fn tray_available(&self) -> bool {
+        self.bridge
+            .as_ref()
+            .is_some_and(bridge::Bridge::tray_available)
+    }
+    fn set_recent_calls(&self, items: Vec<(String, String)>) {
+        if let Some(bridge) = &self.bridge {
+            bridge.set_recent(
+                items
+                    .into_iter()
+                    .map(|(label, number)| RecentCall { label, number })
+                    .collect(),
+            );
+        }
     }
     fn attach_context(&self, ctx: &eframe::egui::Context) {
         let window = ctx.clone();

@@ -1,5 +1,6 @@
 //! System tray icon over the freedesktop `StatusNotifierItem` protocol with a
-//! `com.canonical.dbusmenu` menu ("Show rust-microsip", "Quit").
+//! `com.canonical.dbusmenu` menu ("Show rust-microsip", the recent calls set
+//! with [`Tray::set_recent`], "Quit").
 //!
 //! KDE Plasma, Xfce, LXQt, Cinnamon and GNOME with the AppIndicator extension
 //! host these items. The bus connection serves both objects from zbus's own
@@ -27,6 +28,10 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 const SHOW: i32 = 1;
 const SEPARATOR: i32 = 2;
 const QUIT: i32 = 3;
+/// Menu id of the first recent call; the others follow.
+const RECENT: i32 = 10;
+/// Most recent calls shown in the menu.
+pub const MAX_RECENT: usize = 5;
 
 /// Whether the tray icon is shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -40,12 +45,30 @@ pub enum TrayStatus {
 }
 
 /// A click on the tray icon or its menu.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TrayAction {
     /// Left click or "Show rust-microsip": bring the window to the front.
     Show,
     /// "Quit": quit like the window's close button (asks during a call).
     Quit,
+    /// A recent call was chosen: call this number again. Not validated here.
+    Dial(String),
+}
+
+/// One recent call in the tray menu.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct RecentCall {
+    /// Plain-text menu label, e.g. `"Missed: 1003"`.
+    pub label: String,
+    /// The number [`TrayAction::Dial`] carries when this item is chosen.
+    pub number: String,
+}
+
+/// The dynamic part of the menu; `revision` grows on every change.
+#[derive(Default)]
+struct MenuState {
+    revision: u32,
+    recent: Vec<RecentCall>,
 }
 
 /// ARGB32 pixmap in network byte order, as `StatusNotifierItem` expects.
@@ -61,8 +84,10 @@ pub struct Tray {
     actions: Receiver<TrayAction>,
     status: Shared<TrayStatus>,
     waker: Shared<Option<Waker>>,
-    // Dropping the sender ends the worker, which closes the connection.
-    _stop: SyncSender<()>,
+    menu: Shared<MenuState>,
+    // Nudges the worker to announce a new layout; dropping it ends the
+    // worker, which closes the connection.
+    changed: SyncSender<()>,
 }
 impl std::fmt::Debug for Tray {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -76,18 +101,29 @@ impl Tray {
     /// session bus, in the background.
     pub fn session(width: u32, height: u32, rgba: &[u8]) -> Self {
         let icon = to_argb(width, height, rgba);
-        let (stop, stop_rx) = mpsc::sync_channel(1);
+        let (changed, changed_rx) = mpsc::sync_channel(1);
         let (tx, actions) = mpsc::sync_channel(QUEUE);
         let status = Arc::new(Mutex::new(TrayStatus::Connecting));
         let waker: Shared<Option<Waker>> = Arc::default();
-        let (st, wk) = (Arc::clone(&status), Arc::clone(&waker));
+        let menu: Shared<MenuState> = Arc::default();
+        let (st, wk, mn) = (Arc::clone(&status), Arc::clone(&waker), Arc::clone(&menu));
         let spawned = thread::Builder::new().name("tray".into()).spawn(move || {
             let notify = Notify { tx, waker: wk };
-            match zbus::block_on(register(icon, notify)) {
+            match zbus::block_on(register(icon, notify, Arc::clone(&mn))) {
                 Ok(conn) => {
                     *lock(&st) = TrayStatus::Available;
-                    // Keep the connection (and the icon) until the handle drops.
-                    let _ = stop_rx.recv();
+                    // Keep the connection (and the icon) until the handle
+                    // drops, announcing each new menu layout.
+                    while changed_rx.recv().is_ok() {
+                        let revision = lock(&mn).revision;
+                        let _ = zbus::block_on(conn.emit_signal(
+                            None::<&str>,
+                            MENU_PATH,
+                            "com.canonical.dbusmenu",
+                            "LayoutUpdated",
+                            &(revision, 0i32),
+                        ));
+                    }
                     drop(conn);
                 }
                 Err(_) => *lock(&st) = TrayStatus::Unavailable,
@@ -100,8 +136,24 @@ impl Tray {
             actions,
             status,
             waker,
-            _stop: stop,
+            menu,
+            changed,
         }
+    }
+
+    /// Replace the recent calls in the menu (most recent first; at most
+    /// [`MAX_RECENT`] are shown). Never blocks.
+    pub fn set_recent(&self, mut items: Vec<RecentCall>) {
+        items.truncate(MAX_RECENT);
+        {
+            let mut menu = lock(&self.menu);
+            if menu.recent == items {
+                return;
+            }
+            menu.recent = items;
+            menu.revision = menu.revision.wrapping_add(1);
+        }
+        let _ = self.changed.try_send(());
     }
 
     /// Current availability.
@@ -155,7 +207,11 @@ impl Notify {
 // ponytail: registers once; if the tray host restarts (e.g. plasmashell), the
 // icon stays gone until the app restarts. Watch the watcher's NameOwnerChanged
 // and re-register if users hit that.
-async fn register(icon: Vec<Pixmap>, notify: Notify) -> zbus::Result<zbus::Connection> {
+async fn register(
+    icon: Vec<Pixmap>,
+    notify: Notify,
+    state: Shared<MenuState>,
+) -> zbus::Result<zbus::Connection> {
     let name = format!("org.kde.StatusNotifierItem-{}-1", std::process::id());
     let conn = zbus::connection::Builder::session()?
         .method_timeout(CALL_TIMEOUT)
@@ -166,7 +222,7 @@ async fn register(icon: Vec<Pixmap>, notify: Notify) -> zbus::Result<zbus::Conne
                 notify: notify.clone(),
             },
         )?
-        .serve_at(MENU_PATH, Menu { notify })?
+        .serve_at(MENU_PATH, Menu { notify, state })?
         .name(name.as_str())?
         .build()
         .await?;
@@ -249,44 +305,84 @@ impl Item {
 /// `(id, properties, children)` of a dbusmenu node.
 type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 
+// ponytail: recent-call ids are positions, so a click on a menu the host
+// drew before a layout change dials what is at that position now. Encode the
+// revision in the ids if hosts are seen to lag.
 struct Menu {
     notify: Notify,
+    state: Shared<MenuState>,
 }
 
-fn properties(id: i32) -> HashMap<String, OwnedValue> {
-    let mut out = HashMap::new();
-    let mut put = |key: &str, value: Value<'_>| {
-        if let Ok(value) = OwnedValue::try_from(value) {
-            out.insert(key.to_owned(), value);
-        }
-    };
-    match id {
-        0 => put("children-display", Value::from("submenu")),
-        SHOW => put("label", Value::from("Show rust-microsip")),
-        SEPARATOR => put("type", Value::from("separator")),
-        QUIT => put("label", Value::from("Quit")),
-        _ => {}
+/// Index into the recent calls of a menu id.
+fn recent_index(id: i32) -> Option<usize> {
+    usize::try_from(id.checked_sub(RECENT)?).ok()
+}
+
+/// dbusmenu labels treat `_` as a mnemonic marker; show it literally.
+fn escape(label: &str) -> String {
+    label.replace('_', "__")
+}
+
+impl MenuState {
+    fn known(&self, id: i32) -> bool {
+        matches!(id, 0 | SHOW | SEPARATOR | QUIT)
+            || recent_index(id).is_some_and(|i| i < self.recent.len())
     }
-    out
-}
 
-fn layout(id: i32) -> Layout {
-    let children = if id == 0 {
-        [SHOW, SEPARATOR, QUIT]
-            .into_iter()
-            .filter_map(|child| {
-                let (i, props, _) = layout(child);
-                OwnedValue::try_from(Value::from((i, props, Vec::<OwnedValue>::new()))).ok()
-            })
+    /// Top-level item ids in menu order.
+    fn ids(&self) -> Vec<i32> {
+        let recent = (RECENT..).take(self.recent.len());
+        std::iter::once(SHOW)
+            .chain(recent)
+            .chain([SEPARATOR, QUIT])
             .collect()
-    } else {
-        Vec::new()
-    };
-    (id, properties(id), children)
-}
+    }
 
-fn known(id: i32) -> bool {
-    matches!(id, 0 | SHOW | SEPARATOR | QUIT)
+    fn properties(&self, id: i32) -> HashMap<String, OwnedValue> {
+        let mut out = HashMap::new();
+        let mut put = |key: &str, value: Value<'_>| {
+            if let Ok(value) = OwnedValue::try_from(value) {
+                out.insert(key.to_owned(), value);
+            }
+        };
+        match id {
+            0 => put("children-display", Value::from("submenu")),
+            SHOW => put("label", Value::from("Show rust-microsip")),
+            SEPARATOR => put("type", Value::from("separator")),
+            QUIT => put("label", Value::from("Quit")),
+            _ => {
+                if let Some(call) = recent_index(id).and_then(|i| self.recent.get(i)) {
+                    put("label", Value::from(escape(&call.label)));
+                }
+            }
+        }
+        out
+    }
+
+    fn layout(&self, id: i32) -> Layout {
+        let children = if id == 0 {
+            self.ids()
+                .into_iter()
+                .filter_map(|child| {
+                    let props = self.properties(child);
+                    OwnedValue::try_from(Value::from((child, props, Vec::<OwnedValue>::new()))).ok()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        (id, self.properties(id), children)
+    }
+
+    fn action(&self, id: i32) -> Option<TrayAction> {
+        match id {
+            SHOW => Some(TrayAction::Show),
+            QUIT => Some(TrayAction::Quit),
+            _ => recent_index(id)
+                .and_then(|i| self.recent.get(i))
+                .map(|call| TrayAction::Dial(call.number.clone())),
+        }
+    }
 }
 
 #[zbus::interface(name = "com.canonical.dbusmenu")]
@@ -297,28 +393,31 @@ impl Menu {
         _recursion_depth: i32,
         _property_names: Vec<String>,
     ) -> fdo::Result<(u32, Layout)> {
-        if !known(parent_id) {
+        let state = lock(&self.state);
+        if !state.known(parent_id) {
             return Err(fdo::Error::InvalidArgs("unknown menu item".into()));
         }
-        Ok((1, layout(parent_id)))
+        Ok((state.revision, state.layout(parent_id)))
     }
     fn get_group_properties(
         &self,
         ids: Vec<i32>,
         _property_names: Vec<String>,
     ) -> Vec<(i32, HashMap<String, OwnedValue>)> {
+        let state = lock(&self.state);
         let ids = if ids.is_empty() {
-            vec![0, SHOW, SEPARATOR, QUIT]
+            std::iter::once(0).chain(state.ids()).collect()
         } else {
             ids
         };
         ids.into_iter()
-            .filter(|id| known(*id))
-            .map(|id| (id, properties(id)))
+            .filter(|id| state.known(*id))
+            .map(|id| (id, state.properties(id)))
             .collect()
     }
     fn get_property(&self, id: i32, name: String) -> fdo::Result<OwnedValue> {
-        properties(id)
+        lock(&self.state)
+            .properties(id)
             .remove(&name)
             .ok_or_else(|| fdo::Error::InvalidArgs("unknown menu property".into()))
     }
@@ -326,16 +425,17 @@ impl Menu {
         if event_id != "clicked" {
             return;
         }
-        match id {
-            SHOW => self.notify.send(TrayAction::Show),
-            QUIT => self.notify.send(TrayAction::Quit),
-            _ => {}
+        // Release the lock before notifying (the waker runs other code).
+        let action = lock(&self.state).action(id);
+        if let Some(action) = action {
+            self.notify.send(action);
         }
     }
     fn event_group(&self, events: Vec<(i32, String, OwnedValue, u32)>) -> Vec<i32> {
         let mut errors = Vec::new();
         for (id, event_id, data, timestamp) in events {
-            if known(id) {
+            let known = lock(&self.state).known(id);
+            if known {
                 self.event(id, event_id, data, timestamp);
             } else {
                 errors.push(id);
@@ -390,32 +490,93 @@ mod tests {
         assert!(to_argb(2, 2, &[0; 4]).is_empty());
     }
 
+    fn label(state: &MenuState, id: i32) -> Option<String> {
+        state
+            .properties(id)
+            .remove("label")
+            .and_then(|v| String::try_from(v).ok())
+    }
+
+    fn menu(notify: Notify, recent: Vec<RecentCall>) -> Menu {
+        Menu {
+            notify,
+            state: Arc::new(Mutex::new(MenuState {
+                revision: 1,
+                recent,
+            })),
+        }
+    }
+
+    fn call(label: &str, number: &str) -> RecentCall {
+        RecentCall {
+            label: label.into(),
+            number: number.into(),
+        }
+    }
+
     #[test]
     fn menu_lists_show_and_quit() {
-        let (_, props, children) = layout(0);
+        let state = MenuState::default();
+        let (_, props, children) = state.layout(0);
         assert!(props.contains_key("children-display"));
         assert_eq!(children.len(), 3);
-        let label = |id| {
-            properties(id)
-                .remove("label")
-                .and_then(|v| String::try_from(v).ok())
-        };
-        assert_eq!(label(SHOW).as_deref(), Some("Show rust-microsip"));
-        assert_eq!(label(QUIT).as_deref(), Some("Quit"));
+        assert_eq!(label(&state, SHOW).as_deref(), Some("Show rust-microsip"));
+        assert_eq!(label(&state, QUIT).as_deref(), Some("Quit"));
+    }
+
+    #[test]
+    fn recent_calls_sit_between_show_and_quit() {
+        let (notify, _rx) = notify();
+        let menu = menu(notify, Vec::new());
+        let before = menu.get_layout(0, -1, Vec::new()).map(|(rev, _)| rev);
+        let tray_menu = &menu.state;
+        lock(tray_menu).recent = vec![
+            call("\u{2197} Ana_Lima", "1002"),
+            call("Missed: 1003", "1003"),
+        ];
+        lock(tray_menu).revision += 1;
+        let state = lock(tray_menu);
+        assert_eq!(state.ids(), vec![SHOW, RECENT, RECENT + 1, SEPARATOR, QUIT]);
+        assert_eq!(state.layout(0).2.len(), 5);
+        assert_eq!(label(&state, RECENT).as_deref(), Some("\u{2197} Ana__Lima"));
+        assert_eq!(label(&state, RECENT + 1).as_deref(), Some("Missed: 1003"));
+        assert!(!state.known(RECENT + 2));
+        drop(state);
+        let after = menu.get_layout(0, -1, Vec::new()).map(|(rev, _)| rev);
+        assert_eq!((before.ok(), after.ok()), (Some(1), Some(2)));
+        assert!(menu.get_layout(RECENT + 2, -1, Vec::new()).is_err());
+        assert_eq!(menu.get_group_properties(Vec::new(), Vec::new()).len(), 6);
+    }
+
+    #[test]
+    fn set_recent_bumps_the_revision_only_on_change() {
+        let tray = Tray::session(1, 1, &[0; 4]);
+        let revision = || lock(&tray.menu).revision;
+        let items: Vec<_> = (0..7)
+            .map(|i| call(&format!("{i}"), &format!("10{i}")))
+            .collect();
+        tray.set_recent(items.clone());
+        assert_eq!(revision(), 1);
+        assert_eq!(lock(&tray.menu).recent.len(), MAX_RECENT);
+        tray.set_recent(items);
+        assert_eq!(revision(), 1);
+        tray.set_recent(Vec::new());
+        assert_eq!(revision(), 2);
     }
 
     #[test]
     fn clicks_become_actions() {
         let (notify, rx) = notify();
-        let menu = Menu {
-            notify: notify.clone(),
-        };
+        let menu = menu(notify.clone(), vec![call("\u{2199} 1002", "1002")]);
         let data = || OwnedValue::from(0i32);
         menu.event(QUIT, "hovered".into(), data(), 0);
         menu.event(SEPARATOR, "clicked".into(), data(), 0);
+        menu.event(RECENT + 1, "clicked".into(), data(), 0);
         assert!(rx.try_recv().is_err());
         menu.event(QUIT, "clicked".into(), data(), 0);
         assert_eq!(rx.try_recv(), Ok(TrayAction::Quit));
+        menu.event(RECENT, "clicked".into(), data(), 0);
+        assert_eq!(rx.try_recv(), Ok(TrayAction::Dial("1002".into())));
         assert_eq!(
             menu.event_group(vec![
                 (SHOW, "clicked".into(), data(), 0),
