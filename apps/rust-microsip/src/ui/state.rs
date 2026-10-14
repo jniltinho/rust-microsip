@@ -2669,9 +2669,11 @@ mod tests {
         }
         // Without single-instance protection another window may own the
         // open call: nothing is recovered.
-        let mut st = UiState::new(UiSettings::default());
-        st.attach_store(Some(Store::open(&path)?), None, false, Instant::now());
-        assert!(st.history.is_empty());
+        let mut other = UiState::new(UiSettings::default());
+        other.attach_store(Some(Store::open(&path)?), None, false, Instant::now());
+        assert!(other.history.is_empty());
+        // Close it: Windows refuses to delete a file that is still open.
+        drop(other);
         let mut st = UiState::new(UiSettings::default());
         let now = Instant::now();
         st.attach_store(Some(Store::open(&path)?), None, true, now);
