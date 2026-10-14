@@ -398,6 +398,8 @@ fn show_menu(hwnd: HWND, recent: &[RecentCall]) -> Option<TrayAction> {
 }
 
 /// The action of menu command `id`, for the menu built from `recent`.
+/// Ids cannot go stale: the popup is built from this snapshot when it opens
+/// and `TrackPopupMenu` returns the choice before it is destroyed.
 fn action(id: usize, recent: &[RecentCall]) -> Option<TrayAction> {
     match id {
         SHOW => Some(TrayAction::Show),

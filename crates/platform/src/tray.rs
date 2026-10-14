@@ -28,8 +28,10 @@ const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 const SHOW: i32 = 1;
 const SEPARATOR: i32 = 2;
 const QUIT: i32 = 3;
-/// Menu id of the first recent call; the others follow.
-const RECENT: i32 = 10;
+/// Menu id of the first recent call ever listed. Each listed call gets the
+/// next id and ids are never reused, so a click on a stale menu cannot dial
+/// another number.
+const RECENT: i32 = 1000;
 /// Most recent calls shown in the menu.
 pub const MAX_RECENT: usize = 5;
 
@@ -65,10 +67,21 @@ pub struct RecentCall {
 }
 
 /// The dynamic part of the menu; `revision` grows on every change.
-#[derive(Default)]
 struct MenuState {
     revision: u32,
-    recent: Vec<RecentCall>,
+    /// The current recent calls with their menu ids, in menu order.
+    recent: Vec<(i32, RecentCall)>,
+    /// Id for the next listed call.
+    next_id: i32,
+}
+impl Default for MenuState {
+    fn default() -> Self {
+        Self {
+            revision: 0,
+            recent: Vec::new(),
+            next_id: RECENT,
+        }
+    }
 }
 
 /// ARGB32 pixmap in network byte order, as `StatusNotifierItem` expects.
@@ -145,15 +158,9 @@ impl Tray {
     /// [`MAX_RECENT`] are shown). Never blocks.
     pub fn set_recent(&self, mut items: Vec<RecentCall>) {
         items.truncate(MAX_RECENT);
-        {
-            let mut menu = lock(&self.menu);
-            if menu.recent == items {
-                return;
-            }
-            menu.recent = items;
-            menu.revision = menu.revision.wrapping_add(1);
+        if lock(&self.menu).replace(items) {
+            let _ = self.changed.try_send(());
         }
-        let _ = self.changed.try_send(());
     }
 
     /// Current availability.
@@ -305,17 +312,9 @@ impl Item {
 /// `(id, properties, children)` of a dbusmenu node.
 type Layout = (i32, HashMap<String, OwnedValue>, Vec<OwnedValue>);
 
-// ponytail: recent-call ids are positions, so a click on a menu the host
-// drew before a layout change dials what is at that position now. Encode the
-// revision in the ids if hosts are seen to lag.
 struct Menu {
     notify: Notify,
     state: Shared<MenuState>,
-}
-
-/// Index into the recent calls of a menu id.
-fn recent_index(id: i32) -> Option<usize> {
-    usize::try_from(id.checked_sub(RECENT)?).ok()
 }
 
 /// dbusmenu labels treat `_` as a mnemonic marker; show it literally.
@@ -324,14 +323,41 @@ fn escape(label: &str) -> String {
 }
 
 impl MenuState {
+    /// Replace the recent calls, giving each a fresh id; `false` when they
+    /// are unchanged (ids and revision kept).
+    fn replace(&mut self, items: Vec<RecentCall>) -> bool {
+        if self.recent.iter().map(|(_, call)| call).eq(items.iter()) {
+            return false;
+        }
+        self.recent = items
+            .into_iter()
+            .map(|call| {
+                let id = self.next_id;
+                // ponytail: wraps after 2^31 - 1000 listed calls; ids are
+                // only reused after that.
+                self.next_id = self.next_id.checked_add(1).unwrap_or(RECENT);
+                (id, call)
+            })
+            .collect();
+        self.revision = self.revision.wrapping_add(1);
+        true
+    }
+
+    /// The current recent call with menu id `id`.
+    fn entry(&self, id: i32) -> Option<&RecentCall> {
+        self.recent
+            .iter()
+            .find(|(known, _)| *known == id)
+            .map(|(_, call)| call)
+    }
+
     fn known(&self, id: i32) -> bool {
-        matches!(id, 0 | SHOW | SEPARATOR | QUIT)
-            || recent_index(id).is_some_and(|i| i < self.recent.len())
+        matches!(id, 0 | SHOW | SEPARATOR | QUIT) || self.entry(id).is_some()
     }
 
     /// Top-level item ids in menu order.
     fn ids(&self) -> Vec<i32> {
-        let recent = (RECENT..).take(self.recent.len());
+        let recent = self.recent.iter().map(|(id, _)| *id);
         std::iter::once(SHOW)
             .chain(recent)
             .chain([SEPARATOR, QUIT])
@@ -351,7 +377,7 @@ impl MenuState {
             SEPARATOR => put("type", Value::from("separator")),
             QUIT => put("label", Value::from("Quit")),
             _ => {
-                if let Some(call) = recent_index(id).and_then(|i| self.recent.get(i)) {
+                if let Some(call) = self.entry(id) {
                     put("label", Value::from(escape(&call.label)));
                 }
             }
@@ -378,8 +404,9 @@ impl MenuState {
         match id {
             SHOW => Some(TrayAction::Show),
             QUIT => Some(TrayAction::Quit),
-            _ => recent_index(id)
-                .and_then(|i| self.recent.get(i))
+            // Ids of earlier lists are unknown: never dial on them.
+            _ => self
+                .entry(id)
                 .map(|call| TrayAction::Dial(call.number.clone())),
         }
     }
@@ -498,12 +525,11 @@ mod tests {
     }
 
     fn menu(notify: Notify, recent: Vec<RecentCall>) -> Menu {
+        let mut state = MenuState::default();
+        state.replace(recent);
         Menu {
             notify,
-            state: Arc::new(Mutex::new(MenuState {
-                revision: 1,
-                recent,
-            })),
+            state: Arc::new(Mutex::new(state)),
         }
     }
 
@@ -529,13 +555,11 @@ mod tests {
         let (notify, _rx) = notify();
         let menu = menu(notify, Vec::new());
         let before = menu.get_layout(0, -1, Vec::new()).map(|(rev, _)| rev);
-        let tray_menu = &menu.state;
-        lock(tray_menu).recent = vec![
+        assert!(lock(&menu.state).replace(vec![
             call("\u{2197} Ana_Lima", "1002"),
             call("Missed: 1003", "1003"),
-        ];
-        lock(tray_menu).revision += 1;
-        let state = lock(tray_menu);
+        ]));
+        let state = lock(&menu.state);
         assert_eq!(state.ids(), vec![SHOW, RECENT, RECENT + 1, SEPARATOR, QUIT]);
         assert_eq!(state.layout(0).2.len(), 5);
         assert_eq!(label(&state, RECENT).as_deref(), Some("\u{2197} Ana__Lima"));
@@ -543,7 +567,7 @@ mod tests {
         assert!(!state.known(RECENT + 2));
         drop(state);
         let after = menu.get_layout(0, -1, Vec::new()).map(|(rev, _)| rev);
-        assert_eq!((before.ok(), after.ok()), (Some(1), Some(2)));
+        assert_eq!((before.ok(), after.ok()), (Some(0), Some(1)));
         assert!(menu.get_layout(RECENT + 2, -1, Vec::new()).is_err());
         assert_eq!(menu.get_group_properties(Vec::new(), Vec::new()).len(), 6);
     }
@@ -562,6 +586,30 @@ mod tests {
         assert_eq!(revision(), 1);
         tray.set_recent(Vec::new());
         assert_eq!(revision(), 2);
+    }
+
+    #[test]
+    fn a_click_on_an_earlier_list_never_dials() {
+        let (notify, rx) = notify();
+        let menu = menu(notify, vec![call("\u{2197} 1002", "1002")]);
+        let old = lock(&menu.state).ids()[1];
+        // Same position, different number: the old id must not dial it.
+        assert!(lock(&menu.state).replace(vec![call("\u{2197} 1003", "1003")]));
+        let new = lock(&menu.state).ids()[1];
+        assert_ne!(old, new);
+        let data = || OwnedValue::from(0i32);
+        assert_eq!(
+            menu.event_group(vec![(old, "clicked".into(), data(), 0)]),
+            vec![old]
+        );
+        menu.event(old, "clicked".into(), data(), 0);
+        assert!(rx.try_recv().is_err());
+        assert!(menu.get_layout(old, 0, Vec::new()).is_err());
+        menu.event(new, "clicked".into(), data(), 0);
+        assert_eq!(rx.try_recv(), Ok(TrayAction::Dial("1003".into())));
+        // An unchanged list keeps its ids.
+        assert!(!lock(&menu.state).replace(vec![call("\u{2197} 1003", "1003")]));
+        assert_eq!(lock(&menu.state).ids()[1], new);
     }
 
     #[test]
