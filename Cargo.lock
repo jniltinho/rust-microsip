@@ -3073,7 +3073,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "eframe",
  "ring",
@@ -3093,7 +3093,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-audio"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "cpal",
  "rust-microsip-core",
@@ -3102,7 +3102,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-config"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "rust-microsip-core",
  "secrecy",
@@ -3113,7 +3113,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-control"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "rust-microsip-core",
  "serde",
@@ -3123,7 +3123,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-core"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "secrecy",
  "serde_json",
@@ -3132,7 +3132,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-media"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "rustrtc",
  "sha2",
@@ -3142,7 +3142,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-platform"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "rust-microsip-control",
  "rust-microsip-core",
@@ -3155,7 +3155,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-platform-windows"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "rust-microsip-control",
  "rust-microsip-core",
@@ -3166,7 +3166,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-storage"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "rusqlite",
  "rust-microsip-core",
@@ -3175,7 +3175,7 @@ dependencies = [
 
 [[package]]
 name = "rust-microsip-telephony"
-version = "0.1.0-rc.1"
+version = "0.1.0-rc.2"
 dependencies = [
  "base64",
  "libc",

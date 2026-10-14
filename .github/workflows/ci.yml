@@ -117,6 +117,7 @@ jobs:
       - name: Test executables
         shell: pwsh
         run: |
+          $PSNativeCommandUseErrorActionPreference = $false
           $failed = 0
           foreach ($exe in Get-ChildItem bin/tests -Filter *.exe) {
             Write-Host "== $($exe.Name)"
@@ -127,6 +128,8 @@ jobs:
       - name: CLI smoke
         shell: pwsh
         run: |
+          # Exit codes are checked below; do not abort on a non-zero native exit.
+          $PSNativeCommandUseErrorActionPreference = $false
           $version = & bin/rust-microsip-cli.exe --version
           if ($version -notmatch '^rust-microsip ') { throw "unexpected version: $version" }
           & bin/rust-microsip-cli.exe status
