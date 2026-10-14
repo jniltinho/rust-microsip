@@ -54,6 +54,7 @@ class ConfigurationTests(unittest.TestCase):
         self.assertIn("exten => 600,1,Answer()", config)
         self.assertIn("exten => 601,1,Answer()", config)
         self.assertIn("exten => 602,1,Answer()", config)
+        self.assertIn("exten => 603,1,Progress()", config)
         self.assertNotIn("_X", config)
         self.assertNotIn("System(", config)
         self.assertNotIn("Record(", config)

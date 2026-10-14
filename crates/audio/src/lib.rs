@@ -117,10 +117,34 @@ impl AudioDevices {
                 .collect()
         };
         Ok(Self {
-            inputs: describe(&mut host.input_devices()?, host.default_input_device()),
-            outputs: describe(&mut host.output_devices()?, host.default_output_device()),
+            inputs: routed_only(describe(
+                &mut host.input_devices()?,
+                host.default_input_device(),
+            )),
+            outputs: routed_only(describe(
+                &mut host.output_devices()?,
+                host.default_output_device(),
+            )),
         })
     }
+}
+
+/// On a PipeWire or PulseAudio desktop the sound server owns the hardware:
+/// raw ALSA PCMs (`hw`, `plughw`, `usbstream`, `surround`...) are busy or
+/// unusable, so only the routed entries are listed and the device is chosen
+/// in the desktop's sound settings. Plain ALSA systems keep the full list.
+fn routed_only(devices: Vec<DeviceInfo>) -> Vec<DeviceInfo> {
+    const ROUTED: [&str; 3] = ["alsa:default", "alsa:pulse", "alsa:pipewire"];
+    let server = devices
+        .iter()
+        .any(|d| d.id == "alsa:pulse" || d.id == "alsa:pipewire");
+    if !server {
+        return devices;
+    }
+    devices
+        .into_iter()
+        .filter(|d| ROUTED.contains(&d.id.as_str()))
+        .collect()
 }
 
 /// Point-in-time adapter health and counters.
@@ -570,6 +594,29 @@ mod tests {
             play_rx,
             stats,
         )
+    }
+
+    #[test]
+    fn sound_servers_hide_raw_alsa_devices() {
+        let info = |id: &str| DeviceInfo {
+            id: id.to_owned(),
+            name: id.to_owned(),
+            is_default: false,
+        };
+        let ids = |list: Vec<DeviceInfo>| list.into_iter().map(|d| d.id).collect::<Vec<_>>();
+        let raw = vec![
+            info("alsa:default"),
+            info("alsa:hw:CARD=5,DEV=0"),
+            info("alsa:usbstream:CARD=Adapter"),
+        ];
+        assert_eq!(
+            ids(routed_only(raw.clone())).len(),
+            3,
+            "plain ALSA keeps everything"
+        );
+        let mut served = raw;
+        served.push(info("alsa:pulse"));
+        assert_eq!(ids(routed_only(served)), ["alsa:default", "alsa:pulse"]);
     }
 
     #[test]

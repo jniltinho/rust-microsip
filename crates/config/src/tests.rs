@@ -111,7 +111,7 @@ fn every_precedence_combination_picks_the_highest_source() {
         } else if has(4) {
             ("sqlite.invalid", Theme::Dark, Source::Sqlite)
         } else {
-            ("pbx.invalid", Theme::System, Source::Default)
+            ("pbx.invalid", Theme::Dark, Source::Default)
         };
         assert_eq!(cfg.config.account.server, server, "mask {mask}");
         assert_eq!(cfg.config.ui.theme, theme, "mask {mask}");
@@ -263,7 +263,7 @@ fn explicit_files_must_exist_but_xdg_default_is_optional() {
     c.env
         .insert("XDG_CONFIG_HOME".into(), dir.0.display().to_string());
     c.config_path = Some(dir.file("other.toml", "schema = 1\n", 0o600));
-    assert_eq!(ok(&c).config.ui.theme, Theme::System);
+    assert_eq!(ok(&c).config.ui.theme, Theme::Dark);
 }
 
 #[test]
@@ -714,7 +714,7 @@ fn edits_skip_unchanged_and_refuse_overridden_fields() {
     );
 
     let mut after = before.clone();
-    after.ui.theme = Theme::Dark;
+    after.ui.theme = Theme::Light;
     after.account.port = 5070;
     after.audio.input_device = Some("Mic".into());
     let edits = sqlite_edits(cfg.provenance(), Some(&before), &after)
@@ -722,7 +722,7 @@ fn edits_skip_unchanged_and_refuse_overridden_fields() {
     let expected: BTreeMap<String, Option<String>> = [
         ("account.port", Some("5070")),
         ("audio.input_device", Some("Mic")),
-        ("ui.theme", Some("dark")),
+        ("ui.theme", Some("light")),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_owned(), v.map(str::to_owned)))
@@ -771,7 +771,7 @@ fn edits_skip_unchanged_and_refuse_overridden_fields() {
     }
     c.sqlite = sqlite_layer(&db);
     let restarted = ok(&c);
-    assert_eq!(restarted.config.ui.theme, Theme::Dark);
+    assert_eq!(restarted.config.ui.theme, Theme::Light);
     assert_eq!(restarted.config.account.port, 5070);
     assert_eq!(restarted.source(Field::Theme), Source::Sqlite);
     assert_eq!(restarted.source(Field::Server), Source::Env);
@@ -799,7 +799,7 @@ fn first_run_edits_use_layer_sources_and_skip_overrides() {
         edits.get("account.username"),
         Some(&Some("1001".to_owned()))
     );
-    assert_eq!(edits.get("ui.theme"), Some(&Some("system".to_owned())));
+    assert_eq!(edits.get("ui.theme"), Some(&Some("dark".to_owned())));
     assert!(
         !edits.contains_key("account.auth_username"),
         "unset optional"

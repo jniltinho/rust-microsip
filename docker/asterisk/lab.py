@@ -160,7 +160,10 @@ def dialplan():
               " same => n(accepted),PlayTones(1000)\n same => n,Wait(3)\n same => n,Hangup()\n"
               " same => n(rejected),PlayTones(400)\n same => n,Wait(3)\n same => n,Hangup()\n"
               "exten => 602,1,Answer()\n same => n,PlayTones(1000)\n"
-              " same => n,Wait(20)\n same => n,Hangup()\n")
+              " same => n,Wait(20)\n same => n,Hangup()\n"
+              # Early media: an announcement in 183 Session Progress, never answered.
+              "exten => 603,1,Progress()\n same => n,PlayTones(1000)\n"
+              " same => n,Wait(8)\n same => n,Hangup(1)\n")
     for name in ACCOUNTS:
         config += f"exten => {name},1,Dial(PJSIP/{name},20)\n same => n,Hangup()\n"
     return config

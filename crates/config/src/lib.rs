@@ -220,11 +220,11 @@ impl fmt::Display for Field {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Theme {
     /// Follow the desktop preference.
-    #[default]
     System,
     /// Light theme.
     Light,
-    /// Dark theme.
+    /// Dark theme (the default).
+    #[default]
     Dark,
 }
 impl Theme {

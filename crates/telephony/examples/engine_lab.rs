@@ -348,6 +348,23 @@ fn scenario(
     a.send(Command::Hangup(a.id()?))?;
     wait(&mut [&mut a], 10, |s| s[0].call.is_none())?;
 
+    // 6a. Early media: 603 plays a 1 kHz announcement in 183 Session
+    // Progress and never answers; it must be heard while still ringing.
+    a.send(Command::Dial(target("603")?))?;
+    wait(&mut [&mut a], 10, |s| {
+        phase(s[0]) == Some(CallPhase::Ringing)
+    })?;
+    settle(&mut [&mut a], 1.0);
+    a.measure(&[1000.0, 440.0]);
+    settle(&mut [&mut a], 2.0);
+    let still_ringing = phase(&a) == Some(CallPhase::Ringing);
+    let early_media = voice(&a, "early media announcement")?;
+    if !still_ringing {
+        return Err("early media: the call was answered".into());
+    }
+    a.send(Command::Hangup(a.id()?))?;
+    wait(&mut [&mut a], 15, |s| s[0].call.is_none())?;
+
     // 6b. Busy: a second incoming call (TCP account) is refused with 486 while
     // the active call keeps two-way audio.
     let mut busy_case = serde_json::Value::Null;
@@ -502,7 +519,7 @@ fn scenario(
     Ok(
         serde_json::json!({"scenario":label,"secure":secure,"before":before,"held_frames":held_frames,"resumed":resumed,
         "muted_rms_at_peer":muted_rms,"muted_side_hears":heard_while_muted,"failed_transfer_status":failed_status,"after_failed_transfer":after_failed_transfer,
-        "transferred":transferred,"destination_tone":destination,"busy":busy_case,"reverse_direction":reverse,"cancel_answer_race":race_outcomes,"ivr_123_branch":ivr,"reject":"busy","cancel":"canceled","dnd":"busy","stopped":true}),
+        "transferred":transferred,"destination_tone":destination,"busy":busy_case,"reverse_direction":reverse,"cancel_answer_race":race_outcomes,"ivr_123_branch":ivr,"early_media_while_ringing":early_media,"reject":"busy","cancel":"canceled","dnd":"busy","stopped":true}),
     )
 }
 

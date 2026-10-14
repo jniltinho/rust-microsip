@@ -106,11 +106,11 @@ impl Tab {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum Theme {
     /// Follow the desktop preference; falls back to light.
-    #[default]
     System,
     /// Light visuals.
     Light,
-    /// Dark visuals.
+    /// Dark visuals (the default).
+    #[default]
     Dark,
 }
 impl Theme {

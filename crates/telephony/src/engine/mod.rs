@@ -90,6 +90,60 @@ enum Internal {
     TransferDeadline(CallId, u64),
 }
 
+/// Diagnostics on stderr when `RUST_MICROSIP_TRACE=1`: SIP status codes,
+/// SDP shape and media counters only, never numbers, names, credentials
+/// or keys.
+fn trace(message: impl FnOnce() -> String) {
+    static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    if *ON.get_or_init(|| std::env::var_os("RUST_MICROSIP_TRACE").is_some_and(|v| v == "1")) {
+        eprintln!("rust-microsip trace: {}", message());
+    }
+}
+
+/// What an SDP body offers, for [`trace`]: media address and payload types.
+fn sdp_shape(body: &[u8]) -> String {
+    let text = String::from_utf8_lossy(body.get(..body.len().min(4096)).unwrap_or_default());
+    let pick = |prefix: &str| {
+        text.lines()
+            .filter(|l| l.starts_with(prefix))
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join(" | ")
+    };
+    format!(
+        "c=[{}] m=[{}] rtpmap=[{}] ptime=[{}] dir=[{}]",
+        pick("c="),
+        pick("m="),
+        pick("a=rtpmap"),
+        pick("a=ptime"),
+        text.lines()
+            .filter(|l| matches!(
+                l.trim(),
+                "a=sendrecv" | "a=sendonly" | "a=recvonly" | "a=inactive"
+            ))
+            .collect::<Vec<_>>()
+            .join(" ")
+    )
+}
+
+/// The remote description and codec of an early (180/183) answer, if it
+/// is acceptable under `policy` and uses a codec we offered.
+fn early_media(body: &[u8], policy: MediaSecurity) -> Option<(RemoteDescription, Codec)> {
+    let remote = sdp::parse(body, policy)
+        .map_err(|e| trace(|| format!("early SDP refused: {e:?}")))
+        .ok()?;
+    let codec = remote
+        .codec()
+        .map_err(|e| trace(|| format!("early SDP has no usable codec: {e:?}")))
+        .ok()?;
+    if !OFFER_CODECS.contains(&codec) {
+        trace(|| format!("early SDP codec {codec:?} was not offered"));
+        return None;
+    }
+    trace(|| format!("early media starts: {codec:?} from {}", remote.rtp));
+    Some((remote, codec))
+}
+
 fn classify_connect(error: &rsipstack::Error) -> RegistrationFailure {
     if let rsipstack::Error::IoError(io) = error
         && io
@@ -377,6 +431,9 @@ struct Call {
     negotiated: bool,
     reinvite_pending: bool,
     media: Option<(mpsc::Sender<MediaControl>, Task<media::MediaStats>)>,
+    /// Local ringback while ringing without early media; dropping the
+    /// sender stops it.
+    ringback: Option<(mpsc::Sender<()>, Task<()>)>,
     _handle: Option<Task<()>>,
 }
 impl Call {
@@ -544,6 +601,7 @@ impl Actor {
 
     fn end(&mut self, reason: EndReason) {
         if let Some(call) = self.call.as_mut() {
+            call.ringback = None;
             call.phase = CallPhase::Ended(reason);
         }
         self.publish();
@@ -810,6 +868,7 @@ impl Actor {
             negotiated: false,
             reinvite_pending: false,
             media: None,
+            ringback: None,
             _handle: None,
         };
         let offer = call.describe(Flow::SendRecv);
@@ -848,6 +907,8 @@ impl Actor {
         let Some(call) = self.call.as_mut() else {
             return;
         };
+        // Real media replaces the local ringback.
+        call.ringback = None;
         let remote_key = remote.crypto.map(|(_, key)| key);
         let local_key = call.local_key.as_ref().and_then(|k| k.master().ok());
         let (tx, rx) = mpsc::channel(16);
@@ -873,6 +934,19 @@ impl Actor {
                 let _ = internal.send(Internal::AudioUnavailable).await;
             }
             let stats = media::run(params, Arc::clone(&media), rx).await;
+            trace(|| {
+                format!(
+                    "media ended: sent {} played {} rejected {} other-source {} (first {:?}) unplayable {} (first pt/bytes {:?}) failure {:?}",
+                    stats.sent,
+                    stats.received,
+                    stats.rejected,
+                    stats.other_source,
+                    stats.first_other_source,
+                    stats.unplayable,
+                    stats.first_unplayable,
+                    stats.failure
+                )
+            });
             drop(devices);
             if let Some(failure) = stats.failure {
                 let _ = internal.send(Internal::MediaFailed(id, failure)).await;
@@ -1200,6 +1274,14 @@ impl Actor {
             }
         };
         let status = response.as_ref().map(|r| u16::from(r.status_code.clone()));
+        trace(|| {
+            format!(
+                "final response {status:?} {}",
+                response
+                    .as_ref()
+                    .map_or_else(String::new, |r| sdp_shape(&r.body))
+            )
+        });
         if !status.is_some_and(|s| (200..300).contains(&s)) {
             let reason = if call.cancel_requested {
                 EndReason::Canceled
@@ -1227,6 +1309,10 @@ impl Actor {
             Ok((remote, codec))
         }) {
             Ok((remote, codec)) => {
+                // Replace early media, if any, with the answered session.
+                if let Some((tx, _task)) = call.media.take() {
+                    drop(tx);
+                }
                 call.codec = codec;
                 call.event_pt = remote.event_pt;
                 call.negotiated = true;
@@ -1385,6 +1471,7 @@ impl Actor {
             negotiated: true,
             reinvite_pending: false,
             media: None,
+            ringback: None,
             _handle: Some(handle),
         });
         self.publish();
@@ -1427,10 +1514,51 @@ impl Actor {
                     }
                 }
             }
-            DialogState::Early(..) => {
+            DialogState::Early(_, response) => {
+                trace(|| {
+                    format!(
+                        "early response {} with {} body bytes {}",
+                        u16::from(response.status_code.clone()),
+                        response.body.len(),
+                        sdp_shape(&response.body)
+                    )
+                });
+                // Early media (RFC 3960, gateway model): a 180/183 with SDP
+                // carries the callee's ringback or announcement before the
+                // answer. Play it; send nothing until the call is answered.
+                let early = (call.direction == Direction::Outgoing
+                    && call.media.is_none()
+                    && !response.body.is_empty())
+                .then(|| early_media(&response.body, policy))
+                .flatten();
                 if call.direction == Direction::Outgoing && call.phase == CallPhase::Dialing {
                     call.phase = CallPhase::Ringing;
                     self.publish();
+                }
+                if early.is_none()
+                    && let Some(call) = self.call.as_mut()
+                    && call.direction == Direction::Outgoing
+                    && call.media.is_none()
+                    && call.ringback.is_none()
+                {
+                    let (tx, rx) = mpsc::channel(1);
+                    let task = tokio::spawn(media::ringback(self.media.clone(), rx));
+                    call.ringback = Some((tx, task));
+                }
+                if let Some((remote, codec)) = early
+                    && let Some(call) = self.call.as_mut()
+                {
+                    call.codec = codec;
+                    call.event_pt = remote.event_pt;
+                    self.start_media(remote);
+                    if let Some(call) = self.call.as_ref()
+                        && let Some((tx, _)) = &call.media
+                    {
+                        let _ = tx.try_send(MediaControl::Flow {
+                            send: false,
+                            receive: true,
+                        });
+                    }
                 }
             }
             DialogState::Updated(_, request, handle) => {
@@ -1632,6 +1760,7 @@ mod tests {
             negotiated,
             reinvite_pending: false,
             media: None,
+            ringback: None,
             _handle: None,
         })
     }

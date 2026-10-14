@@ -802,7 +802,7 @@ fn desktop(args: &CliArgs) -> ExitCode {
         account: stored.as_ref().map(|s| s.account.clone()),
         theme: stored
             .as_ref()
-            .map_or(Theme::System, |s| ui_theme(s.ui.theme)),
+            .map_or(Theme::Dark, |s| ui_theme(s.ui.theme)),
         audio_input: audio_prefs.input_device.clone(),
         audio_output: audio_prefs.output_device.clone(),
         overridden: sources.as_ref().map(overridden).unwrap_or_default(),
@@ -1186,14 +1186,14 @@ mod tests {
         let mut save = settings_saver(true, Some(sources), Some(base));
         let mut settings = UiSettings {
             account: Some(account()),
-            theme: Theme::Dark,
+            theme: Theme::Light,
             ..UiSettings::default()
         };
         save(&settings, Some(&mut store))?;
         let saved = store.load_config()?;
         assert_eq!(
             saved,
-            BTreeMap::from([("ui.theme".to_owned(), "dark".to_owned())]),
+            BTreeMap::from([("ui.theme".to_owned(), "light".to_owned())]),
             "unchanged and overridden fields are not written"
         );
         // Editing a TOML-held field names the source and writes nothing.

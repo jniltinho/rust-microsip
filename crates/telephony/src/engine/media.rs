@@ -132,6 +132,14 @@ pub(super) struct MediaStats {
     pub sent: u64,
     pub received: u64,
     pub rejected: u64,
+    /// Packets from an address other than the negotiated one (dropped),
+    /// and the first such address, for diagnostics.
+    pub other_source: u64,
+    pub first_other_source: Option<SocketAddr>,
+    /// Authentic packets not played: another payload type or packet size,
+    /// and the first (payload type, payload bytes) seen, for diagnostics.
+    pub unplayable: u64,
+    pub first_unplayable: Option<(u8, usize)>,
     /// Why the task stopped on its own; `None` when the call ended it.
     pub failure: Option<MediaFailure>,
 }
@@ -265,6 +273,45 @@ impl Pacer {
     }
 }
 
+/// Local ringback while an outgoing call rings without early media: the
+/// Brazilian cadence (ANATEL), 425 Hz for 1 s then 4 s of silence.
+pub(super) fn ringback_frame(index: u64) -> [i16; FRAME_SAMPLES] {
+    const CYCLE: u64 = 250; // 5 s of 20 ms frames
+    const ON: u64 = 50; // 1 s
+    let mut frame = [0i16; FRAME_SAMPLES];
+    if index % CYCLE < ON {
+        let start = index.wrapping_mul(FRAME_SAMPLES as u64);
+        for (offset, sample) in frame.iter_mut().enumerate() {
+            let t = (start.wrapping_add(offset as u64) % 8000) as f64 / 8000.0;
+            *sample = (6000.0 * (2.0 * std::f64::consts::PI * 425.0 * t).sin()) as i16;
+        }
+    }
+    frame
+}
+
+/// Play [`ringback_frame`]s until `stop` closes (the sender is dropped when
+/// early media starts, the call is answered or it ends).
+pub(super) async fn ringback(media: SharedMedia, mut stop: mpsc::Receiver<()>) {
+    let (_opened, devices) = open_devices(&media).await;
+    let mut tick = tokio::time::interval(Duration::from_millis(20));
+    tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut pacer = Pacer::new(tokio::time::Instant::now());
+    let mut index = 0u64;
+    loop {
+        tokio::select! {
+            _ = stop.recv() => break,
+            now = tick.tick() => {
+                for _ in 0..pacer.due(now) {
+                    let frame = ringback_frame(index);
+                    lock_media(&media).play(&frame);
+                    index = index.wrapping_add(1);
+                }
+            }
+        }
+    }
+    drop(devices);
+}
+
 /// Run until `control` closes. The device bridge is used only on the tick.
 pub(super) async fn run(
     params: MediaParams,
@@ -379,6 +426,10 @@ pub(super) async fn run(
                 let Ok((length, source)) = result else { continue };
                 // Only the negotiated media address is accepted (no latching).
                 if source != sender.remote || !receive {
+                    if receive {
+                        stats.other_source += 1;
+                        stats.first_other_source.get_or_insert(source);
+                    }
                     continue;
                 }
                 let clear = match bank.as_mut() {
@@ -400,6 +451,8 @@ pub(super) async fn run(
                 // Any authentic RTP (comfort noise, events, other ptime) proves liveness.
                 heard = tokio::time::Instant::now();
                 if packet.header.payload_type != codec.payload_type() || packet.payload.len() != FRAME_SAMPLES {
+                    stats.unplayable += 1;
+                    stats.first_unplayable.get_or_insert((packet.header.payload_type, packet.payload.len()));
                     continue;
                 }
                 let mut decoded = [0i16; FRAME_SAMPLES];
@@ -723,6 +776,21 @@ mod tests {
     /// Wait for the guard's blocking `stop` to run.
     async fn settle() {
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[test]
+    fn ringback_is_425_hz_one_second_in_five() {
+        let loud = |i| ringback_frame(i).iter().any(|s| s.unsigned_abs() > 1000);
+        assert!(loud(0) && loud(49));
+        assert!(!loud(50) && !loud(249));
+        assert!(loud(250));
+        // 425 Hz: ~8.5 cycles in a 20 ms frame, i.e. ~17 zero crossings.
+        let frame = ringback_frame(3);
+        let crossings = frame
+            .windows(2)
+            .filter(|w| (w[0] < 0) != (w[1] < 0))
+            .count();
+        assert!((15..=19).contains(&crossings), "{crossings}");
     }
 
     #[test]
