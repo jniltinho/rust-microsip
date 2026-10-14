@@ -134,3 +134,5 @@ jobs:
           if ($version -notmatch '^rust-microsip ') { throw "unexpected version: $version" }
           & bin/rust-microsip-cli.exe status
           if ($LASTEXITCODE -ne 4) { throw "status without an owner must exit 4, got $LASTEXITCODE" }
+          # The runner's wrapper would otherwise propagate that expected exit code.
+          exit 0
