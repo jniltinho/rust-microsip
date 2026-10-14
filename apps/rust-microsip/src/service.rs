@@ -8,7 +8,7 @@
 //! prompt), reports microphone activity on stderr and stops cleanly on
 //! SIGTERM/SIGINT.
 
-use crate::{fail, open_storage};
+use super::{fail, open_storage};
 use rust_microsip::cli::read_bootstrap;
 use rust_microsip::owner::{ControlOwner, capability_hash};
 use rust_microsip::ui::{Backend, UiSettings, UiState};
@@ -50,15 +50,8 @@ fn watch_termination(flag: Arc<AtomicBool>) {
                 return;
             };
             runtime.block_on(async {
-                use tokio::signal::unix::{SignalKind, signal};
-                if let (Ok(mut term), Ok(mut int)) = (
-                    signal(SignalKind::terminate()),
-                    signal(SignalKind::interrupt()),
-                ) {
-                    tokio::select! {
-                        _ = term.recv() => {}
-                        _ = int.recv() => {}
-                    }
+                if let Some(mut signals) = super::signals::Signals::new() {
+                    signals.next().await;
                 }
                 flag.store(true, Ordering::SeqCst);
             });

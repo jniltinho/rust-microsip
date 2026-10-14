@@ -7,13 +7,16 @@
 #   scripts/cargo-docker.sh cargo test -p rust-microsip-core
 #   scripts/cargo-docker.sh bash          # interactive shell
 #   RMS_DOCKER_NET=none scripts/cargo-docker.sh cargo test --frozen --workspace
+#   RMS_TOOLCHAIN_STAGE=windows-toolchain scripts/cargo-docker.sh \
+#       cargo build --target x86_64-pc-windows-gnu --locked   # Windows cross build
 #
 # Without arguments it runs `cargo build --workspace --locked`.
 set -eu
 cd "$(dirname "$0")/.."
-image=${RMS_TOOLCHAIN_IMAGE:-rust-microsip-toolchain:dev}
+stage=${RMS_TOOLCHAIN_STAGE:-toolchain}
+image=${RMS_TOOLCHAIN_IMAGE:-rust-microsip-$stage:dev}
 if ! docker image inspect "$image" > /dev/null 2>&1; then
-    docker buildx build --platform linux/amd64 --target toolchain --load -t "$image" . >&2
+    docker buildx build --platform linux/amd64 --target "$stage" --load -t "$image" . >&2
 fi
 mkdir -p target/home target/cargo-home
 target_dir=${CARGO_TARGET_DIR:-target/docker}

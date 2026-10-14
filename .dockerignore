@@ -12,9 +12,16 @@ apps/**
 !apps/rust-microsip/
 apps/rust-microsip/**
 !apps/rust-microsip/Cargo.toml
+!apps/rust-microsip/build.rs
+!apps/rust-microsip/windows/
+apps/rust-microsip/windows/**
+!apps/rust-microsip/windows/rust-microsip.manifest
 !apps/rust-microsip/src/
 apps/rust-microsip/src/**
 !apps/rust-microsip/src/*.rs
+!apps/rust-microsip/src/bin/
+apps/rust-microsip/src/bin/**
+!apps/rust-microsip/src/bin/*.rs
 !apps/rust-microsip/src/ui/
 apps/rust-microsip/src/ui/**
 !apps/rust-microsip/src/ui/*.rs
@@ -42,6 +49,7 @@ apps/rust-microsip/examples/**
 !docker/
 docker/**
 !docker/rust-components.sha256
+!docker/rust-components-windows.sha256
 !packaging/
 packaging/**
 !packaging/verify.sh

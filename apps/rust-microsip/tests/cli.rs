@@ -1,4 +1,5 @@
 //! Process-level CLI contracts with fictional data, no network or devices.
+#![cfg(unix)]
 
 use std::process::{Command, Output};
 

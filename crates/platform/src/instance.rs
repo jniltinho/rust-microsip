@@ -19,7 +19,7 @@
 //! or `v1 service` when the headless service owns the profile.
 
 use crate::Waker;
-use rust_microsip_core::DialTarget;
+pub use crate::ipc::{Ack, InstanceError, MAX_LINE, Request};
 use std::fs::{self, DirBuilder, File, OpenOptions, TryLockError};
 use std::io::{self, Read, Write};
 use std::os::unix::fs::{DirBuilderExt, FileTypeExt, MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -31,8 +31,6 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
-/// Maximum length of one protocol line, including the newline.
-pub const MAX_LINE: usize = 512;
 /// Requests buffered by the owner before new ones are answered `busy`.
 const QUEUE: usize = 16;
 /// Socket read/write timeout for both sides.
@@ -43,72 +41,6 @@ const DIR_NAME: &str = "rust-microsip";
 const LOCK_FILE: &str = "instance.lock";
 const SOCKET_FILE: &str = "instance.sock";
 
-/// A validated request forwarded by another process.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Request {
-    /// Raise and focus the existing window.
-    Activate,
-    /// Show a dial confirmation for this target; never dial automatically.
-    Dial(DialTarget),
-}
-impl Request {
-    fn encode(&self) -> String {
-        match self {
-            Self::Activate => "v1 activate\n".to_owned(),
-            Self::Dial(target) => format!("v1 dial {}\n", target.as_str()),
-        }
-    }
-    fn decode(line: &str) -> Option<Self> {
-        match line.strip_prefix("v1 ")? {
-            "activate" => Some(Self::Activate),
-            rest => {
-                let target = rest.strip_prefix("dial ")?;
-                // DialTarget::parse trims; require the exact canonical form.
-                let parsed = DialTarget::parse(target).ok()?;
-                (parsed.as_str() == target).then_some(Self::Dial(parsed))
-            }
-        }
-    }
-}
-
-/// Owner reply to a forwarded request.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Ack {
-    /// The request was queued for the owner.
-    Ok,
-    /// The owner queue was full; the request was dropped.
-    Busy,
-    /// The owner rejected the request as malformed.
-    Invalid,
-    /// The headless service owns the profile: no window opens and links are
-    /// not dialed (`engine_owned_by_service`, `uri_confirmation_unavailable`).
-    Service,
-}
-
-/// Single-instance or IPC failure. Paths are included; request data never is.
-#[derive(Debug, thiserror::Error)]
-pub enum InstanceError {
-    /// `XDG_RUNTIME_DIR` is unset or not absolute; there is no private fallback.
-    #[error("XDG_RUNTIME_DIR is not set to an absolute path")]
-    NoRuntimeDir,
-    /// The runtime directory or socket is not a private object owned by this user.
-    #[error("{0} is not private to the current user (expected owner-only access)")]
-    Insecure(PathBuf),
-    /// The owner process did not answer within the bounded timeout.
-    #[error("the running instance did not respond")]
-    NoResponse,
-    /// The owner answered with an unexpected line.
-    #[error("the running instance sent an invalid reply")]
-    Protocol,
-    /// An I/O operation failed.
-    #[error("{path}: {source}")]
-    Io {
-        /// Object being accessed.
-        path: PathBuf,
-        /// Underlying error.
-        source: io::Error,
-    },
-}
 fn io_err(path: &Path) -> impl FnOnce(io::Error) -> InstanceError + '_ {
     move |source| InstanceError::Io {
         path: path.to_owned(),
@@ -439,6 +371,7 @@ fn ensure_private_dir(dir: &Path, uid: u32) -> Result<(), InstanceError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rust_microsip_core::DialTarget;
     use std::os::unix::fs::symlink;
 
     /// Unique temporary directory removed on drop.

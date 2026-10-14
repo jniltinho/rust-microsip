@@ -1,3 +1,5 @@
+> Approved for implementation on 2026-10-14; see the [approval record](approval.md).
+
 ## Why
 
 MicroSIP is a Windows application, so most people who would switch to rust-microsip run Windows; rust-microsip ships only for Linux. The architecture already keeps telephony, media, storage and core free of Linux APIs ([architecture](../../../docs/architecture.md), "Porting"); what is Linux-specific lives in `crates/platform` (Unix sockets with `SO_PEERCRED`, D-Bus notifications, StatusNotifierItem tray, Secret Service), in Unix file modes inside `config`/`storage`, and in the packaging. This change plans a Windows port that tests that promise without touching the engine. The sibling project's draft (`<rustXterm checkout>/openspec/changes/add-windows-port/`) faced the same stack; its decisions are reused where they fit a softphone.

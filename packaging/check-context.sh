@@ -11,8 +11,8 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml LICENSE NOTICE \
-    apps/rust-microsip/Cargo.toml \
-    apps/rust-microsip/tests/cli.rs apps/rust-microsip/tests/mcp.rs docker/rust-components.sha256 \
+    apps/rust-microsip/Cargo.toml apps/rust-microsip/build.rs apps/rust-microsip/windows/rust-microsip.manifest \
+    apps/rust-microsip/tests/cli.rs apps/rust-microsip/tests/mcp.rs docker/rust-components.sha256 docker/rust-components-windows.sha256 \
     crates/telephony/Cargo.toml crates/telephony/src/lib.rs crates/telephony/tests/registration.rs \
     crates/telephony/examples/g0_registration.rs crates/telephony/examples/g0_calls.rs \
     crates/telephony/src/g0_calls.rs crates/telephony/src/g0_controls.rs crates/telephony/examples/g0_controls.rs \
@@ -28,7 +28,7 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     packaging/appimage/build-appimage.sh packaging/appimage/verify.sh \
     packaging/appimage/pins.txt packaging/appimage/rust-microsip.desktop \
     crates/core/Cargo.toml crates/audio/Cargo.toml crates/config/Cargo.toml crates/storage/Cargo.toml crates/platform/Cargo.toml crates/control/Cargo.toml \
-    $(find apps/rust-microsip/src apps/rust-microsip/tests apps/rust-microsip/src/ui crates/telephony/src/engine crates/core/src crates/core/tests crates/audio/src \
+    $(find apps/rust-microsip/src apps/rust-microsip/src/bin apps/rust-microsip/tests apps/rust-microsip/src/ui crates/telephony/src/engine crates/core/src crates/core/tests crates/audio/src \
         crates/config/src crates/storage/src crates/platform/src crates/platform/src/control crates/control/src apps/rust-microsip/src/ui/state apps/rust-microsip/src/mcp apps/rust-microsip/examples crates/telephony/examples crates/media/src -maxdepth 1 -type f -name '*.rs' | sort) \
     $(find packaging/third-party-notices packaging/appimage/runtime-licenses -type f | sort); do
     if [ -L "$path" ] || [ ! -f "$path" ]; then

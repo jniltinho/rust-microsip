@@ -13,7 +13,7 @@ IMAGE ?= rust-microsip-toolchain:dev
 DIST  ?= dist
 
 .PHONY: help toolchain build release test fmt fmt-check clippy doc check verify dist \
-	dist-check scan selftest context clean-clone lab-build lab-init suite clean shell
+	dist-check windows scan selftest context clean-clone lab-build lab-init suite clean shell
 
 help: ## Show this help
 	@awk 'BEGIN { FS = ":.*## " } /^[a-zA-Z_-]+:.*## / { printf "  %-12s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
@@ -49,6 +49,12 @@ verify: ## The CI verify stage: offline fmt, clippy, tests, rustdoc and licence 
 
 dist: ## Release artifacts (ELF, AppImage, SHA256SUMS, notices, SBOM) into DIST=dist
 	docker buildx build --platform linux/amd64 --target artifacts --output type=local,dest=$(DIST) .
+
+windows: ## Windows test build (both exes, portable zip, SHA256SUMS) into DIST=dist/windows, cross-compiled in Docker
+	RMS_TOOLCHAIN_STAGE=windows-toolchain CARGO_TARGET_DIR=target/windows scripts/cargo-docker.sh \
+		cargo build -p rust-microsip --release --target x86_64-pc-windows-gnu --locked
+	python3 packaging/windows/zip.py target/windows/x86_64-pc-windows-gnu/release $(if $(filter dist,$(DIST)),dist/windows,$(DIST)) \
+		$$(awk '/^\[workspace.package\]/ { s = 1; next } /^\[/ { s = 0 } s && /^version = / { gsub(/"/, "", $$3); print $$3; exit }' Cargo.toml)
 
 dist-check: ## Check the artifacts in DIST=dist (checksums, AppImage wraps the same ELF, publication scan)
 	cd $(DIST) && sha256sum --check --strict SHA256SUMS

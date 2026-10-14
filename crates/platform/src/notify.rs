@@ -7,6 +7,7 @@
 //! only way to answer.
 
 use crate::Waker;
+use crate::sanitize_caller;
 use rust_microsip_core::CallId;
 use std::collections::HashMap;
 use std::sync::mpsc::{self, Receiver, SyncSender, TrySendError};
@@ -23,7 +24,6 @@ const QUEUE: usize = 8;
 const CALL_TIMEOUT: Duration = Duration::from_secs(5);
 /// Notification lifetime in milliseconds; it is also closed explicitly.
 const EXPIRE_MS: i32 = 60_000;
-const MAX_CALLER_CHARS: usize = 64;
 
 /// Whether desktop notifications can currently be shown.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -159,28 +159,6 @@ impl Notifier {
             Err(TrySendError::Full(_)) => Delivery::QueueFull,
             Err(TrySendError::Disconnected(_)) => Delivery::Unavailable,
         }
-    }
-}
-
-/// Make caller text safe for a notification body: drop control and bidi
-/// override characters, bound the length and escape the markup subset.
-pub fn sanitize_caller(caller: &str) -> String {
-    let mut out = String::new();
-    let visible = caller.chars().filter(|&c| {
-        !(c.is_control() || matches!(c, '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}'))
-    });
-    for c in visible.take(MAX_CALLER_CHARS) {
-        match c {
-            '&' => out.push_str("&amp;"),
-            '<' => out.push_str("&lt;"),
-            '>' => out.push_str("&gt;"),
-            _ => out.push(c),
-        }
-    }
-    if out.trim().is_empty() {
-        "Unknown caller".to_owned()
-    } else {
-        out
     }
 }
 
@@ -365,17 +343,5 @@ mod tests {
             assert_eq!(notifier.close(CallId(1)), Delivery::Unavailable);
             assert_eq!(notifier.try_recv_action(), None);
         }
-    }
-
-    #[test]
-    fn caller_text_is_sanitized() {
-        assert_eq!(sanitize_caller("Alice <1002>"), "Alice &lt;1002&gt;");
-        assert_eq!(sanitize_caller("A\r\nB\u{0}\u{202e}C & D"), "ABC &amp; D");
-        assert_eq!(sanitize_caller("\n\t "), "Unknown caller");
-        assert_eq!(sanitize_caller(&"x".repeat(500)).len(), MAX_CALLER_CHARS);
-        assert_eq!(
-            sanitize_caller("<b>$(reboot)</b>"),
-            "&lt;b&gt;$(reboot)&lt;/b&gt;"
-        );
     }
 }

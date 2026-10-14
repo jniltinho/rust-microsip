@@ -50,6 +50,29 @@ ENV PATH="/opt/rust/bin:${PATH}" CARGO_HOME=/home/builder/.cargo
 WORKDIR /work
 USER builder
 
+# Windows cross toolchain (add-windows-port W1): mingw-w64 from the same
+# snapshot and the checksummed Rust std for x86_64-pc-windows-gnu.
+FROM toolchain AS windows-toolchain
+USER root
+RUN apt-get update --error-on=any \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        gcc-mingw-w64-x86-64 g++-mingw-w64-x86-64 binutils-mingw-w64-x86-64 \
+    && rm -rf /var/lib/apt/lists/*
+COPY docker/rust-components-windows.sha256 /tmp/rust-components-windows.sha256
+RUN set -eu; cd /tmp; \
+    while read -r checksum archive; do \
+        curl --fail --show-error --silent --location --retry 3 \
+            "https://static.rust-lang.org/dist/2026-10-01/$archive" -o "$archive"; \
+        printf '%s  %s\n' "$checksum" "$archive" | sha256sum --check --strict -; \
+        tar -xJf "$archive"; \
+        "${archive%.tar.xz}/install.sh" --prefix=/opt/rust --disable-ldconfig; \
+        rm -rf "$archive" "${archive%.tar.xz}"; \
+    done < /tmp/rust-components-windows.sha256
+# Static libgcc/winpthreads (the exe imports only Windows system DLLs) and
+# deterministic PE headers.
+ENV CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-arg=-static -C link-arg=-Wl,--no-insert-timestamp"
+USER builder
+
 FROM toolchain AS source
 COPY --chown=builder:builder Cargo.toml Cargo.lock rust-toolchain.toml LICENSE NOTICE Dockerfile .dockerignore ./
 COPY --chown=builder:builder docker/rust-components.sha256 docker/
@@ -105,7 +128,7 @@ root = Path("/context")
 allowed = {
     "Dockerfile", ".dockerignore", "Cargo.toml", "Cargo.lock",
     "rust-toolchain.toml", "LICENSE", "NOTICE",
-    "apps/rust-microsip/Cargo.toml", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256",
+    "apps/rust-microsip/Cargo.toml", "apps/rust-microsip/build.rs", "apps/rust-microsip/windows/rust-microsip.manifest", "crates/telephony/Cargo.toml", "crates/media/Cargo.toml", "docker/rust-components.sha256", "docker/rust-components-windows.sha256",
     "crates/core/Cargo.toml", "crates/audio/Cargo.toml", "crates/config/Cargo.toml", "crates/storage/Cargo.toml", "crates/platform/Cargo.toml", "crates/control/Cargo.toml",
     "packaging/reviewed-licenses.json",
     "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
@@ -122,7 +145,7 @@ unexpected = []
 for path in files:
     relative = str(path.relative_to(root))
     is_source = path.suffix == ".rs" and str(path.parent.relative_to(root)) in {
-        "apps/rust-microsip/src", "apps/rust-microsip/tests",
+        "apps/rust-microsip/src", "apps/rust-microsip/src/bin", "apps/rust-microsip/tests",
         "crates/telephony/src", "crates/telephony/tests", "crates/telephony/examples",
         "crates/media/src", "crates/media/tests", "apps/rust-microsip/src/ui", "apps/rust-microsip/src/mcp", "apps/rust-microsip/examples",
         "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src", "crates/platform/src/control", "crates/control/src", "apps/rust-microsip/src/ui/state",

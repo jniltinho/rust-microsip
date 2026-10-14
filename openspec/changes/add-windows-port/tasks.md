@@ -2,7 +2,7 @@ Every task is checked only with a receipt in `docs/receipts/` bound to a commit 
 
 ## 1. Approval and build spike (W-A)
 
-- [ ] 1.1 Review this proposal with the owner and record decisions on the unsafe policy (W2), windows-gnu versus MSVC (W1), signing, and the Windows 11 evaluation image; verify an approval record linked from the proposal.
+- [x] 1.1 Review this proposal with the owner and record decisions on the unsafe policy (W2), windows-gnu versus MSVC (W1), signing, and the Windows 11 evaluation image; verify an approval record linked from the proposal. Completed: [approval record](approval.md). The owner's instruction started implementation with the recommended W1/W2 defaults and no signing for now; the Windows 11 image is decided at task 6.2.
 - [ ] 1.2 Add a Windows toolchain stage to the `Dockerfile` (mingw-w64 from the pinned snapshot, Windows Rust std in `docker/rust-components.sha256`) and a `make` target; verify `cargo build --target x86_64-pc-windows-gnu --frozen` offline in Docker, including `ring` and bundled SQLite, without any host toolchain (WIN-11).
 - [ ] 1.3 Gate Linux-only code with `cfg(unix)` (platform modules, zbus/rustix dependencies, Unix modes in `config`/`storage`/grants, Unix-only tests) and make eframe `wayland`/`x11` target-specific; verify the Linux build, tests and lab suite are unchanged and the Windows build compiles with a stub adapter.
 - [ ] 1.4 Spike on the runner: run a cross-compiled exe that opens the window under WARP, enumerates WASAPI devices and prints whether cpal exposes stable endpoint ids; verify a receipt recording the import table (system DLLs only) and the id result (WIN-01, WIN-08).

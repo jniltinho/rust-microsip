@@ -1,5 +1,6 @@
 //! The stdio MCP server against a real client of the official SDK (AG-03),
 //! with no owner running: fictional data, no network or devices.
+#![cfg(unix)]
 
 use rmcp::ServiceExt;
 use rmcp::model::CallToolRequestParams;

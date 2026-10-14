@@ -12,6 +12,7 @@
 use rusqlite::{Connection, ErrorCode, OptionalExtension, TransactionBehavior, params};
 use rust_microsip_core::{DialTarget, Direction, EndReason};
 use std::fs::{self, DirBuilder, OpenOptions};
+#[cfg(unix)]
 use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -20,7 +21,8 @@ mod control;
 mod csv;
 mod grants;
 mod settings;
-#[cfg(test)]
+// The tests check Unix modes; Windows runs them after add-windows-port 2.6/5.1.
+#[cfg(all(test, unix))]
 mod tests;
 
 pub use control::{AUDIT_RETENTION_DAYS, LEDGER_RETENTION_SECS, OperationRecord, OperationState};
@@ -494,10 +496,12 @@ impl Store {
             .parent()
             .filter(|p| !p.as_os_str().is_empty() && !p.exists())
         {
-            DirBuilder::new()
-                .recursive(true)
-                .mode(0o700)
-                .create(parent)?;
+            let mut dir = DirBuilder::new();
+            dir.recursive(true);
+            #[cfg(unix)]
+            dir.mode(0o700);
+            // ponytail: owner-only DACL on Windows comes with add-windows-port 2.6.
+            dir.create(parent)?;
         }
         create_private_file(path, false)?;
         let mut store = Self {
@@ -1111,7 +1115,9 @@ fn create_private_file(path: &Path, new_only: bool) -> Result<()> {
         Ok(_) | Err(_) => {}
     }
     let mut options = OpenOptions::new();
-    options.write(true).mode(0o600);
+    options.write(true);
+    #[cfg(unix)]
+    options.mode(0o600);
     if new_only {
         options.create_new(true);
     } else {
@@ -1121,9 +1127,11 @@ fn create_private_file(path: &Path, new_only: bool) -> Result<()> {
         std::io::ErrorKind::AlreadyExists => StorageError::BackupExists,
         _ => StorageError::Io(e),
     })?;
-    let mode = file.metadata()?.permissions().mode();
-    if mode & 0o077 != 0 {
+    #[cfg(unix)]
+    if file.metadata()?.permissions().mode() & 0o077 != 0 {
         file.set_permissions(fs::Permissions::from_mode(0o600))?;
     }
+    #[cfg(not(unix))]
+    drop(file);
     Ok(())
 }

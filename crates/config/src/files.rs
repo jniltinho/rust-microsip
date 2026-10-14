@@ -1,13 +1,71 @@
 //! Bounded, permission-checked file reads and atomic saves.
 
 use crate::{ConfigError, StoredConfig};
+use perm::{DirBuilderExt, OpenOptionsExt};
 use secrecy::SecretString;
 use secrecy::zeroize::Zeroizing;
 use std::fs::{self, DirBuilder, File, Metadata, OpenOptions};
 use std::io::{ErrorKind, Read, Write};
-use std::os::unix::fs::{DirBuilderExt, MetadataExt, OpenOptionsExt};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
+
+/// Owner, mode and identity of files: Unix metadata, or neutral values on
+/// Windows until the platform adapter checks DACLs (add-windows-port 2.6).
+#[cfg(unix)]
+mod perm {
+    use std::fs::Metadata;
+    use std::os::unix::fs::MetadataExt;
+    pub(super) use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
+
+    pub(super) fn same_file(a: &Metadata, b: &Metadata) -> bool {
+        (a.dev(), a.ino()) == (b.dev(), b.ino())
+    }
+    pub(super) fn mode(meta: &Metadata) -> u32 {
+        meta.mode()
+    }
+    pub(super) fn owner(meta: &Metadata) -> u32 {
+        meta.uid()
+    }
+    /// Effective user id (owner of `/proc/self`, Linux only).
+    pub(super) fn current_uid() -> std::io::Result<u32> {
+        std::fs::metadata("/proc/self").map(|m| m.uid())
+    }
+}
+#[cfg(windows)]
+mod perm {
+    // ponytail: no owner/mode checks on Windows yet; the adapter's DACLs
+    // (add-windows-port task 2.6) replace them.
+    use std::fs::Metadata;
+
+    pub(super) trait DirBuilderExt {
+        fn mode(&mut self, mode: u32) -> &mut Self;
+    }
+    impl DirBuilderExt for std::fs::DirBuilder {
+        fn mode(&mut self, _mode: u32) -> &mut Self {
+            self
+        }
+    }
+    pub(super) trait OpenOptionsExt {
+        fn mode(&mut self, mode: u32) -> &mut Self;
+    }
+    impl OpenOptionsExt for std::fs::OpenOptions {
+        fn mode(&mut self, _mode: u32) -> &mut Self {
+            self
+        }
+    }
+    pub(super) fn same_file(a: &Metadata, b: &Metadata) -> bool {
+        a.len() == b.len() && a.modified().ok() == b.modified().ok()
+    }
+    pub(super) fn mode(_meta: &Metadata) -> u32 {
+        0o600
+    }
+    pub(super) fn owner(_meta: &Metadata) -> u32 {
+        0
+    }
+    pub(super) fn current_uid() -> std::io::Result<u32> {
+        Ok(0)
+    }
+}
 
 /// Upper bound for TOML and `.env` files.
 pub(crate) const MAX_CONFIG_BYTES: u64 = 64 * 1024;
@@ -50,10 +108,9 @@ fn insecure(path: &Path, problem: FileProblem) -> ConfigError {
     }
 }
 
-/// Effective user id of this process (owner of `/proc/self`, Linux only).
+/// Effective user id of this process (owner of `/proc/self` on Linux).
 pub(crate) fn current_uid() -> Result<u32, ConfigError> {
-    let proc = Path::new("/proc/self");
-    fs::metadata(proc).map(|m| m.uid()).map_err(io_err(proc))
+    perm::current_uid().map_err(io_err(Path::new("/proc/self")))
 }
 
 /// A file's text (zeroed on drop) and the metadata of the opened handle.
@@ -88,7 +145,7 @@ pub(crate) fn read_bounded(
     }
     let file = File::open(path).map_err(&io)?;
     let meta = file.metadata().map_err(&io)?;
-    if (meta.dev(), meta.ino()) != (before.dev(), before.ino()) {
+    if !perm::same_file(&meta, &before) {
         // Replaced between the check and the open.
         return Err(insecure(
             path,
@@ -99,10 +156,10 @@ pub(crate) fn read_bounded(
             },
         ));
     }
-    if meta.mode() & 0o022 != 0 {
+    if perm::mode(&meta) & 0o022 != 0 {
         return Err(insecure(path, FileProblem::Writable));
     }
-    if meta.uid() != owner && meta.uid() != 0 {
+    if perm::owner(&meta) != owner && perm::owner(&meta) != 0 {
         return Err(insecure(path, FileProblem::ForeignOwner));
     }
     let mut buf = Zeroizing::new(Vec::new());
@@ -138,10 +195,10 @@ pub fn read_ca_file(path: &Path, uid: u32) -> Result<Vec<u8>, ConfigError> {
 
 /// A secret-bearing file must be owned by `uid` with no group/other permission bits.
 pub(crate) fn require_private(path: &Path, meta: &Metadata, uid: u32) -> Result<(), ConfigError> {
-    if meta.uid() != uid {
+    if perm::owner(meta) != uid {
         return Err(insecure(path, FileProblem::NotOwned));
     }
-    if meta.mode() & 0o077 != 0 {
+    if perm::mode(meta) & 0o077 != 0 {
         return Err(insecure(path, FileProblem::NotPrivate));
     }
     Ok(())

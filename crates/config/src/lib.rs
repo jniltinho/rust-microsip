@@ -525,7 +525,8 @@ impl ResolveContext {
         })
     }
 
-    /// The XDG default TOML path, if `XDG_CONFIG_HOME` or `HOME` is an absolute path.
+    /// The default TOML path: under `XDG_CONFIG_HOME` (or `HOME/.config`),
+    /// on Windows under `APPDATA`; only absolute paths count.
     pub fn default_config_path(&self) -> Option<PathBuf> {
         let abs = |name: &str| {
             self.env
@@ -533,8 +534,11 @@ impl ResolveContext {
                 .map(PathBuf::from)
                 .filter(|p| p.is_absolute())
         };
-        let base =
-            abs("XDG_CONFIG_HOME").or_else(|| abs("HOME").map(|home| home.join(".config")))?;
+        let base = if cfg!(windows) {
+            abs("APPDATA")?
+        } else {
+            abs("XDG_CONFIG_HOME").or_else(|| abs("HOME").map(|home| home.join(".config")))?
+        };
         Some(base.join("rust-microsip").join("config.toml"))
     }
 }
@@ -956,5 +960,6 @@ fn toml_layer(text: &str, path: &Path) -> Result<TomlLayer, ConfigError> {
     Ok((layer, literal))
 }
 
-#[cfg(test)]
+// The tests check Unix modes; Windows runs them after add-windows-port 2.6/5.1.
+#[cfg(all(test, unix))]
 mod tests;

@@ -11,9 +11,13 @@
 //! (below flags, environment, `.env` and TOML). If it cannot be opened, an
 //! in-memory store keeps the session usable with a visible warning, but the
 //! account is not registered automatically and settings cannot be saved.
+// Windows: the window starts without a console; `rust-microsip-cli.exe`
+// (same code, console subsystem) serves the CLI, `mcp --stdio` and `service`.
+#![cfg_attr(windows, windows_subsystem = "windows")]
 
 mod bridge;
 mod service;
+mod signals;
 
 use rust_microsip::cli;
 use rust_microsip::owner::ControlOwner;
@@ -370,16 +374,24 @@ fn config_theme(theme: Theme) -> config::Theme {
     }
 }
 
-/// `$XDG_CONFIG_HOME`, falling back to `$HOME/.config`; absolute paths only.
+/// `$XDG_CONFIG_HOME`, falling back to `$HOME/.config`; `%APPDATA%` on
+/// Windows. Absolute paths only.
 fn config_home(env: &BTreeMap<String, String>) -> Option<PathBuf> {
     let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
+    if cfg!(windows) {
+        return abs("APPDATA");
+    }
     abs("XDG_CONFIG_HOME").or_else(|| abs("HOME").map(|h| h.join(".config")))
 }
 
-/// `$XDG_DATA_HOME`, falling back to `$HOME/.local/share`; only absolute
-/// paths from the environment snapshot, never the working directory.
+/// `$XDG_DATA_HOME`, falling back to `$HOME/.local/share`; `%LOCALAPPDATA%`
+/// on Windows (the database must not roam). Only absolute paths from the
+/// environment snapshot, never the working directory.
 fn data_home(env: &BTreeMap<String, String>) -> Option<PathBuf> {
     let abs = |name: &str| env.get(name).map(PathBuf::from).filter(|p| p.is_absolute());
+    if cfg!(windows) {
+        return abs("LOCALAPPDATA");
+    }
     abs("XDG_DATA_HOME").or_else(|| abs("HOME").map(|h| h.join(".local/share")))
 }
 
@@ -781,7 +793,10 @@ fn desktop(args: &CliArgs) -> ExitCode {
         audio_input: audio_prefs.input_device.clone(),
         audio_output: audio_prefs.output_device.clone(),
         overridden: sources.as_ref().map(overridden).unwrap_or_default(),
-        desktop_entry: data_home(&ctx.env).map(|d| d.join("applications").join(DESKTOP_FILE)),
+        // Windows registers links under HKCU instead (add-windows-port 2.10).
+        desktop_entry: data_home(&ctx.env)
+            .filter(|_| cfg!(unix))
+            .map(|d| d.join("applications").join(DESKTOP_FILE)),
         grant_dir: listener.as_ref().map(|l| l.runtime_dir().join("grants")),
         bootstrap_dir: config_home(&ctx.env).map(|d| d.join("rust-microsip").join("bootstrap")),
     };
@@ -913,17 +928,10 @@ fn watch_signals(
                 return;
             };
             runtime.block_on(async {
-                use tokio::signal::unix::{SignalKind, signal};
-                let (Ok(mut term), Ok(mut int)) = (
-                    signal(SignalKind::terminate()),
-                    signal(SignalKind::interrupt()),
-                ) else {
+                let Some(mut signals) = signals::Signals::new() else {
                     return;
                 };
-                let first = tokio::select! {
-                    _ = term.recv() => 143,
-                    _ = int.recv() => 130,
-                };
+                let first = signals.next().await;
                 code.store(first, Ordering::SeqCst);
                 // Set before the close request, so the frame that sees it quits.
                 terminating.store(true, Ordering::SeqCst);
@@ -944,10 +952,7 @@ fn watch_signals(
                             std::process::exit(first.into());
                         }
                     });
-                let second: u8 = tokio::select! {
-                    _ = term.recv() => 143,
-                    _ = int.recv() => 130,
-                };
+                let second = signals.next().await;
                 std::process::exit(second.into());
             });
         });
@@ -1050,7 +1055,8 @@ fn control_cli(raw: &[String]) -> ExitCode {
     ExitCode::from(response.exit_code())
 }
 
-fn main() -> ExitCode {
+/// Entry point shared by `rust-microsip` and, on Windows, `rust-microsip-cli`.
+pub(crate) fn main() -> ExitCode {
     let raw: Vec<String> = std::env::args_os()
         .skip(1)
         .map_while(|a| a.into_string().ok())

@@ -402,6 +402,7 @@ impl GrantForm {
 ///
 /// # Errors
 /// I/O failures, including an existing file.
+#[cfg(unix)]
 pub fn write_private(
     dir: &std::path::Path,
     name: &str,
@@ -431,6 +432,20 @@ pub fn write_private(
     file.write_all(content.as_bytes())?;
     file.sync_all()?;
     Ok(path)
+}
+
+/// Grant files hold secrets: refused on Windows until the platform adapter
+/// can create owner-only (DACL) files (add-windows-port task 2.6).
+///
+/// # Errors
+/// Always [`std::io::ErrorKind::Unsupported`].
+#[cfg(not(unix))]
+pub fn write_private(
+    _dir: &std::path::Path,
+    _name: &str,
+    _content: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    Err(std::io::ErrorKind::Unsupported.into())
 }
 
 impl UiState {

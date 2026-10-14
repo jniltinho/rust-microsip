@@ -1617,6 +1617,7 @@ fn icon_path(entry: &Path) -> Option<std::path::PathBuf> {
 /// Atomic write with mode `0644`, creating the parent directory.
 fn write_public(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write;
+    #[cfg(unix)]
     use std::os::unix::fs::OpenOptionsExt;
     let dir = path.parent().ok_or(std::io::ErrorKind::InvalidInput)?;
     std::fs::create_dir_all(dir)?;
@@ -1627,15 +1628,19 @@ fn write_public(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
         std::process::id()
     ));
     let _ = std::fs::remove_file(&tmp);
-    let written = std::fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .mode(0o644)
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o644);
+    let written = options
         .open(&tmp)
         .and_then(|mut file| {
-            use std::os::unix::fs::PermissionsExt;
             // Not subject to the umask: desktop entries are world-readable.
-            file.set_permissions(std::fs::Permissions::from_mode(0o644))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                file.set_permissions(std::fs::Permissions::from_mode(0o644))?;
+            }
             file.write_all(bytes)?;
             file.sync_all()
         })
@@ -2684,6 +2689,7 @@ mod tests {
         Ok(())
     }
 
+    #[cfg(unix)]
     #[test]
     fn link_handler_entry_is_opt_in_private_to_the_user_and_removable() -> std::io::Result<()> {
         use std::os::unix::fs::PermissionsExt;
