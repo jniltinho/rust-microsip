@@ -5,7 +5,10 @@
 //! Presentation logic lives in the GPU-free `state` module; this module only
 //! lays out widgets and routes clicks and keys into it.
 
+mod calls;
 mod state;
+mod tokens;
+mod widgets;
 
 pub use state::{
     AUDIO_TEST_SECONDS, DESKTOP_FILE, GrantForm, GrantSpec, IssuedGrant, Theme, UiSettings,
@@ -13,16 +16,17 @@ pub use state::{
 };
 
 use rust_microsip_audio::AudioDevices;
-use rust_microsip_storage::{HistoryFilter, Store};
+use rust_microsip_storage::Store;
 
 use eframe::egui;
 use rust_microsip_core::{
-    CallPhase, Command, Direction, Event, MediaSecurity, Notice, RegistrationState, Transport,
+    CallPhase, Command, Direction, Event, MediaSecurity, Notice, RegistrationFailure,
+    RegistrationState, Transport,
 };
 use secrecy::SecretString;
 use state::{
-    Action, ContactForm, ImportForm, MAX_NUMBER_CHARS, SaveFn, Tab, format_duration, outcome_text,
-    phase_text, registration_text, transfer_text,
+    Action, ContactForm, ImportForm, MAX_NUMBER_CHARS, SaveFn, Tab, format_duration, phase_text,
+    registration_text, transfer_text,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -189,41 +193,6 @@ const KEYPAD_LETTERS: [&str; 12] = [
     "", "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ", "", "", "",
 ];
 
-/// Visual tokens, in one place. Text colors keep at least 4.5:1 contrast on
-/// the default egui panel backgrounds of each theme.
-mod tokens {
-    use eframe::egui::Color32;
-    pub const KEY_HEIGHT: f32 = 36.0;
-    pub const CONTROL_HEIGHT: f32 = 28.0;
-    pub const CALL_HEIGHT: f32 = 34.0;
-    pub const TOGGLE_HEIGHT: f32 = 22.0;
-    pub const SPACING: f32 = 4.0;
-    pub const NUMBER_SIZE: f32 = 18.0;
-    pub const DIGIT_SIZE: f32 = 20.0;
-
-    /// Semantic colors for one theme.
-    pub struct Palette {
-        pub ok: Color32,
-        pub warn: Color32,
-        pub error: Color32,
-    }
-    pub const fn palette(dark: bool) -> Palette {
-        if dark {
-            Palette {
-                ok: Color32::from_rgb(0x81, 0xC7, 0x84),
-                warn: Color32::from_rgb(0xFF, 0xB7, 0x4D),
-                error: Color32::from_rgb(0xEF, 0x9A, 0x9A),
-            }
-        } else {
-            Palette {
-                ok: Color32::from_rgb(0x1B, 0x5E, 0x20),
-                warn: Color32::from_rgb(0x8A, 0x4B, 0x00),
-                error: Color32::from_rgb(0xB0, 0x00, 0x20),
-            }
-        }
-    }
-}
-
 /// Supply or override a widget's accessible name: placeholder-only fields,
 /// sliders, combo boxes, and one-glyph buttons named by their purpose.
 fn named(response: egui::Response, name: &str) -> egui::Response {
@@ -354,6 +323,7 @@ impl SoftphoneApp {
         storage: Storage,
     ) -> Self {
         install_font(ctx);
+        tokens::install(ctx);
         ctx.options_mut(|o| o.fallback_theme = egui::Theme::Light);
         ctx.set_theme(theme_preference(settings.theme));
         backend.attach_context(ctx);
@@ -498,8 +468,32 @@ impl SoftphoneApp {
         let st = &mut self.state;
         let palette = tokens::palette(ui.visuals().dark_mode);
         ui.spacing_mut().item_spacing = egui::vec2(tokens::SPACING, tokens::SPACING);
-        egui::Panel::top("rust_microsip_tabs").show(ui, |ui| tab_strip(ui, st, &mut out));
-        egui::Panel::bottom("rust_microsip_status").show(ui, |ui| status_bar(ui, st, &palette));
+        egui::Panel::top("rust_microsip_tabs")
+            .show_separator_line(false)
+            .frame(
+                egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin {
+                    left: 4,
+                    right: 4,
+                    top: 4,
+                    bottom: 0,
+                }),
+            )
+            .show(ui, |ui| tab_strip(ui, st, &mut out));
+        egui::Panel::bottom("rust_microsip_status")
+            .frame(
+                egui::Frame::side_top_panel(ui.style()).inner_margin(egui::Margin::symmetric(8, 2)),
+            )
+            .show(ui, |ui| status_bar(ui, st, &palette));
+        if st.view == View::Settings {
+            // Save stays visible while the form scrolls.
+            egui::Panel::bottom("rust_microsip_settings_footer")
+                .show(ui, |ui| settings_footer(ui, &palette, &mut out));
+        }
+        if st.view == View::Main && matches!(st.tab, Tab::Calls | Tab::Contacts) {
+            // MicroSIP keeps the search box under the list.
+            egui::Panel::bottom("rust_microsip_list_footer")
+                .show(ui, |ui| calls::footer(ui, st, &mut out));
+        }
         approval_modal(&ctx, st, &palette, now, &mut out);
         let focus_number = std::mem::take(&mut self.focus_number);
         egui::CentralPanel::default().show(ui, |ui| {
@@ -535,14 +529,24 @@ impl SoftphoneApp {
                     View::Import => import(ui, st, &palette, &mut out),
                     View::Main => match st.tab {
                         Tab::Phone => phone(ui, st, focus_number, &mut out),
-                        Tab::Calls => calls(ui, st, &mut out),
-                        Tab::Contacts => contacts(ui, st, &mut out),
+                        Tab::Calls => calls::calls(ui, st, &palette, &mut out),
+                        Tab::Contacts => calls::contacts(ui, st, &palette, &mut out),
                     },
                 }
             });
         });
         for action in out {
             self.dispatch(&ctx, action);
+        }
+        // "Add to contacts" from the Calls tab: fill the new editor's number.
+        if let Some(number) = ctx.data_mut(|d| d.remove_temp::<String>(calls::prefill_id()))
+            && let Some(row) = self
+                .state
+                .contact_form
+                .as_mut()
+                .and_then(|form| form.numbers.first_mut())
+        {
+            row.0 = number;
         }
     }
 }
@@ -561,6 +565,11 @@ impl eframe::App for SoftphoneApp {
     }
 }
 
+/// The palette of the theme `ui` is drawn in.
+fn palette_of(ui: &egui::Ui) -> tokens::Palette {
+    tokens::palette(ui.visuals().dark_mode)
+}
+
 /// Button that is disabled with a hover reason when `enabled` is an error.
 fn guarded(ui: &mut egui::Ui, button: egui::Button<'_>, enabled: Result<(), &str>) -> bool {
     match enabled {
@@ -572,20 +581,28 @@ fn guarded(ui: &mut egui::Ui, button: egui::Button<'_>, enabled: Result<(), &str
     }
 }
 
+/// MicroSIP's notebook row: Phone | Calls | Contacts as tabs on the left,
+/// the ▼ menu button (accessible name "Menu") at the far right, and the
+/// panel border running under every tab except the selected one.
 fn tab_strip(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
-    ui.horizontal(|ui| {
+    let palette = tokens::palette(ui.visuals().dark_mode);
+    let row = ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        let mut selected_rect = None;
         for tab in Tab::ALL {
             let selected =
                 st.tab == tab && matches!(st.view, View::Main | View::ContactEdit | View::Import);
-            if ui
-                .add(egui::Button::new(tab.label()).selected(selected))
-                .clicked()
-            {
+            let response = widgets::tab(ui, tab.label(), selected);
+            if selected {
+                selected_rect = Some(response.rect);
+            }
+            if response.clicked() {
                 out.push(Action::SelectTab(tab));
             }
         }
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.menu_button("Menu", |ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            let button = widgets::menu_button(ui, "Menu").on_hover_text("Menu");
+            egui::Popup::menu(&button).show(|ui| {
                 for (label, action) in [
                     ("Settings\u{2026}", Action::OpenSettings),
                     ("Unregister", Action::Unregister),
@@ -599,29 +616,204 @@ fn tab_strip(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
                 }
             });
         });
+        selected_rect
     });
+    let y = row.response.rect.bottom() - 0.5;
+    let stroke = egui::Stroke::new(1.0, palette.control_border);
+    let (left, right) = (ui.max_rect().left(), ui.max_rect().right());
+    match row.inner {
+        Some(tab) => {
+            ui.painter().hline(left..=tab.left(), y, stroke);
+            ui.painter().hline(tab.right()..=right, y, stroke);
+        }
+        None => {
+            ui.painter().hline(left..=right, y, stroke);
+        }
+    }
 }
 
-fn status_bar(ui: &mut egui::Ui, st: &UiState, palette: &tokens::Palette) {
-    let color = match st.registration {
-        _ if st.engine_failed => palette.error,
-        RegistrationState::Registered => palette.ok,
-        RegistrationState::Failed(_) => palette.error,
-        RegistrationState::Registering | RegistrationState::Disabled => ui.visuals().text_color(),
+/// Registration presence as MicroSIP shows it: a round icon and one word.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Presence {
+    /// Registered.
+    Online,
+    /// Registered with do-not-disturb on.
+    DoNotDisturb,
+    /// Registration in progress.
+    Connecting,
+    /// No account, or unregistered.
+    Offline,
+    /// Registration failed or the engine stopped.
+    Error,
+}
+
+/// Presence and its short status text for the status bar.
+fn presence(st: &UiState) -> (Presence, String) {
+    if st.engine_failed {
+        return (Presence::Error, "Engine stopped; restart".to_owned());
+    }
+    let (presence, text) = match st.registration {
+        RegistrationState::Registered if st.dnd => {
+            (Presence::DoNotDisturb, "Do not disturb".to_owned())
+        }
+        RegistrationState::Registered => (Presence::Online, "Online".to_owned()),
+        RegistrationState::Registering => (Presence::Connecting, "Connecting\u{2026}".to_owned()),
+        RegistrationState::Disabled => (Presence::Offline, "Offline".to_owned()),
+        RegistrationState::Failed(reason) => (
+            Presence::Error,
+            match reason {
+                RegistrationFailure::Unauthorized => "Incorrect password".to_owned(),
+                RegistrationFailure::Timeout | RegistrationFailure::Network => {
+                    "Connection failed".to_owned()
+                }
+                RegistrationFailure::Certificate => "Certificate rejected".to_owned(),
+                RegistrationFailure::Rejected(code) => format!("Server error {code}"),
+            },
+        ),
     };
-    let text = if st.engine_failed {
-        "Engine stopped; restart".to_owned()
+    if st.dnd && presence != Presence::DoNotDisturb {
+        return (presence, format!("{text} \u{00b7} DND"));
+    }
+    (presence, text)
+}
+
+/// The round presence icon. Besides the color, DND carries a bar and an
+/// error a cross, so the state never rests on color alone.
+fn presence_icon(
+    painter: &egui::Painter,
+    center: egui::Pos2,
+    presence: Presence,
+    palette: &tokens::Palette,
+) {
+    let r = tokens::STATUS_DOT;
+    let color = match presence {
+        Presence::Online => palette.ok,
+        Presence::DoNotDisturb | Presence::Error => palette.error,
+        Presence::Connecting => palette.warn,
+        Presence::Offline => palette.muted,
+    };
+    painter.circle_filled(center, r, color);
+    let mark = egui::Stroke::new(1.5, palette.window);
+    match presence {
+        Presence::DoNotDisturb => {
+            painter.hline(
+                (center.x - r * 0.55)..=(center.x + r * 0.55),
+                center.y,
+                mark,
+            );
+        }
+        Presence::Error => {
+            let d = r * 0.4;
+            painter.line_segment(
+                [center + egui::vec2(-d, -d), center + egui::vec2(d, d)],
+                mark,
+            );
+            painter.line_segment(
+                [center + egui::vec2(-d, d), center + egui::vec2(d, -d)],
+                mark,
+            );
+        }
+        Presence::Connecting => {
+            painter.circle_filled(center, r * 0.35, palette.window);
+        }
+        Presence::Online | Presence::Offline => {}
+    }
+}
+
+/// MicroSIP-style status bar: presence icon, status word, account at the right.
+/// Its accessible name keeps the registration text ("Registered",
+/// "Failed: wrong credentials", "DND on", ...).
+fn status_bar(ui: &mut egui::Ui, st: &UiState, palette: &tokens::Palette) {
+    let (presence, text) = presence(st);
+    let detail = if st.engine_failed {
+        text.clone()
     } else {
         registration_text(st.registration)
     };
-    ui.horizontal_wrapped(|ui| {
-        ui.label(egui::RichText::new("\u{2022}").color(color));
-        ui.label(egui::RichText::new(text).color(color));
-        if st.dnd {
-            ui.label(egui::RichText::new("DND on").strong());
+    let account = st.account_text();
+    let width = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(
+        egui::vec2(width, tokens::STATUS_HEIGHT),
+        egui::Sense::hover(),
+    );
+    let painter = ui.painter_at(rect);
+    let dot = egui::pos2(rect.left() + tokens::STATUS_DOT + 1.0, rect.center().y);
+    presence_icon(&painter, dot, presence, palette);
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let status = painter.layout_no_wrap(text.clone(), font, palette.text);
+    let text_left = dot.x + tokens::STATUS_DOT + 6.0;
+    let status_width = status.size().x;
+    painter.galley(
+        egui::pos2(text_left, rect.center().y - status.size().y / 2.0),
+        status,
+        palette.text,
+    );
+    // Leave the bottom-right corner to the size grip, as MicroSIP does.
+    widgets::grip(
+        ui.painter(),
+        rect.right_bottom() + egui::vec2(6.0, 1.0),
+        palette,
+    );
+    let right = rect.right() - 12.0;
+    let room = right - (text_left + status_width + 12.0);
+    if room > 24.0 {
+        let small = egui::TextStyle::Small.resolve(ui.style());
+        let mut job =
+            egui::text::LayoutJob::simple_singleline(account.clone(), small, palette.muted);
+        job.wrap = egui::text::TextWrapping::truncate_at_width(room);
+        let galley = painter.layout_job(job);
+        let pos = egui::pos2(
+            right - galley.size().x,
+            rect.center().y - galley.size().y / 2.0,
+        );
+        painter.galley(pos, galley, palette.muted);
+    }
+    let dnd = if st.dnd { ", DND on" } else { "" };
+    let name = format!("{text}: {detail}{dnd}, {account}");
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, &name));
+    response.on_hover_text(format!("{detail}{dnd}\n{account}"));
+}
+
+/// Square segmented buttons: `(label, selected, disabled reason)` each.
+/// Returns the index clicked. The selected one has an accent underline.
+fn segmented(
+    ui: &mut egui::Ui,
+    palette: &tokens::Palette,
+    options: &[(&str, bool, Option<&str>)],
+) -> Option<usize> {
+    let mut clicked = None;
+    let count = options.len().max(1) as f32;
+    let width = ui.available_width() / count;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (index, (label, selected, disabled)) in options.iter().enumerate() {
+            let text = if *selected {
+                egui::RichText::new(*label).color(palette.text).strong()
+            } else {
+                egui::RichText::new(*label).color(palette.muted)
+            };
+            let button = egui::Button::new(text)
+                .selected(*selected)
+                .min_size(egui::vec2(width, tokens::SEGMENT_HEIGHT));
+            let response = ui.add_enabled(disabled.is_none(), button);
+            if *selected {
+                let rect = response.rect;
+                ui.painter().hline(
+                    rect.x_range(),
+                    rect.bottom() - tokens::UNDERLINE / 2.0,
+                    egui::Stroke::new(tokens::UNDERLINE, palette.accent),
+                );
+            }
+            let response = match disabled {
+                Some(reason) => response.on_disabled_hover_text(*reason),
+                None => response,
+            };
+            if response.clicked() {
+                clicked = Some(index);
+            }
         }
     });
-    ui.label(egui::RichText::new(st.account_text()).small());
+    clicked
 }
 
 /// Delay before Allow/Deny accept a click, so a click aimed at something else
@@ -797,16 +989,22 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
             response.scroll_to_me(None);
         }
     }
-    let gap = ui.spacing().item_spacing.x;
+    // MicroSIP's grid: 3x4 bordered keys, digit left-aligned, letters after it.
+    let gap = 2.0;
     let width = (ui.available_width() - 2.0 * gap) / 3.0;
+    let key_size = egui::vec2(width, tokens::KEY_HEIGHT);
+    ui.spacing_mut().item_spacing.y = gap;
     for row in KEYPAD.chunks(3).zip(KEYPAD_LETTERS.chunks(3)) {
         ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = gap;
             for (key, letters) in row.0.iter().zip(row.1) {
-                let label = (
-                    egui::RichText::new(key.to_string()).size(tokens::DIGIT_SIZE),
-                    egui::RichText::new(*letters).small().weak(),
-                );
-                let button = ui.add_sized([width, tokens::KEY_HEIGHT], egui::Button::new(label));
+                let digit = key.to_string();
+                let name = if letters.is_empty() {
+                    digit.clone()
+                } else {
+                    format!("{digit} {letters}")
+                };
+                let button = widgets::key(ui, key_size, &digit, letters, &name, false, true);
                 let button = if dtmf {
                     button.on_hover_text("Send DTMF")
                 } else {
@@ -818,50 +1016,61 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
             }
         });
     }
+    // The R / + / C row; R (redial) is not offered, Back takes its place.
     ui.horizontal(|ui| {
-        let size = [width, tokens::CONTROL_HEIGHT];
+        ui.spacing_mut().item_spacing.x = gap;
         for (text, hover, action) in [
             ("Back", "Delete the last character", Action::Backspace),
             ("+", "Add +", Action::Plus),
             ("C", "Clear the number", Action::ClearNumber),
         ] {
             // The hover text doubles as the screen-reader name.
-            let button = ui.add_enabled(!in_call, egui::Button::new(text).min_size(size.into()));
-            if named(button, hover).on_hover_text(hover).clicked() {
+            let button = widgets::key(ui, key_size, text, "", hover, true, !in_call);
+            if button.on_hover_text(hover).clicked() && !in_call {
                 out.push(action);
             }
         }
     });
+    ui.spacing_mut().item_spacing.y = tokens::SPACING;
     ui.add_space(tokens::SPACING);
+    // A wide Call button and a small square End beside it, as MicroSIP's
+    // Call and message buttons.
     ui.horizontal(|ui| {
-        let side = width;
-        let call_width = ui.available_width() - side - gap;
+        ui.spacing_mut().item_spacing.x = gap + 4.0;
+        let end_width = tokens::END_WIDTH;
+        let call_width = ui.available_width() - end_width - gap - 4.0;
         let call = egui::Button::new(st.call_label())
             .min_size(egui::vec2(call_width, tokens::CALL_HEIGHT));
         if guarded(ui, call, st.can_call()) {
             out.push(Action::Call);
         }
-        let end = egui::Button::new(st.end_label()).min_size(egui::vec2(side, tokens::CALL_HEIGHT));
+        let end =
+            egui::Button::new(st.end_label()).min_size(egui::vec2(end_width, tokens::CALL_HEIGHT));
         if guarded(ui, end, st.can_end().map(|_| ())) {
             out.push(Action::End);
         }
     });
     ui.add_space(tokens::SPACING);
-    for (text, name, hover) in [
+    // Speaker and microphone: icon box, "−" slider "+".
+    for (glyph, name, hover) in [
         (
-            "Spk",
+            widgets::Glyph::Speaker,
             "Speaker volume",
             "Speaker volume arrives in a later release",
         ),
         (
-            "Mic",
+            widgets::Glyph::Microphone,
             "Microphone volume",
             "Microphone volume arrives in a later release",
         ),
     ] {
         ui.horizontal(|ui| {
-            ui.label(text);
-            ui.spacing_mut().slider_width = ui.available_width();
+            widgets::icon_box(ui, tokens::TOGGLE_HEIGHT, glyph);
+            let muted = egui::RichText::new("-").color(palette_of(ui).muted);
+            ui.label(muted);
+            let plus_width = 12.0;
+            ui.spacing_mut().slider_width =
+                (ui.available_width() - plus_width - ui.spacing().item_spacing.x).max(40.0);
             let mut level = 1.0_f32;
             named(
                 ui.add_enabled(
@@ -871,6 +1080,7 @@ fn phone(ui: &mut egui::Ui, st: &mut UiState, focus_number: bool, out: &mut Vec<
                 name,
             )
             .on_disabled_hover_text(hover);
+            ui.label(egui::RichText::new("+").color(palette_of(ui).muted));
         });
     }
     let connected = st
@@ -964,145 +1174,6 @@ fn search_box(ui: &mut egui::Ui, text: &mut String, width: f32) -> bool {
     )
     .on_hover_text("Searches local data only")
     .changed()
-}
-
-fn calls(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
-    ui.horizontal(|ui| {
-        for (filter, label) in [
-            (HistoryFilter::All, "All"),
-            (HistoryFilter::Incoming, "In"),
-            (HistoryFilter::Outgoing, "Out"),
-            (HistoryFilter::Missed, "Missed"),
-        ] {
-            if ui
-                .add(egui::Button::new(label).selected(st.history_filter == filter))
-                .clicked()
-            {
-                out.push(Action::SetHistoryFilter(filter));
-            }
-        }
-    });
-    ui.horizontal(|ui| {
-        let width = ui.available_width() - 50.0;
-        if search_box(ui, &mut st.history_search, width) {
-            out.push(Action::SearchHistory);
-        }
-        if ui
-            .add_enabled(!st.history.is_empty(), egui::Button::new("Clear"))
-            .on_hover_text("Delete the whole history")
-            .clicked()
-        {
-            out.push(Action::ClearHistory);
-        }
-    });
-    if st.history.is_empty() {
-        ui.label(egui::RichText::new("No calls.").weak());
-    }
-    let now = state::utc_now();
-    for entry in &st.history {
-        let call = &entry.call;
-        let direction = if call.direction == Direction::Outgoing {
-            "Out"
-        } else {
-            "In"
-        };
-        let duration = call
-            .duration_ms
-            .map(|ms| format!("  {}", format_duration(Duration::from_millis(ms))))
-            .unwrap_or_default();
-        let secure = if call.secure { "  SRTP" } else { "" };
-        let text = format!(
-            "{direction}  {}\n{}  {}{duration}{secure}",
-            call.remote,
-            outcome_text(call.outcome),
-            state::age_text(now - call.started_utc)
-        );
-        right_row(ui, 2.0 * tokens::CONTROL_HEIGHT, |ui| {
-            if ui
-                .small_button("Del")
-                .on_hover_text("Delete this entry")
-                .clicked()
-            {
-                out.push(Action::DeleteCall(entry.id));
-            }
-            if ui.small_button("Call").on_hover_text("Dial").clicked() {
-                out.push(Action::DialNumber(call.remote.clone()));
-            }
-            let row = ui
-                .add_sized(
-                    [ui.available_width(), 0.0],
-                    egui::Button::new(text).frame(false),
-                )
-                .on_hover_text("Click: copy to the number field. Double-click: dial");
-            if row.double_clicked() {
-                out.push(Action::DialNumber(call.remote.clone()));
-            } else if row.clicked() {
-                out.push(Action::FillNumber(call.remote.clone()));
-            }
-        });
-        ui.separator();
-    }
-}
-
-fn contacts(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
-    ui.horizontal(|ui| {
-        let width = ui.available_width() - 100.0;
-        if search_box(ui, &mut st.contact_search, width) {
-            out.push(Action::SearchContacts);
-        }
-        if ui.button("Add").clicked() {
-            out.push(Action::NewContact);
-        }
-        if ui
-            .button("Import")
-            .on_hover_text("Import contacts from a CSV file")
-            .clicked()
-        {
-            out.push(Action::OpenImport);
-        }
-    });
-    if st.contacts.is_empty() {
-        ui.label(egui::RichText::new("No contacts.").weak());
-    }
-    for contact in &st.contacts {
-        right_row(ui, tokens::CONTROL_HEIGHT, |ui| {
-            if ui.small_button("Del").clicked() {
-                out.push(Action::DeleteContact(contact.id));
-            }
-            if ui.small_button("Edit").clicked() {
-                out.push(Action::EditContact(contact.id));
-            }
-            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                ui.add(egui::Label::new(egui::RichText::new(&contact.name).strong()).truncate());
-                if contact.favorite {
-                    ui.label(egui::RichText::new("Favorite").small());
-                }
-            });
-        });
-        for number in &contact.numbers {
-            right_row(ui, tokens::TOGGLE_HEIGHT, |ui| {
-                if ui.small_button("Call").on_hover_text("Dial").clicked() {
-                    out.push(Action::DialNumber(number.number.clone()));
-                }
-                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    ui.add_space(tokens::SPACING * 2.0);
-                    let label = number.label.as_deref().unwrap_or("");
-                    if ui
-                        .add(
-                            egui::Button::new(format!("{}  {label}", number.number))
-                                .frame(false)
-                                .truncate(),
-                        )
-                        .on_hover_text("Copy to the number field")
-                        .clicked()
-                    {
-                        out.push(Action::FillNumber(number.number.clone()));
-                    }
-                });
-            });
-        }
-        ui.separator();
-    }
 }
 
 fn contact_editor(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
@@ -1257,140 +1328,129 @@ fn import_fields(
     }
 }
 
-fn audio_settings(ui: &mut egui::Ui, st: &UiState, out: &mut Vec<Action>) {
-    ui.label("Audio devices (applied on the next start)");
-    if st.audio_devices_loading {
-        ui.label(egui::RichText::new("Loading devices\u{2026}").weak());
-        return;
-    }
-    let Some(devices) = &st.audio_devices else {
-        ui.label(egui::RichText::new("No audio devices could be listed.").weak());
-        return;
-    };
-    for (label, list, current, input) in [
-        ("Microphone", &devices.inputs, &st.audio_input, true),
-        ("Speaker", &devices.outputs, &st.audio_output, false),
-    ] {
-        ui.horizontal(|ui| {
-            ui.label(label);
-            let mut selected = current.clone();
-            let shown = match selected.as_deref() {
-                None => "System default".to_owned(),
-                Some(key) => list
-                    .iter()
-                    .find(|d| state::device_key(d) == key)
-                    .map_or_else(|| format!("{key} (not found)"), |d| d.name.clone()),
-            };
-            let combo = egui::ComboBox::from_id_salt(label)
-                .selected_text(shown)
-                .width(ui.available_width())
-                .truncate()
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut selected, None, "System default");
-                    for device in list {
-                        let text = if device.is_default {
-                            format!("{} (default)", device.name)
-                        } else {
-                            device.name.clone()
-                        };
-                        ui.selectable_value(&mut selected, Some(state::device_key(device)), text);
-                    }
-                });
-            named(combo.response, &format!("{label} device"));
-            if selected != *current {
-                out.push(if input {
-                    Action::SetAudioInput(selected)
-                } else {
-                    Action::SetAudioOutput(selected)
-                });
-            }
+/// A titled settings group: section title, then the fields in a flat
+/// surface panel with a hairline border.
+fn section(
+    ui: &mut egui::Ui,
+    palette: &tokens::Palette,
+    title: &str,
+    hint: Option<&str>,
+    add: impl FnOnce(&mut egui::Ui),
+) {
+    ui.add_space(tokens::SPACING * 2.0);
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new(title)
+                .size(tokens::SECTION_SIZE)
+                .strong()
+                .color(palette.text),
+        );
+        if let Some(hint) = hint {
+            ui.label(egui::RichText::new(hint).small().color(palette.muted));
+        }
+    });
+    egui::Frame::new()
+        .fill(palette.surface)
+        .stroke(egui::Stroke::new(1.0, palette.hairline))
+        .inner_margin(egui::Margin::same(8))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            add(ui);
         });
-    }
 }
 
-fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out: &mut Vec<Action>) {
-    ui.heading("Settings");
-    let form = &mut st.form;
-    egui::Grid::new("rust_microsip_account")
-        .num_columns(2)
-        .show(ui, |ui| {
-            for (label, value) in [
-                ("Display name", &mut form.display_name),
-                ("Username", &mut form.username),
-                ("Auth user", &mut form.auth_username),
-                ("Domain", &mut form.domain),
-                ("Server", &mut form.server),
-                ("Port", &mut form.port),
-            ] {
-                let label = ui.label(label);
-                ui.add(
-                    egui::TextEdit::singleline(value)
-                        .char_limit(253)
-                        .desired_width(150.0),
-                )
-                .labelled_by(label.id);
-                ui.end_row();
-            }
-            let label = ui.label("Password");
-            ui.add(
-                egui::TextEdit::singleline(&mut form.password)
-                    .id(password_id())
-                    .password(true)
-                    .char_limit(128)
-                    .desired_width(150.0)
-                    .hint_text("unchanged"),
+/// One form line as in MicroSIP's dialogs: a fixed-width column with the
+/// label right-aligned, then the field filling the rest. `add` receives the
+/// label's id for `labelled_by`.
+fn field_row<R>(
+    ui: &mut egui::Ui,
+    label: &str,
+    add: impl FnOnce(&mut egui::Ui, egui::Id) -> R,
+) -> R {
+    ui.horizontal(|ui| {
+        let height = ui.spacing().interact_size.y;
+        let label = ui
+            .allocate_ui_with_layout(
+                egui::vec2(tokens::LABEL_WIDTH, height),
+                egui::Layout::right_to_left(egui::Align::Center),
+                |ui| {
+                    ui.set_min_width(tokens::LABEL_WIDTH);
+                    ui.add_space(2.0);
+                    ui.add(egui::Label::new(label).truncate())
+                },
             )
-            .labelled_by(label.id);
-            ui.end_row();
-        });
-    ui.checkbox(
-        &mut form.remember,
-        "Remember password in the system keyring",
-    )
-    .on_hover_text("Stored in the desktop Secret Service; never in the settings database");
-    ui.label(egui::RichText::new(PASSWORD_NOTE).small());
-    ui.horizontal(|ui| {
-        ui.label("Transport");
-        let mut transport = form.transport();
-        for t in [Transport::Udp, Transport::Tcp, Transport::Tls] {
-            ui.radio_value(&mut transport, t, t.as_str().to_uppercase());
+            .inner;
+        add(ui, label.id)
+    })
+    .inner
+}
+
+/// A single-line text field filling the rest of a [`field_row`].
+fn text_field(ui: &mut egui::Ui, label: egui::Id, edit: egui::TextEdit<'_>) -> egui::Response {
+    let width = ui.available_width();
+    ui.add(edit.desired_width(width)).labelled_by(label)
+}
+
+/// Muted explanatory text inside a section.
+fn note(ui: &mut egui::Ui, palette: &tokens::Palette, text: &str) {
+    ui.label(egui::RichText::new(text).small().color(palette.muted));
+}
+
+fn audio_settings(
+    ui: &mut egui::Ui,
+    st: &UiState,
+    palette: &tokens::Palette,
+    out: &mut Vec<Action>,
+) {
+    if st.audio_devices_loading {
+        note(ui, palette, "Loading devices\u{2026}");
+    } else if let Some(devices) = &st.audio_devices {
+        for (label, list, current, input) in [
+            ("Microphone", &devices.inputs, &st.audio_input, true),
+            ("Speaker", &devices.outputs, &st.audio_output, false),
+        ] {
+            field_row(ui, label, |ui, _| {
+                let mut selected = current.clone();
+                let shown = match selected.as_deref() {
+                    None => "System default".to_owned(),
+                    Some(key) => list
+                        .iter()
+                        .find(|d| state::device_key(d) == key)
+                        .map_or_else(|| format!("{key} (not found)"), |d| d.name.clone()),
+                };
+                let combo = egui::ComboBox::from_id_salt(label)
+                    .selected_text(shown)
+                    .width(ui.available_width())
+                    .truncate()
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut selected, None, "System default");
+                        for device in list {
+                            let text = if device.is_default {
+                                format!("{} (default)", device.name)
+                            } else {
+                                device.name.clone()
+                            };
+                            ui.selectable_value(
+                                &mut selected,
+                                Some(state::device_key(device)),
+                                text,
+                            );
+                        }
+                    });
+                named(combo.response, &format!("{label} device"));
+                if selected != *current {
+                    out.push(if input {
+                        Action::SetAudioInput(selected)
+                    } else {
+                        Action::SetAudioOutput(selected)
+                    });
+                }
+            });
         }
-        if transport != form.transport() {
-            form.set_transport(transport);
-        }
-    });
-    ui.horizontal(|ui| {
-        ui.label("Media");
-        let mut media = form.media();
-        ui.radio_value(&mut media, MediaSecurity::PlainRtp, "RTP");
-        let tls = form.transport() == Transport::Tls;
-        ui.add_enabled_ui(tls || media == MediaSecurity::Srtp, |ui| {
-            ui.radio_value(&mut media, MediaSecurity::Srtp, "SRTP");
-        })
-        .response
-        .on_disabled_hover_text("SRTP requires TLS signaling");
-        form.media = Some(media);
-    });
-    if form.media() == MediaSecurity::Srtp && form.transport() != Transport::Tls {
-        ui.label(egui::RichText::new("SRTP requires TLS signaling").color(palette.error));
+    } else {
+        note(ui, palette, "No audio devices could be listed.");
     }
-    if form.media() == MediaSecurity::PlainRtp {
-        ui.label(egui::RichText::new("Calls will not be encrypted").color(palette.warn));
-    }
-    ui.separator();
-    ui.horizontal(|ui| {
-        ui.label("Theme");
-        let mut theme = st.theme;
-        for t in Theme::ALL {
-            ui.radio_value(&mut theme, t, t.label());
-        }
-        if theme != st.theme {
-            out.push(Action::SetTheme(theme));
-        }
-    });
-    ui.separator();
-    audio_settings(ui, st, out);
-    ui.horizontal(|ui| {
+    field_row(ui, "Audio test", |ui, _| {
         if guarded(ui, egui::Button::new("Test"), st.can_test_audio()) {
             out.push(Action::TestAudio);
         }
@@ -1398,19 +1458,21 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
             Some(peak) => {
                 ui.add(
                     egui::ProgressBar::new(f32::from(peak) / f32::from(i16::MAX))
+                        .desired_height(tokens::TOGGLE_HEIGHT - 6.0)
                         .text("Microphone level"),
                 );
             }
-            None => {
-                ui.label(
-                    egui::RichText::new("Plays a short tone and shows the microphone level")
-                        .small(),
-                );
-            }
+            None => note(ui, palette, "Plays a tone, shows the mic level"),
         }
     });
-    ui.separator();
-    ui.label(egui::RichText::new(OVERRIDE_NOTE).small());
+}
+
+fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out: &mut Vec<Action>) {
+    ui.label(
+        egui::RichText::new("Settings")
+            .size(tokens::NUMBER_SIZE)
+            .color(palette.text),
+    );
     if !st.overridden.is_empty() {
         ui.label(
             egui::RichText::new(format!("Fixed elsewhere: {}", st.overridden.join(", ")))
@@ -1418,43 +1480,174 @@ fn settings(ui: &mut egui::Ui, st: &mut UiState, palette: &tokens::Palette, out:
                 .color(palette.warn),
         );
     }
-    ui.separator();
-    ui.label("Links");
-    ui.horizontal(|ui| {
-        if ui.button("Handle sip:/tel: links").clicked() {
-            out.push(Action::InstallLinkHandler);
+    let form = &mut st.form;
+    section(ui, palette, "Account", None, |ui| {
+        // MicroSIP's Account dialog order: server first, then identity.
+        for (label, value, hint) in [
+            ("SIP Server", &mut form.server, "same as domain"),
+            ("Port", &mut form.port, "5060"),
+            ("Username", &mut form.username, "required"),
+            ("Domain", &mut form.domain, "required"),
+            ("Login", &mut form.auth_username, "same as username"),
+        ] {
+            field_row(ui, label, |ui, id| {
+                text_field(
+                    ui,
+                    id,
+                    egui::TextEdit::singleline(value)
+                        .char_limit(253)
+                        .hint_text(hint),
+                );
+            });
         }
-        if ui
-            .button("Remove")
-            .on_hover_text("Delete the link handler entry")
-            .clicked()
-        {
-            out.push(Action::RemoveLinkHandler);
+        let show_id = egui::Id::new("rust_microsip_show_password");
+        let mut show = ui.data(|d| d.get_temp::<bool>(show_id).unwrap_or(false));
+        field_row(ui, "Password", |ui, id| {
+            text_field(
+                ui,
+                id,
+                egui::TextEdit::singleline(&mut form.password)
+                    .id(password_id())
+                    .password(!show)
+                    .char_limit(128)
+                    .hint_text("unchanged"),
+            );
+        });
+        field_row(ui, "", |ui, _| {
+            if ui.checkbox(&mut show, "Display password").changed() {
+                ui.data_mut(|d| d.insert_temp(show_id, show));
+            }
+        });
+        field_row(ui, "Display Name", |ui, id| {
+            text_field(
+                ui,
+                id,
+                egui::TextEdit::singleline(&mut form.display_name).char_limit(253),
+            );
+        });
+        ui.checkbox(
+            &mut form.remember,
+            "Remember password in the system keyring",
+        )
+        .on_hover_text("Stored in the desktop Secret Service; never in the settings database");
+        note(ui, palette, PASSWORD_NOTE);
+        ui.add_space(tokens::SPACING);
+        field_row(ui, "Transport", |ui, _| {
+            let current = form.transport();
+            let all = [Transport::Udp, Transport::Tcp, Transport::Tls];
+            let labels = all.map(|t| t.as_str().to_uppercase());
+            let options: Vec<_> = all
+                .iter()
+                .zip(&labels)
+                .map(|(t, label)| (label.as_str(), *t == current, None))
+                .collect();
+            if let Some(index) = segmented(ui, palette, &options) {
+                form.set_transport(all[index]);
+            }
+        });
+        field_row(ui, "Encryption", |ui, _| {
+            let media = form.media();
+            let srtp_allowed = form.transport() == Transport::Tls || media == MediaSecurity::Srtp;
+            let options = [
+                ("RTP", media == MediaSecurity::PlainRtp, None),
+                (
+                    "SRTP",
+                    media == MediaSecurity::Srtp,
+                    (!srtp_allowed).then_some("SRTP requires TLS signaling"),
+                ),
+            ];
+            form.media = Some(match segmented(ui, palette, &options) {
+                Some(0) => MediaSecurity::PlainRtp,
+                Some(_) => MediaSecurity::Srtp,
+                None => media,
+            });
+        });
+        if form.media() == MediaSecurity::Srtp && form.transport() != Transport::Tls {
+            ui.label(egui::RichText::new("SRTP requires TLS signaling").color(palette.error));
+        }
+        if form.media() == MediaSecurity::PlainRtp {
+            ui.label(egui::RichText::new("Calls will not be encrypted").color(palette.warn));
         }
     });
-    ui.label(egui::RichText::new(LINK_NOTE).small());
-    ui.separator();
-    agent_access(ui, st, out);
-    ui.separator();
-    ui.horizontal(|ui| {
-        if ui.button("Save and register").clicked() {
+    section(ui, palette, "Settings", None, |ui| {
+        audio_settings(ui, st, palette, out);
+        field_row(ui, "", |ui, _| {
+            note(ui, palette, "Devices apply on the next start");
+        });
+        ui.add_space(tokens::SPACING);
+        field_row(ui, "Theme", |ui, _| {
+            let options: Vec<_> = Theme::ALL
+                .iter()
+                .map(|t| (t.label(), *t == st.theme, None))
+                .collect();
+            if let Some(index) = segmented(ui, palette, &options) {
+                out.push(Action::SetTheme(Theme::ALL[index]));
+            }
+        });
+    });
+    section(ui, palette, "Links", None, |ui| {
+        ui.horizontal(|ui| {
+            if ui.button("Handle sip:/tel: links").clicked() {
+                out.push(Action::InstallLinkHandler);
+            }
+            if ui
+                .button("Remove")
+                .on_hover_text("Delete the link handler entry")
+                .clicked()
+            {
+                out.push(Action::RemoveLinkHandler);
+            }
+        });
+        note(ui, palette, LINK_NOTE);
+    });
+    section(ui, palette, "Agent access", Some("CLI/MCP"), |ui| {
+        agent_access(ui, st, palette, out);
+    });
+    section(ui, palette, "Configuration sources", None, |ui| {
+        note(ui, palette, OVERRIDE_NOTE);
+    });
+    ui.add_space(tokens::SPACING * 2.0);
+}
+
+/// Pinned under the settings form: the primary save button and Cancel.
+fn settings_footer(ui: &mut egui::Ui, palette: &tokens::Palette, out: &mut Vec<Action>) {
+    ui.add_space(tokens::SPACING);
+    right_row(ui, tokens::CONTROL_HEIGHT, |ui| {
+        let save =
+            egui::Button::new(egui::RichText::new("Save and register").color(palette.on_accent))
+                .fill(palette.accent)
+                .min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT));
+        if ui
+            .add(save)
+            .on_hover_text("Save, then register again")
+            .clicked()
+        {
             out.push(Action::SaveSettings);
         }
-        if ui.button("Cancel").on_hover_text("Esc").clicked() {
+        let cancel = egui::Button::new("Cancel").min_size(egui::vec2(0.0, tokens::CONTROL_HEIGHT));
+        if ui
+            .add(cancel)
+            .on_hover_text("Esc: discard changes")
+            .clicked()
+        {
             out.push(Action::CloseView);
         }
     });
+    ui.add_space(tokens::SPACING);
 }
 
 /// Grants for the CLI/MCP: what an agent may do without asking each time.
-fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
-    ui.label("Agent access (CLI/MCP)");
-    ui.label(
-        egui::RichText::new(
-            "Without a grant every change waits for Allow here. A grant lets a local program \
-             do only what you tick, for the numbers you list, for at most an hour.",
-        )
-        .small(),
+fn agent_access(
+    ui: &mut egui::Ui,
+    st: &mut UiState,
+    palette: &tokens::Palette,
+    out: &mut Vec<Action>,
+) {
+    note(
+        ui,
+        palette,
+        "Without a grant every change waits for Allow here. A grant lets a local program \
+         do only what you tick, for the numbers you list, for at most an hour.",
     );
     let form = &mut st.grant_form;
     egui::Grid::new("rust_microsip_grant_scopes")
@@ -1467,33 +1660,27 @@ fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
                 }
             }
         });
-    ui.horizontal(|ui| {
-        let label = ui.label("May call");
-        ui.add(
-            egui::TextEdit::singleline(&mut form.destinations)
-                .hint_text("1002, 1003")
-                .desired_width(140.0),
-        )
-        .labelled_by(label.id);
+    field_row(ui, "May call", |ui, id| {
+        text_field(
+            ui,
+            id,
+            egui::TextEdit::singleline(&mut form.destinations).hint_text("1002, 1003"),
+        );
     });
-    ui.horizontal(|ui| {
-        let label = ui
-            .label("May answer")
-            .on_hover_text("Trusts the caller ID the PBX passes on, which callers can fake");
-        ui.add(
-            egui::TextEdit::singleline(&mut form.incoming)
-                .hint_text("1002")
-                .desired_width(140.0),
+    field_row(ui, "May answer", |ui, id| {
+        text_field(
+            ui,
+            id,
+            egui::TextEdit::singleline(&mut form.incoming).hint_text("1002"),
         )
-        .labelled_by(label.id);
+        .on_hover_text("Trusts the caller ID the PBX passes on, which callers can fake");
     });
-    ui.horizontal(|ui| {
-        let label = ui.label("Minutes");
+    field_row(ui, "Minutes", |ui, id| {
         named(
             ui.add(egui::DragValue::new(&mut form.minutes).range(1..=60)),
             "Grant minutes",
         )
-        .labelled_by(label.id);
+        .labelled_by(id);
         let label = ui.label("Calls");
         named(
             ui.add(egui::DragValue::new(&mut form.quota).range(0..=100)),
@@ -1501,7 +1688,7 @@ fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
         )
         .labelled_by(label.id);
     });
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         if ui.button("Create grant file").clicked() {
             out.push(Action::CreateGrant { bootstrap: false });
         }
@@ -1514,16 +1701,16 @@ fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
         {
             out.push(Action::CreateGrant { bootstrap: true });
         }
+        if ui
+            .button("Clear audit log")
+            .on_hover_text("Delete the record of agent requests and decisions (asks first)")
+            .clicked()
+        {
+            out.push(Action::ClearAudit);
+        }
     });
-    if ui
-        .small_button("Clear audit log")
-        .on_hover_text("Delete the record of agent requests and decisions (asks first)")
-        .clicked()
-    {
-        out.push(Action::ClearAudit);
-    }
     if let Some(path) = &st.grant_form.written {
-        ui.label(egui::RichText::new(format!("Written to {path}")).small());
+        note(ui, palette, &format!("Written to {path}"));
     }
     for grant in st.listed_grants() {
         ui.horizontal(|ui| {
@@ -1532,19 +1719,22 @@ fn agent_access(ui: &mut egui::Ui, st: &mut UiState, out: &mut Vec<Action>) {
             } else {
                 "session"
             };
-            ui.label(
-                egui::RichText::new(format!(
-                    "{} ({kind}): {} · calls {}/{}",
-                    grant.id,
-                    grant.scopes.join(", "),
-                    grant.used,
-                    grant.quota
-                ))
-                .small(),
-            );
             if named(ui.small_button("Revoke"), "Revoke grant").clicked() {
                 out.push(Action::RevokeGrant(grant.id.clone()));
             }
+            ui.add(
+                egui::Label::new(
+                    egui::RichText::new(format!(
+                        "{} ({kind}): {} \u{00b7} calls {}/{}",
+                        grant.id,
+                        grant.scopes.join(", "),
+                        grant.used,
+                        grant.quota
+                    ))
+                    .small(),
+                )
+                .truncate(),
+            );
         });
     }
 }
@@ -1574,46 +1764,6 @@ mod tests {
         let icon = window_icon();
         assert_eq!((icon.width, icon.height), (256, 256));
         assert_eq!(icon.rgba.len(), 256 * 256 * 4);
-    }
-
-    /// WCAG 2.x contrast ratio between two opaque colors.
-    fn contrast(a: egui::Color32, b: egui::Color32) -> f32 {
-        let luminance = |c: egui::Color32| {
-            let channel = |v: u8| {
-                let v = f32::from(v) / 255.0;
-                if v <= 0.040_45 {
-                    v / 12.92
-                } else {
-                    ((v + 0.055) / 1.055).powf(2.4)
-                }
-            };
-            0.2126 * channel(c.r()) + 0.7152 * channel(c.g()) + 0.0722 * channel(c.b())
-        };
-        let (x, y) = (luminance(a), luminance(b));
-        (x.max(y) + 0.05) / (x.min(y) + 0.05)
-    }
-
-    #[test]
-    fn text_and_status_colors_meet_wcag_aa_in_both_themes() {
-        for dark in [false, true] {
-            let visuals = if dark {
-                egui::Visuals::dark()
-            } else {
-                egui::Visuals::light()
-            };
-            let palette = tokens::palette(dark);
-            for background in [visuals.panel_fill, visuals.window_fill] {
-                for (name, color) in [
-                    ("text", visuals.text_color()),
-                    ("ok", palette.ok),
-                    ("warn", palette.warn),
-                    ("error", palette.error),
-                ] {
-                    let ratio = contrast(color, background);
-                    assert!(ratio >= 4.5, "{name} dark={dark}: {ratio:.2}:1");
-                }
-            }
-        }
     }
 
     struct Fake {
@@ -1657,7 +1807,10 @@ mod tests {
             },
             Box::new(|_, _| Ok(())),
             Storage {
-                store: Store::open_in_memory().ok(),
+                store: Store::open_in_memory().ok().map(|mut store| {
+                    seed(&mut store, state::utc_now());
+                    store
+                }),
                 warning: Some("Not saved to disk.".into()),
                 recover_interrupted: true,
                 control: None,
@@ -1702,6 +1855,34 @@ mod tests {
             assert!(!output.shapes.is_empty());
             output.drop_without_applying_deltas();
         }
+        // Calls list with rows, one selected (action strip), and every
+        // status bar state.
+        app.state.history_filter = rust_microsip_storage::HistoryFilter::All;
+        app.dispatch(&ctx, Action::SearchHistory);
+        app.dispatch(&ctx, Action::SearchContacts);
+        assert!(app.state.history.len() >= 4);
+        let first = app.state.history.first().map(|e| e.id);
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("rust_microsip_history_selection"), first));
+        app.state.view = View::Main;
+        app.state.tab = Tab::Calls;
+        for (theme, registration, dnd) in [
+            (Theme::Dark, RegistrationState::Registered, false),
+            (Theme::Light, RegistrationState::Registered, true),
+            (Theme::Dark, RegistrationState::Registering, false),
+            (
+                Theme::Light,
+                RegistrationState::Failed(RegistrationFailure::Unauthorized),
+                false,
+            ),
+            (Theme::Dark, RegistrationState::Disabled, true),
+        ] {
+            ctx.set_theme(theme_preference(theme));
+            app.state.registration = registration;
+            app.state.dnd = dnd;
+            let output = ctx.run_ui(input(), |ui| app.draw(ui));
+            assert!(!output.shapes.is_empty());
+            output.drop_without_applying_deltas();
+        }
         // Connected call with the transfer prompt open.
         if let Some(active) = app.state.call.as_mut() {
             active.snapshot.phase = CallPhase::Established;
@@ -1713,5 +1894,167 @@ mod tests {
         assert!(!output.shapes.is_empty());
         output.drop_without_applying_deltas();
         assert_eq!(*sent.borrow(), 0);
+    }
+
+    /// Fictional history and contacts (lab extensions, invented names).
+    fn seed(store: &mut Store, now: i64) {
+        use rust_microsip_storage::{CallOutcome, CallRecord, ContactNumber, NewContact};
+        for (name, number) in [("Ana Lima", "1002"), ("Support desk", "600")] {
+            let contact = NewContact {
+                name: name.into(),
+                favorite: false,
+                numbers: vec![ContactNumber {
+                    number: number.into(),
+                    label: Some("work".into()),
+                }],
+            };
+            assert!(store.add_contact(&contact).is_ok());
+        }
+        for (index, (ago, direction, remote, outcome, seconds, secure)) in [
+            (
+                40 * 86_400,
+                Direction::Incoming,
+                "1002",
+                CallOutcome::Answered,
+                Some(48),
+                false,
+            ),
+            (
+                2 * 86_400,
+                Direction::Outgoing,
+                "600",
+                CallOutcome::Answered,
+                Some(128),
+                true,
+            ),
+            (
+                5 * 3600,
+                Direction::Outgoing,
+                "1003",
+                CallOutcome::Busy,
+                None,
+                false,
+            ),
+            (
+                3 * 3600,
+                Direction::Incoming,
+                "600",
+                CallOutcome::Answered,
+                Some(192),
+                false,
+            ),
+            (
+                40 * 60,
+                Direction::Incoming,
+                "1003",
+                CallOutcome::Missed,
+                None,
+                false,
+            ),
+            (
+                14 * 60,
+                Direction::Outgoing,
+                "1002",
+                CallOutcome::Answered,
+                Some(84),
+                true,
+            ),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let started = now - ago;
+            let record = CallRecord {
+                session_key: format!("fixture:{index}"),
+                started_utc: started,
+                answered_utc: seconds.map(|_| started + 5),
+                ended_utc: Some(started + 5 + seconds.unwrap_or(0)),
+                direction,
+                remote: remote.into(),
+                outcome,
+                duration_ms: seconds.map(|s| u64::try_from(s).unwrap_or(0) * 1000),
+                secure,
+            };
+            assert!(store.record_call(&record).is_ok());
+        }
+    }
+
+    /// Writes the fictional fixture to `$RMS_SEED_DB` for screenshots of a
+    /// scratch profile: `RMS_SEED_DB=<absolute path>/rust-microsip.sqlite3 cargo
+    /// test -p rust-microsip seed_fixture -- --ignored` (tests run in the package directory).
+    #[test]
+    #[ignore = "writes a fixture database for captures"]
+    fn seed_fixture() {
+        let Some(path) = std::env::var_os("RMS_SEED_DB") else {
+            return;
+        };
+        let path = std::path::PathBuf::from(path);
+        if let Some(parent) = path.parent() {
+            assert!(std::fs::create_dir_all(parent).is_ok());
+        }
+        let store = Store::open(&path);
+        assert!(store.is_ok());
+        if let Ok(mut store) = store {
+            seed(&mut store, state::utc_now());
+        }
+    }
+
+    #[test]
+    fn presence_mirrors_microsip_status_words() {
+        let mut st = UiState::new(UiSettings::default());
+        for (registration, dnd, expected, text) in [
+            (
+                RegistrationState::Registered,
+                false,
+                Presence::Online,
+                "Online",
+            ),
+            (
+                RegistrationState::Registered,
+                true,
+                Presence::DoNotDisturb,
+                "Do not disturb",
+            ),
+            (
+                RegistrationState::Registering,
+                false,
+                Presence::Connecting,
+                "Connecting\u{2026}",
+            ),
+            (
+                RegistrationState::Disabled,
+                false,
+                Presence::Offline,
+                "Offline",
+            ),
+            (
+                RegistrationState::Disabled,
+                true,
+                Presence::Offline,
+                "Offline \u{00b7} DND",
+            ),
+            (
+                RegistrationState::Failed(RegistrationFailure::Unauthorized),
+                false,
+                Presence::Error,
+                "Incorrect password",
+            ),
+            (
+                RegistrationState::Failed(RegistrationFailure::Network),
+                false,
+                Presence::Error,
+                "Connection failed",
+            ),
+        ] {
+            st.registration = registration;
+            st.dnd = dnd;
+            assert_eq!(
+                presence(&st),
+                (expected, text.to_owned()),
+                "{registration:?}"
+            );
+        }
+        st.engine_failed = true;
+        assert_eq!(presence(&st).0, Presence::Error);
     }
 }
