@@ -893,7 +893,10 @@ fn panic_text(payload: &(dyn std::any::Any + Send)) -> &str {
 /// within its bounded shutdown instead of dying mid-call; the process then
 /// exits with 143 (TERM) or 130 (INT), stored in `code`. Without a window
 /// yet, or on a second signal while shutting down, it exits immediately
-/// with that code.
+/// with that code. If the window loop does not run within
+/// [`bridge::STALL`] (a covered window on Wayland), the engine shuts down
+/// here and the process exits; events the window had not applied yet are
+/// then missing from the history, which beats hanging until SIGKILL.
 fn watch_signals(
     window: Arc<OnceLock<eframe::egui::Context>>,
     terminating: Arc<AtomicBool>,
