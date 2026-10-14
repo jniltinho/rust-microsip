@@ -77,3 +77,57 @@ jobs:
           sh packaging/release/scan-publication.sh dist
       - name: Docker context allowlist and negative control
         run: sh packaging/check-context.sh
+
+  windows-build:
+    name: Windows cross build (Docker)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Clippy, release exes and test executables for x86_64-pc-windows-gnu
+        run: docker buildx build --progress plain --platform linux/amd64 --target windows-artifacts --output type=local,dest=dist-windows .
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-binaries
+          path: dist-windows/
+          retention-days: 7
+
+  # Runs the Docker-built binaries; the runner's own Rust is never used.
+  windows-test:
+    name: Windows tests (Docker-built binaries)
+    needs: windows-build
+    runs-on: windows-2022
+    timeout-minutes: 30
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: windows-binaries
+          path: bin
+      - name: Checksums
+        shell: pwsh
+        run: |
+          Set-Location bin
+          foreach ($line in Get-Content SHA256SUMS) {
+            $hash, $file = $line -split '\s+', 2
+            $actual = (Get-FileHash -Algorithm SHA256 $file.TrimStart('*')).Hash.ToLower()
+            if ($actual -ne $hash) { throw "checksum mismatch: $file" }
+          }
+      - name: Test executables
+        shell: pwsh
+        run: |
+          $failed = 0
+          foreach ($exe in Get-ChildItem bin/tests -Filter *.exe) {
+            Write-Host "== $($exe.Name)"
+            & $exe.FullName --test-threads=1
+            if ($LASTEXITCODE -ne 0) { $failed++ }
+          }
+          if ($failed -ne 0) { throw "$failed test executable(s) failed" }
+      - name: CLI smoke
+        shell: pwsh
+        run: |
+          $version = & bin/rust-microsip-cli.exe --version
+          if ($version -notmatch '^rust-microsip ') { throw "unexpected version: $version" }
+          & bin/rust-microsip-cli.exe status
+          if ($LASTEXITCODE -ne 4) { throw "status without an owner must exit 4, got $LASTEXITCODE" }

@@ -12,6 +12,8 @@ members = [
     "crates/control",
 ]
 resolver = "3"
+# Vendored crates keep their own manifests and lints (vendor/README.md).
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0-rc.1"
@@ -31,6 +33,10 @@ expect_used = "deny"
 todo = "deny"
 unimplemented = "deny"
 dbg_macro = "deny"
+
+# Patched copies of registry crates, reviewed in vendor/README.md.
+[patch.crates-io]
+wgpu-hal = { path = "vendor/wgpu-hal" }
 
 [profile.release]
 lto = "thin"

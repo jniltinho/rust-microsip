@@ -233,6 +233,38 @@ impl Drop for DeviceGuard {
     }
 }
 
+/// Frames of 20 ms due at each tick, measured on the clock rather than by
+/// counting ticks: Windows timers fire every ~15.6 ms, so a 20 ms interval
+/// lands ~31 ms apart and would send only ~32 frames a second.
+struct Pacer {
+    start: tokio::time::Instant,
+    done: u64,
+}
+
+impl Pacer {
+    /// Most frames processed at once; a longer stall (suspend, a frozen
+    /// process) restarts the schedule instead of sending a burst.
+    const MAX_CATCH_UP: u64 = 5;
+
+    fn new(start: tokio::time::Instant) -> Self {
+        Self { start, done: 0 }
+    }
+
+    /// Frames to process now (at least one per tick).
+    fn due(&mut self, now: tokio::time::Instant) -> u64 {
+        let elapsed = u64::try_from(now.saturating_duration_since(self.start).as_millis() / 20)
+            .unwrap_or(u64::MAX)
+            .saturating_add(1);
+        let mut due = elapsed.saturating_sub(self.done).max(1);
+        if due > Self::MAX_CATCH_UP {
+            self.done = elapsed.saturating_sub(1);
+            due = 1;
+        }
+        self.done = self.done.saturating_add(due);
+        due
+    }
+}
+
 /// Run until `control` closes. The device bridge is used only on the tick.
 pub(super) async fn run(
     params: MediaParams,
@@ -271,11 +303,12 @@ pub(super) async fn run(
     let mut dtmf: Option<(Transmission, u32)> = None;
     let mut tick = tokio::time::interval(Duration::from_millis(20));
     tick.set_missed_tick_behavior(MissedTickBehavior::Delay);
+    let mut pacer = Pacer::new(tokio::time::Instant::now());
     let mut buffer = [0u8; 1600];
     let mut heard = tokio::time::Instant::now();
     let mut frame = [0i16; FRAME_SAMPLES];
     let mut encoded = [0u8; FRAME_SAMPLES];
-    loop {
+    'media: loop {
         tokio::select! {
             command = control.recv() => match command {
                 None => break,
@@ -303,11 +336,12 @@ pub(super) async fn run(
                     jitter = JitterBuffer::default();
                 }
             },
-            _ = tick.tick() => {
+            now = tick.tick() => {
                 if receive && heard.elapsed() > INACTIVITY {
                     stats.failure = Some(MediaFailure::Inactivity);
-                    break;
+                    break 'media;
                 }
+                for _ in 0..pacer.due(now) {
                 let captured = media.lock().map(|mut io| io.capture(&mut frame)).unwrap_or(false);
                 if !captured || muted {
                     frame.fill(0);
@@ -338,6 +372,7 @@ pub(super) async fn run(
                 let played = if receive { jitter.pop() } else { None };
                 if let Ok(mut io) = media.lock() {
                     io.play(&played.unwrap_or([0; FRAME_SAMPLES]));
+                }
                 }
             },
             result = params.socket.recv_from(&mut buffer) => {
@@ -688,6 +723,23 @@ mod tests {
     /// Wait for the guard's blocking `stop` to run.
     async fn settle() {
         tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[test]
+    fn pacing_follows_the_clock_with_a_bounded_catch_up() {
+        let start = tokio::time::Instant::now();
+        let at = |ms| start + Duration::from_millis(ms);
+        let mut pacer = Pacer::new(start);
+        assert_eq!(pacer.due(at(0)), 1);
+        // Coarse timers: ticks 31 ms apart still average one frame per 20 ms.
+        let mut frames = 1;
+        for k in 1..=100u64 {
+            frames += pacer.due(at(31 * k));
+        }
+        assert_eq!(frames, 31 * 100 / 20 + 1);
+        // A long stall restarts the schedule: one frame, no burst.
+        assert_eq!(pacer.due(at(31 * 100 + 5_000)), 1);
+        assert_eq!(pacer.due(at(31 * 100 + 5_020)), 1);
     }
 
     #[tokio::test]

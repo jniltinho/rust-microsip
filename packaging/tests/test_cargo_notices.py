@@ -99,6 +99,43 @@ class NoticeTests(unittest.TestCase):
             collector.collect(metadata, {"package": []}, Path(directory), Path(directory))
 
 
+class VendoredTests(unittest.TestCase):
+    """Path-patched copies are accepted only as pinned in VENDORED."""
+
+    def setup_root(self, directory, apache=None):
+        root = Path(directory) / "repo"
+        crate = root / "vendor" / "wgpu-hal"
+        crate.mkdir(parents=True)
+        (crate / "Cargo.toml").write_text("")
+        real = Path(__file__).parents[2] / "vendor" / "wgpu-hal"
+        (crate / "LICENSE.APACHE").write_bytes(apache if apache is not None else (real / "LICENSE.APACHE").read_bytes())
+        (crate / "LICENSE.MIT").write_bytes((real / "LICENSE.MIT").read_bytes())
+        package = {"id": "w", "name": "wgpu-hal", "version": "30.0.1", "source": None,
+                   "license": "MIT OR Apache-2.0", "manifest_path": str(crate / "Cargo.toml")}
+        metadata = {"workspace_members": ["own"], "packages": [package],
+                    "resolve": {"nodes": [{"id": "w", "features": []}]}}
+        return root, metadata
+
+    def test_accepts_the_pinned_vendored_crate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, metadata = self.setup_root(directory)
+            report = collector.collect(metadata, {"package": []}, Path(directory), Path(directory) / "out",
+                                       vendor_root=root)
+            self.assertEqual(report["packages"][0]["source"], "vendored:vendor/wgpu-hal")
+
+    def test_rejects_changed_notice_or_other_location(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root, metadata = self.setup_root(directory, apache=b"edited")
+            with self.assertRaises(ValueError):
+                collector.collect(metadata, {"package": []}, Path(directory), Path(directory) / "out",
+                                  vendor_root=root)
+        with tempfile.TemporaryDirectory() as directory:
+            root, metadata = self.setup_root(directory)
+            with self.assertRaises(ValueError):
+                collector.collect(metadata, {"package": []}, Path(directory), Path(directory) / "out",
+                                  vendor_root=root / "elsewhere")
+
+
 def exception(checksum, expression="Apache-2.0", name="example", version="1.0.0"):
     return {(name, version): {"name": name, "version": version, "archive_sha256": checksum,
                               "declared_expression": expression, "chosen_license": "Apache-2.0",

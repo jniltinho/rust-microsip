@@ -19,7 +19,7 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     crates/telephony/src/g0_hold.rs crates/telephony/examples/g0_hold.rs \
     crates/telephony/src/g0_transfer.rs crates/telephony/examples/g0_transfer.rs \
     crates/media/src/dtmf.rs crates/media/Cargo.toml crates/media/src/lib.rs crates/media/tests/media.rs \
-    packaging/verify.sh packaging/export-scaffold.sh \
+    packaging/verify.sh packaging/export-scaffold.sh packaging/windows/collect-tests.py packaging/windows/zip.py \
     packaging/check-g0-dependencies.py packaging/tests/test_g0_dependencies.py \
     packaging/collect-cargo-notices.py packaging/tests/test_cargo_notices.py \
     packaging/reviewed-licenses.json \
@@ -28,6 +28,7 @@ for path in Dockerfile .dockerignore Cargo.toml Cargo.lock rust-toolchain.toml L
     packaging/appimage/build-appimage.sh packaging/appimage/verify.sh \
     packaging/appimage/pins.txt packaging/appimage/rust-microsip.desktop \
     crates/core/Cargo.toml crates/audio/Cargo.toml crates/config/Cargo.toml crates/storage/Cargo.toml crates/platform/Cargo.toml crates/platform-windows/Cargo.toml crates/control/Cargo.toml \
+    $(find vendor/wgpu-hal -type f | sort) \
     $(find apps/rust-microsip/src apps/rust-microsip/src/bin apps/rust-microsip/tests apps/rust-microsip/src/ui crates/telephony/src/engine crates/core/src crates/core/tests crates/audio/src \
         crates/config/src crates/storage/src crates/platform/src crates/platform/src/control crates/platform-windows/src crates/control/src apps/rust-microsip/src/ui/state apps/rust-microsip/src/mcp apps/rust-microsip/examples crates/telephony/examples crates/media/src -maxdepth 1 -type f -name '*.rs' | sort) \
     $(find packaging/third-party-notices packaging/appimage/runtime-licenses -type f | sort); do

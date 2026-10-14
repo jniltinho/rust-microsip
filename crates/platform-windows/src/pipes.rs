@@ -11,13 +11,24 @@
 //!   single-instance lock, released by the kernel when the process dies; it
 //!   has exactly one server instance, reused for every client, so the lock is
 //!   held for as long as the [`Listener`] lives.
-//! - Remote clients are rejected (`PIPE_REJECT_REMOTE_CLIENTS`) and the pipes
-//!   carry a protected DACL granting access to the current user SID only.
-//! - Every accepted client's process token must carry this user's SID and be
-//!   neither restricted nor an AppContainer token; otherwise the connection is
-//!   closed without a byte (the `SO_PEERCRED` contract of the Unix code).
-//!   Clients check the server process the same way, and open the pipe with
-//!   identification-only impersonation, so they never talk to an impostor.
+//! - Remote clients are rejected (`PIPE_REJECT_REMOTE_CLIENTS`). The pipes
+//!   are owned by the current user SID, carry a protected DACL granting
+//!   access to that SID only, and a medium no-read-up/no-write-up mandatory
+//!   label, so low-integrity processes of the same user cannot open them.
+//! - After a client's first message and before any answer, the server
+//!   impersonates it (identification level) and checks its token: this
+//!   user's SID, neither restricted nor AppContainer, at least medium
+//!   integrity, not anonymous; otherwise the connection is closed without a
+//!   byte (the `SO_PEERCRED` contract of the Unix code). The client process
+//!   id is kept only as information for the approval prompt.
+//! - Clients open the pipe with identification-only impersonation and check
+//!   its security descriptor: owner this user's SID and label at least
+//!   medium, so they never talk to another user or a low-integrity squatter.
+//!   Residual risk: another user (or a same-user restricted token at medium
+//!   integrity) can pre-create a pipe name, which the owner reports as an
+//!   insecure profile instead of starting: a denial of service, never a
+//!   connection to the impostor (except that a restricted medium squatter
+//!   passes the descriptor check, as its objects carry our owner and label).
 //! - I/O is blocking on dedicated threads, as on Unix. Handles are opened
 //!   overlapped only to bound every read, write and accept with a timeout.
 //!
@@ -43,16 +54,21 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use windows_sys::Win32::Foundation::{
-    ERROR_ACCESS_DENIED, ERROR_BROKEN_PIPE, ERROR_FILE_NOT_FOUND, ERROR_IO_PENDING, ERROR_NO_DATA,
-    ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE,
-    HANDLE, INVALID_HANDLE_VALUE, LocalFree, WAIT_TIMEOUT, WIN32_ERROR,
+    ERROR_ACCESS_DENIED, ERROR_BROKEN_PIPE, ERROR_FILE_NOT_FOUND, ERROR_IO_INCOMPLETE,
+    ERROR_IO_PENDING, ERROR_NO_DATA, ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED,
+    ERROR_PIPE_NOT_CONNECTED, ERROR_SUCCESS, GENERIC_READ, GENERIC_WRITE, HANDLE,
+    INVALID_HANDLE_VALUE, LocalFree, WAIT_TIMEOUT, WIN32_ERROR,
 };
 use windows_sys::Win32::Security::Authorization::{
-    ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    ConvertStringSecurityDescriptorToSecurityDescriptorW, GetSecurityInfo, SDDL_REVISION_1,
+    SE_KERNEL_OBJECT,
 };
 use windows_sys::Win32::Security::{
-    GetTokenInformation, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES, TOKEN_INFORMATION_CLASS,
-    TOKEN_QUERY, TokenIsAppContainer, TokenIsRestricted, TokenUser,
+    ACE_HEADER, ACL, GetAce, GetLengthSid, GetTokenInformation, IsValidSid,
+    LABEL_SECURITY_INFORMATION, OWNER_SECURITY_INFORMATION, PSECURITY_DESCRIPTOR, PSID,
+    RevertToSelf, SECURITY_ATTRIBUTES, SecurityIdentification, TOKEN_INFORMATION_CLASS,
+    TOKEN_QUERY, TokenImpersonationLevel, TokenIntegrityLevel, TokenIsAppContainer,
+    TokenIsRestricted, TokenUser,
 };
 use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, FILE_FLAG_OVERLAPPED, OPEN_EXISTING,
@@ -63,11 +79,12 @@ use windows_sys::Win32::System::IO::{
 };
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
-    GetNamedPipeServerProcessId, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE,
+    ImpersonateNamedPipeClient, PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE,
     PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
 };
 use windows_sys::Win32::System::Threading::{
-    CreateEventW, OpenProcess, OpenProcessToken, PROCESS_QUERY_LIMITED_INFORMATION,
+    CreateEventW, GetCurrentThread, OpenProcess, OpenProcessToken, OpenThreadToken,
+    PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 // --- Win32 layer: every unsafe block of this module ------------------------
@@ -78,6 +95,11 @@ const PIPE_BUFFER: u32 = 4096;
 const SLICE: Duration = Duration::from_millis(250);
 /// Pause before retrying a busy pipe or after a persistent error.
 const RETRY: Duration = Duration::from_millis(50);
+/// `SECURITY_MANDATORY_MEDIUM_RID`: the integrity level of a normal desktop
+/// process (defined here to avoid the `Win32_System_SystemServices` feature).
+const MEDIUM_INTEGRITY: u32 = 0x2000;
+/// `SYSTEM_MANDATORY_LABEL_ACE_TYPE`.
+const LABEL_ACE_TYPE: u8 = 17;
 
 fn is(error: &io::Error, code: WIN32_ERROR) -> bool {
     error.raw_os_error() == i32::try_from(code).ok()
@@ -109,9 +131,13 @@ impl Drop for LocalMemory {
     }
 }
 
-/// Protected DACL with one entry: generic all for `sid` (design W4).
+/// Owner `sid`, a protected DACL with one entry (generic all for `sid`,
+/// design W4) and a medium no-read-up/no-write-up label, so low-integrity
+/// processes (sandboxes, AppContainers) of the same user cannot open the
+/// pipe. Setting a label at or below our own level needs no privilege; a
+/// low-integrity owner fails here, which is intended.
 fn owner_only_descriptor(sid: &str) -> io::Result<LocalMemory> {
-    let sddl = wide(&format!("D:P(A;;GA;;;{sid})"));
+    let sddl = wide(&format!("O:{sid}D:P(A;;GA;;;{sid})S:(ML;;NWNR;;;ME)"));
     let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
     // SAFETY: `sddl` is NUL-terminated and outlives the call; `descriptor`
     // is a valid out pointer and the optional size pointer may be null.
@@ -201,13 +227,108 @@ fn client_pid(pipe: &OwnedHandle) -> io::Result<u32> {
     Ok(pid)
 }
 
-fn server_pid(pipe: &OwnedHandle) -> io::Result<u32> {
-    let mut pid = 0;
-    // SAFETY: `pipe` is an open client end and `pid` a valid out pointer.
-    if unsafe { GetNamedPipeServerProcessId(pipe.as_raw_handle(), &mut pid) } == 0 {
+/// The calling thread impersonates a pipe client while this lives; dropping
+/// it reverts to the process token. Not `Send`: impersonation is per thread.
+struct Impersonation(std::marker::PhantomData<*const ()>);
+impl Drop for Impersonation {
+    fn drop(&mut self) {
+        // SAFETY: plain call that only affects the current thread.
+        if unsafe { RevertToSelf() } == 0 {
+            // Going on under the client's identity is never acceptable.
+            std::process::abort();
+        }
+    }
+}
+
+/// Impersonate the client of `pipe` (data must have been read from it).
+fn impersonate(pipe: &OwnedHandle) -> io::Result<Impersonation> {
+    // SAFETY: `pipe` is a connected server instance; failure leaves the
+    // thread unchanged.
+    if unsafe { ImpersonateNamedPipeClient(pipe.as_raw_handle()) } == 0 {
         return Err(io::Error::last_os_error());
     }
-    Ok(pid)
+    Ok(Impersonation(std::marker::PhantomData))
+}
+
+/// Token of the client the current thread impersonates, opened for query
+/// with the process's own access rights (works for identification-level
+/// tokens; anonymous ones fail).
+fn thread_token(_: &Impersonation) -> io::Result<OwnedHandle> {
+    // SAFETY: plain call; the pseudo-handle needs no closing.
+    let thread = unsafe { GetCurrentThread() };
+    let mut raw: HANDLE = ptr::null_mut();
+    // SAFETY: `thread` is the current-thread pseudo-handle and `raw` a valid
+    // out pointer.
+    if unsafe { OpenThreadToken(thread, TOKEN_QUERY, 1, &mut raw) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    owned(raw)
+}
+
+/// Owner SID and lowest mandatory label of the kernel object `handle`
+/// (`None`: no label, which Windows treats as medium).
+fn object_owner_and_label(handle: &OwnedHandle) -> io::Result<(String, Option<u32>)> {
+    let invalid = || io::Error::new(io::ErrorKind::InvalidData, "malformed security descriptor");
+    let mut owner: PSID = ptr::null_mut();
+    let mut sacl: *mut ACL = ptr::null_mut();
+    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+    // SAFETY: `handle` is open with READ_CONTROL (GENERIC_READ); every out
+    // pointer is valid and the unused ones are null, as allowed.
+    let error = unsafe {
+        GetSecurityInfo(
+            handle.as_raw_handle(),
+            SE_KERNEL_OBJECT,
+            OWNER_SECURITY_INFORMATION | LABEL_SECURITY_INFORMATION,
+            &mut owner,
+            ptr::null_mut(),
+            ptr::null_mut(),
+            &mut sacl,
+            &mut descriptor,
+        )
+    };
+    if error != ERROR_SUCCESS {
+        return Err(io::Error::from_raw_os_error(
+            i32::try_from(error).unwrap_or(i32::MAX),
+        ));
+    }
+    // `owner` and `sacl` point into this allocation.
+    let _descriptor = LocalMemory(descriptor);
+    // SAFETY: `owner` is null or points into the live descriptor.
+    if owner.is_null() || unsafe { IsValidSid(owner) } == 0 {
+        return Err(invalid());
+    }
+    // SAFETY: `owner` is a valid SID (checked above).
+    let owner_len = usize::try_from(unsafe { GetLengthSid(owner) }).map_err(|_| invalid())?;
+    // SAFETY: a valid SID is readable for exactly `GetLengthSid` bytes, all
+    // inside the live descriptor, and nothing writes it meanwhile.
+    let owner_bytes = unsafe { std::slice::from_raw_parts(owner.cast::<u8>(), owner_len) };
+    let owner = sid_string(owner_bytes).ok_or_else(invalid)?;
+    let mut label: Option<u32> = None;
+    if !sacl.is_null() {
+        // SAFETY: `sacl` points to an ACL inside the live descriptor.
+        let count = unsafe { (*sacl).AceCount };
+        for index in 0..u32::from(count) {
+            let mut ace: *mut c_void = ptr::null_mut();
+            // SAFETY: `sacl` is valid, `index` below its ACE count and `ace` a
+            // valid out pointer.
+            if unsafe { GetAce(sacl, index, &mut ace) } == 0 || ace.is_null() {
+                return Err(invalid());
+            }
+            // SAFETY: every ACE starts with an `ACE_HEADER`.
+            let header = unsafe { ace.cast::<ACE_HEADER>().read_unaligned() };
+            if header.AceType != LABEL_ACE_TYPE {
+                continue;
+            }
+            // SAFETY: the system validated this ACL, so the ACE lies within
+            // it for its whole `AceSize`.
+            let bytes = unsafe {
+                std::slice::from_raw_parts(ace.cast::<u8>(), usize::from(header.AceSize))
+            };
+            let rid = label_rid(bytes).ok_or_else(invalid)?;
+            label = Some(label.map_or(rid, |lowest| lowest.min(rid)));
+        }
+    }
+    Ok((owner, label))
 }
 
 /// Fill `out` with one token information class.
@@ -248,29 +369,42 @@ fn process_token(pid: u32) -> io::Result<OwnedHandle> {
     owned(raw_token)
 }
 
-/// String SID of the token's user.
-fn token_sid(token: &OwnedHandle) -> io::Result<String> {
-    // TOKEN_USER (16 bytes) plus the largest SID (68 bytes).
-    let mut user = [0u64; 16];
-    token_information(token, TokenUser, &mut user)?;
-    let bytes: Vec<u8> = user.iter().flat_map(|word| word.to_ne_bytes()).collect();
-    sid_from_token_user(&bytes, user.as_ptr() as usize)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "malformed token user"))
+/// Parse the SID of a `TOKEN_USER` or `TOKEN_MANDATORY_LABEL` (both a
+/// `SID_AND_ATTRIBUTES`) of `token`.
+fn token_sid_field<T>(
+    token: &OwnedHandle,
+    class: TOKEN_INFORMATION_CLASS,
+    parse: impl FnOnce(&[u8]) -> Option<T>,
+) -> io::Result<T> {
+    // SID_AND_ATTRIBUTES (16 bytes) plus the largest SID (68 bytes).
+    let mut info = [0u64; 16];
+    token_information(token, class, &mut info)?;
+    let bytes: Vec<u8> = info.iter().flat_map(|word| word.to_ne_bytes()).collect();
+    sid_in_copy(&bytes, info.as_ptr() as usize)
+        .and_then(parse)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidData, "malformed token SID"))
 }
 
-/// User and token kind of process `pid`.
-fn process_identity(pid: u32) -> io::Result<Identity> {
-    let token = process_token(pid)?;
-    let sid = token_sid(&token)?;
-    // Both classes answer a DWORD; any nonzero value means yes.
-    let mut restricted = [0u64];
-    token_information(&token, TokenIsRestricted, &mut restricted)?;
-    let mut app_container = [0u64];
-    token_information(&token, TokenIsAppContainer, &mut app_container)?;
+/// String SID of the token's user.
+fn token_sid(token: &OwnedHandle) -> io::Result<String> {
+    token_sid_field(token, TokenUser, sid_string)
+}
+
+/// A DWORD-sized token information class (the buffer starts zeroed).
+fn token_dword(token: &OwnedHandle, class: TOKEN_INFORMATION_CLASS) -> io::Result<u32> {
+    let mut value = [0u64];
+    token_information(token, class, &mut value)?;
+    Ok(u32::try_from(value[0]).unwrap_or(u32::MAX))
+}
+
+/// User, token kind and integrity level of `token`.
+fn token_identity(token: &OwnedHandle) -> io::Result<Identity> {
     Ok(Identity {
-        sid,
-        restricted: restricted[0] != 0,
-        app_container: app_container[0] != 0,
+        sid: token_sid(token)?,
+        // Both classes answer a DWORD; any nonzero value means yes.
+        restricted: token_dword(token, TokenIsRestricted)? != 0,
+        app_container: token_dword(token, TokenIsAppContainer)? != 0,
+        integrity: token_sid_field(token, TokenIntegrityLevel, integrity_rid)?,
     })
 }
 
@@ -325,7 +459,10 @@ fn transfer(
         let slice = deadline.map_or(SLICE, |d| {
             d.saturating_duration_since(Instant::now()).min(SLICE)
         });
-        let millis = u32::try_from(slice.as_millis()).unwrap_or(u32::MAX);
+        // Rounded up and at least 1 ms: a zero wait only polls.
+        let millis = u32::try_from(slice.as_micros().div_ceil(1000))
+            .unwrap_or(u32::MAX)
+            .max(1);
         let mut done = 0;
         // SAFETY: `pending` describes the operation started above on
         // `handle`; `done` is a valid out pointer.
@@ -333,7 +470,8 @@ fn transfer(
             return Ok(done);
         }
         let error = io::Error::last_os_error();
-        if !is(&error, WAIT_TIMEOUT) {
+        // ERROR_IO_INCOMPLETE is what a zero-length wait reports: still pending.
+        if !is(&error, WAIT_TIMEOUT) && !is(&error, ERROR_IO_INCOMPLETE) {
             // Completed with an error, or the wait failed: either way make
             // sure nothing is pending before the buffers go away.
             let _ = cancel_and_wait(handle, pending);
@@ -342,7 +480,8 @@ fn transfer(
         let expired = deadline.is_some_and(|d| Instant::now() >= d)
             || stop.is_some_and(|s| s.load(Ordering::SeqCst));
         if expired {
-            // Data that arrived before the cancel still counts.
+            // An operation that completed before the cancel still counts
+            // (its bytes are returned); only a cancelled one times out.
             return cancel_and_wait(handle, pending)
                 .map_err(|_| io::Error::from(io::ErrorKind::TimedOut));
         }
@@ -377,6 +516,8 @@ struct Pipe {
     handle: Arc<OwnedHandle>,
     read_timeout: Option<Duration>,
     write_timeout: Option<Duration>,
+    /// Ends any read or write early (`TimedOut`) once set.
+    stop: Option<Arc<AtomicBool>>,
 }
 impl Pipe {
     fn new(handle: OwnedHandle) -> Self {
@@ -384,6 +525,7 @@ impl Pipe {
             handle: Arc::new(handle),
             read_timeout: None,
             write_timeout: None,
+            stop: None,
         }
     }
 }
@@ -392,7 +534,12 @@ impl Read for Pipe {
         if buf.is_empty() {
             return Ok(0);
         }
-        match transfer(&self.handle, Op::Read(buf), self.read_timeout, None) {
+        match transfer(
+            &self.handle,
+            Op::Read(buf),
+            self.read_timeout,
+            self.stop.as_deref(),
+        ) {
             Ok(read) => Ok(usize::try_from(read).unwrap_or(0)),
             // The other end closed: end of stream, as on a socket.
             Err(e)
@@ -411,8 +558,13 @@ impl Write for Pipe {
         if buf.is_empty() {
             return Ok(0);
         }
-        transfer(&self.handle, Op::Write(buf), self.write_timeout, None)
-            .map(|written| usize::try_from(written).unwrap_or(0))
+        transfer(
+            &self.handle,
+            Op::Write(buf),
+            self.write_timeout,
+            self.stop.as_deref(),
+        )
+        .map(|written| usize::try_from(written).unwrap_or(0))
     }
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
@@ -428,41 +580,85 @@ fn accept(pipe: &OwnedHandle, stop: &AtomicBool) -> io::Result<bool> {
     }
 }
 
-/// User SID and token kind of a process.
+/// User SID, token kind and integrity level (RID) of a client token.
 #[derive(Debug, PartialEq, Eq)]
 struct Identity {
     sid: String,
     restricted: bool,
     app_container: bool,
+    integrity: u32,
 }
 impl Identity {
-    /// Same user, full (non-restricted, non-AppContainer) token.
+    /// Same user, full (non-restricted, non-AppContainer) token, at least
+    /// medium integrity (an elevated client is fine).
     fn is_trusted_by(&self, own_sid: &str) -> bool {
-        self.sid == own_sid && !self.restricted && !self.app_container
+        self.sid == own_sid
+            && !self.restricted
+            && !self.app_container
+            && self.integrity >= MEDIUM_INTEGRITY
     }
 }
 
-/// The client's process id when it runs as `own_sid` with a full token.
-/// Any lookup failure counts as untrusted.
-fn trusted_client(pipe: &OwnedHandle, own_sid: &str) -> Option<u32> {
-    let pid = client_pid(pipe).ok()?;
-    process_identity(pid)
-        .is_ok_and(|peer| peer.is_trusted_by(own_sid))
-        .then_some(pid)
+/// Whether the client of `pipe` is trusted, judged by its impersonation
+/// token (not by its process id, which can be reused and may not be openable
+/// across elevation). Call only after reading the client's first message and
+/// before answering anything. Any failure, including an anonymous client,
+/// counts as untrusted.
+fn trusted_client(pipe: &OwnedHandle, own_sid: &str) -> bool {
+    // The guard reverts as soon as the token is open, also on error.
+    let Ok(token) = impersonate(pipe).and_then(|guard| thread_token(&guard)) else {
+        return false;
+    };
+    // The impersonation token is queried with the process's own identity.
+    let level_ok = token_dword(&token, TokenImpersonationLevel)
+        .is_ok_and(|level| i32::try_from(level).is_ok_and(|l| l >= SecurityIdentification));
+    level_ok && token_identity(&token).is_ok_and(|peer| peer.is_trusted_by(own_sid))
+}
+
+/// The server a client reached is trusted when the pipe is owned by our user
+/// and labelled at least medium (no label means medium): a low-integrity
+/// squatter of the same user gets a low label, another user another owner.
+fn server_is_trusted(owner: &str, label: Option<u32>, own_sid: &str) -> bool {
+    owner == own_sid && label.unwrap_or(MEDIUM_INTEGRITY) >= MEDIUM_INTEGRITY
 }
 
 fn own_sid() -> io::Result<String> {
     token_sid(&process_token(std::process::id())?)
 }
 
-/// The SID inside a `TOKEN_USER` copied to `bytes` from address `base`:
-/// its pointer must point back into the copy.
-fn sid_from_token_user(bytes: &[u8], base: usize) -> Option<String> {
+/// The binary SID of a `SID_AND_ATTRIBUTES` copied to `bytes` from address
+/// `base`: its pointer must point back into the copy.
+fn sid_in_copy(bytes: &[u8], base: usize) -> Option<&[u8]> {
     let width = size_of::<usize>();
     let pointer = usize::from_ne_bytes(bytes.get(..width)?.try_into().ok()?);
     let offset = pointer.checked_sub(base)?;
     let count = usize::from(*bytes.get(offset.checked_add(1)?)?);
-    sid_string(bytes.get(offset..offset.checked_add(8 + 4 * count)?)?)
+    bytes.get(offset..offset.checked_add(8 + 4 * count)?)
+}
+
+/// The user SID inside a `TOKEN_USER` copied to `bytes` from address `base`.
+#[cfg(test)]
+fn sid_from_token_user(bytes: &[u8], base: usize) -> Option<String> {
+    sid_string(sid_in_copy(bytes, base)?)
+}
+
+/// The level (RID) of a mandatory label SID `S-1-16-<rid>`; `None` for any
+/// other or malformed SID.
+fn integrity_rid(sid: &[u8]) -> Option<u32> {
+    match *sid {
+        [1, 1, 0, 0, 0, 0, 0, 16, a, b, c, d] => Some(u32::from_le_bytes([a, b, c, d])),
+        _ => None,
+    }
+}
+
+/// The level of a `SYSTEM_MANDATORY_LABEL_ACE` given as its `AceSize` bytes
+/// (4-byte header, 4-byte mask, then the SID, maybe followed by padding).
+fn label_rid(ace: &[u8]) -> Option<u32> {
+    if *ace.first()? != LABEL_ACE_TYPE {
+        return None;
+    }
+    let count = usize::from(*ace.get(9)?);
+    integrity_rid(ace.get(8..8 + 8 + 4 * count)?)
 }
 
 /// Standard string form (`S-1-5-21-...`) of a binary SID, as
@@ -518,7 +714,8 @@ enum Refused {
     Io(io::Error),
 }
 
-/// Connect to `name` and check that the server runs as `own_sid`.
+/// Connect to `name` and check that the pipe belongs to `own_sid` at medium
+/// integrity or more (see [`server_is_trusted`]).
 fn connect(name: &str, own_sid: &str, deadline: Instant) -> Result<Pipe, Refused> {
     let wide_name = wide(name);
     let handle = loop {
@@ -535,9 +732,8 @@ fn connect(name: &str, own_sid: &str, deadline: Instant) -> Result<Pipe, Refused
             Err(e) => return Err(Refused::Io(e)),
         }
     };
-    let trusted = server_pid(&handle)
-        .and_then(process_identity)
-        .is_ok_and(|server| server.is_trusted_by(own_sid));
+    let trusted = object_owner_and_label(&handle)
+        .is_ok_and(|(owner, label)| server_is_trusted(&owner, label, own_sid));
     if !trusted {
         return Err(Refused::Foreign);
     }
@@ -655,7 +851,8 @@ pub fn acquire_owner(runtime_dir: &Path) -> Result<Option<Listener>, InstanceErr
 /// Owner side: queued, validated requests from other processes.
 ///
 /// Dropping it stops the accept thread and closes the pipe, which releases
-/// the single-instance lock.
+/// the single-instance lock. The drop blocks until that thread ends: about
+/// one 250 ms wait slice, since a client being served is cut short too.
 pub struct Listener {
     dir: PathBuf,
     sid: String,
@@ -695,8 +892,10 @@ impl Listener {
         let thread = thread::Builder::new()
             .name("instance-ipc".into())
             .spawn(move || {
+                let mut pipe = Pipe::new(handle);
+                pipe.stop = Some(Arc::clone(&thread_stop));
                 accept_loop(
-                    Pipe::new(handle),
+                    pipe,
                     &thread_sid,
                     &tx,
                     &thread_waker,
@@ -746,9 +945,10 @@ impl Listener {
 impl Drop for Listener {
     fn drop(&mut self) {
         self.stop.store(true, Ordering::SeqCst);
-        // Bounded: the accept wait polls `stop` and each client is served
-        // within IO_TIMEOUT plus the linger. Joining releases the lock before
-        // a later owner in this process (tests) tries to take it.
+        // Bounded by about one SLICE (plus a RETRY pause): the accept wait and
+        // every read, write and linger of a client being served poll `stop`.
+        // Joining releases the lock before a later owner in this process
+        // (tests) tries to take it.
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
@@ -777,33 +977,39 @@ fn accept_loop(
         }
         // ponytail: clients are served one at a time (others retry on
         // ERROR_PIPE_BUSY); each has a total IO_TIMEOUT deadline.
-        // Foreign, restricted or AppContainer clients get no byte back.
-        if trusted_client(&pipe.handle, sid).is_some() {
-            let _ = serve(&mut pipe, tx, waker, service.load(Ordering::SeqCst));
-        }
+        let _ = serve(&mut pipe, sid, tx, waker, service.load(Ordering::SeqCst));
         disconnect(&pipe.handle);
+    }
+}
+
+/// Run the current waker, if any, without holding its lock.
+fn wake(waker: &Mutex<Option<Waker>>) {
+    let current = waker.lock().unwrap_or_else(PoisonError::into_inner).clone();
+    if let Some(wake) = current {
+        wake();
     }
 }
 
 fn serve(
     pipe: &mut Pipe,
+    sid: &str,
     tx: &SyncSender<Request>,
     waker: &Mutex<Option<Waker>>,
     service: bool,
 ) -> io::Result<()> {
     pipe.write_timeout = Some(IO_TIMEOUT);
-    let ack = match read_line(pipe)?.as_deref().and_then(Request::decode) {
+    let line = read_line(pipe)?;
+    // Foreign, restricted, AppContainer or low-integrity clients get no
+    // byte back (identification needs the client's first write).
+    if !trusted_client(&pipe.handle, sid) {
+        return Ok(());
+    }
+    let ack = match line.as_deref().and_then(Request::decode) {
         None => Ack::Invalid,
         Some(_) if service => Ack::Service,
         Some(request) => match tx.try_send(request) {
             Ok(()) => {
-                if let Some(wake) = waker
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner)
-                    .as_ref()
-                {
-                    wake();
-                }
+                wake(waker);
                 Ack::Ok
             }
             Err(TrySendError::Full(_) | TrySendError::Disconnected(_)) => Ack::Busy,
@@ -1061,25 +1267,27 @@ fn control_accept_loop(
             continue;
         };
         let connected = std::mem::replace(&mut listening, next);
-        // Foreign users are dropped before anything is read.
-        let Some(pid) = trusted_client(&connected, sid) else {
-            continue;
-        };
+        // Informational only; trust comes from the client's token.
+        let pid = client_pid(&connected).ok();
         let mut pipe = Pipe::new(connected);
         if shared.connections.fetch_add(1, Ordering::SeqCst) >= MAX_CONNECTIONS {
             shared.connections.fetch_sub(1, Ordering::SeqCst);
+            // Even `busy` goes only to a trusted client, identified after its
+            // hello (one short line, read with a total deadline).
             pipe.write_timeout = Some(HELLO_DEADLINE);
-            let busy = ControlError::new(ErrorCode::Busy, "too many control connections");
-            if write_message(&mut pipe, &Response::error("", &busy)).is_ok() {
-                linger(&mut pipe, HELLO_DEADLINE);
+            if read_line(&mut pipe).is_ok() && trusted_client(&pipe.handle, sid) {
+                let busy = ControlError::new(ErrorCode::Busy, "too many control connections");
+                if write_message(&mut pipe, &Response::error("", &busy)).is_ok() {
+                    linger(&mut pipe, HELLO_DEADLINE);
+                }
             }
             continue;
         }
-        let shared = Arc::clone(shared);
+        let (shared, sid) = (Arc::clone(shared), sid.to_owned());
         let spawned = thread::Builder::new()
             .name("control-conn".into())
             .spawn(move || {
-                let _ = serve_control(pipe, &shared, Some(pid));
+                let _ = serve_control(pipe, &shared, &sid, pid);
                 shared.connections.fetch_sub(1, Ordering::SeqCst);
             });
         if spawned.is_err() {
@@ -1114,12 +1322,17 @@ fn global_allows(counter: &AtomicU64) -> bool {
     }
 }
 
-fn serve_control(pipe: Pipe, shared: &Shared, pid: Option<u32>) -> io::Result<()> {
+fn serve_control(pipe: Pipe, shared: &Shared, sid: &str, pid: Option<u32>) -> io::Result<()> {
     let mut writer = pipe.clone();
     writer.write_timeout = Some(REPLY_DEADLINE);
     let mut reader = BufReader::new(pipe);
     reader.get_mut().read_timeout = Some(HELLO_DEADLINE);
     let hello: Hello = read_message(&mut reader)?;
+    // Identify the client before any answer: foreign, restricted,
+    // AppContainer or low-integrity clients are closed without a byte.
+    if !trusted_client(&reader.get_ref().handle, sid) {
+        return Err(io::ErrorKind::PermissionDenied.into());
+    }
     if hello != Hello::current() {
         return Err(io::ErrorKind::InvalidData.into());
     }
@@ -1171,16 +1384,7 @@ fn forward_control(request: ControlRequest, shared: &Shared, pid: Option<u32>) -
         enqueued: Instant::now(),
     };
     match shared.tx.try_send(incoming) {
-        Ok(()) => {
-            if let Some(wake) = shared
-                .waker
-                .lock()
-                .unwrap_or_else(PoisonError::into_inner)
-                .as_ref()
-            {
-                wake();
-            }
-        }
+        Ok(()) => wake(&shared.waker),
         Err(TrySendError::Full(_)) => {
             return Response::error(
                 &id,
@@ -1343,16 +1547,75 @@ mod tests {
     }
 
     #[test]
-    fn only_the_same_user_with_a_full_token_is_trusted() {
-        let peer = |sid: &str, restricted, app_container| Identity {
+    fn only_the_same_user_with_a_full_medium_token_is_trusted() {
+        const LOW: u32 = 0x1000;
+        const HIGH: u32 = 0x3000;
+        let peer = |sid: &str, restricted, app_container, integrity| Identity {
             sid: sid.into(),
             restricted,
             app_container,
+            integrity,
         };
-        assert!(peer("S-1-5-21-1", false, false).is_trusted_by("S-1-5-21-1"));
-        assert!(!peer("S-1-5-21-2", false, false).is_trusted_by("S-1-5-21-1"));
-        assert!(!peer("S-1-5-21-1", true, false).is_trusted_by("S-1-5-21-1"));
-        assert!(!peer("S-1-5-21-1", false, true).is_trusted_by("S-1-5-21-1"));
+        let own = "S-1-5-21-1";
+        assert!(peer(own, false, false, MEDIUM_INTEGRITY).is_trusted_by(own));
+        assert!(peer(own, false, false, HIGH).is_trusted_by(own), "elevated");
+        assert!(!peer("S-1-5-21-2", false, false, MEDIUM_INTEGRITY).is_trusted_by(own));
+        assert!(!peer(own, true, false, MEDIUM_INTEGRITY).is_trusted_by(own));
+        assert!(!peer(own, false, true, MEDIUM_INTEGRITY).is_trusted_by(own));
+        assert!(!peer(own, false, false, LOW).is_trusted_by(own), "low IL");
+        assert!(!peer(own, false, false, MEDIUM_INTEGRITY - 1).is_trusted_by(own));
+        assert!(
+            !peer(own, false, false, 0).is_trusted_by(own),
+            "untrusted IL"
+        );
+    }
+
+    #[test]
+    fn servers_must_be_ours_and_at_least_medium() {
+        let own = "S-1-5-21-1";
+        assert!(server_is_trusted(own, None, own), "no label means medium");
+        assert!(server_is_trusted(own, Some(MEDIUM_INTEGRITY), own));
+        assert!(server_is_trusted(own, Some(0x3000), own));
+        assert!(!server_is_trusted(own, Some(0x1000), own), "low squatter");
+        assert!(!server_is_trusted("S-1-5-21-2", None, own), "other user");
+        assert!(!server_is_trusted("S-1-5-32-544", Some(0x3000), own));
+    }
+
+    #[test]
+    fn integrity_labels_are_parsed_strictly() {
+        let label = |rid: u32| {
+            let mut sid = vec![1, 1, 0, 0, 0, 0, 0, 16];
+            sid.extend_from_slice(&rid.to_le_bytes());
+            sid
+        };
+        assert_eq!(integrity_rid(&label(0x2000)), Some(0x2000));
+        assert_eq!(integrity_rid(&label(0x1000)), Some(0x1000));
+        // Not a mandatory label authority, truncated or padded: refused.
+        let mut other = label(0x2000);
+        other[7] = 5;
+        assert_eq!(integrity_rid(&other), None);
+        assert_eq!(integrity_rid(&label(0x2000)[..11]), None);
+        let mut padded = label(0x2000);
+        padded.push(0);
+        assert_eq!(integrity_rid(&padded), None);
+        // A TOKEN_MANDATORY_LABEL is parsed like a TOKEN_USER.
+        let base = 0x2000usize;
+        let mut copy = (base + 16).to_ne_bytes().to_vec();
+        copy.resize(16, 0);
+        copy.extend_from_slice(&label(0x3000));
+        assert_eq!(
+            sid_in_copy(&copy, base).and_then(integrity_rid),
+            Some(0x3000)
+        );
+        // SYSTEM_MANDATORY_LABEL_ACE: header, mask (NW|NR), SID, padding.
+        let mut ace = vec![LABEL_ACE_TYPE, 0, 24, 0, 3, 0, 0, 0];
+        ace.extend_from_slice(&label(0x1000));
+        ace.extend_from_slice(&[0; 4]);
+        assert_eq!(label_rid(&ace), Some(0x1000));
+        assert_eq!(label_rid(&ace[..19]), None, "truncated SID");
+        ace[0] = 0;
+        assert_eq!(label_rid(&ace), None, "not a label ACE");
+        assert_eq!(label_rid(&[]), None);
     }
 
     #[test]

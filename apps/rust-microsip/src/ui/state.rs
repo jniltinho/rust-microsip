@@ -2685,6 +2685,8 @@ mod tests {
         end(&mut st, 2, Direction::Outgoing, true, EndReason::Normal);
         assert_eq!(st.history.len(), 2);
         assert_eq!(st.history[0].call.outcome, CallOutcome::Answered);
+        // Close the store first: Windows refuses to delete an open file.
+        drop(st);
         std::fs::remove_dir_all(dir)?;
         Ok(())
     }

@@ -109,6 +109,8 @@ pub fn desktop_executable() -> Option<std::path::PathBuf> {
 
 #[cfg(test)]
 mod tests {
+    // Desktop entries are a Linux mechanism (Windows paths are not `/`-rooted).
+    #[cfg(unix)]
     #[test]
     fn entry_names_the_real_executable() {
         use std::path::Path;

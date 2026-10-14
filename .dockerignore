@@ -50,6 +50,10 @@ apps/rust-microsip/examples/**
 docker/**
 !docker/rust-components.sha256
 !docker/rust-components-windows.sha256
+!vendor/
+vendor/**
+!vendor/wgpu-hal/
+!vendor/wgpu-hal/**
 !packaging/
 packaging/**
 !packaging/verify.sh
@@ -59,6 +63,9 @@ packaging/**
 !packaging/reviewed-licenses.json
 !packaging/third-party-notices/
 !packaging/third-party-notices/**
+!packaging/windows/
+packaging/windows/**
+!packaging/windows/*.py
 !packaging/appimage/
 packaging/appimage/**
 !packaging/appimage/build-appimage.sh

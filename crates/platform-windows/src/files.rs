@@ -11,9 +11,15 @@
 //!   this module does not understand is refused. Deny entries only restrict
 //!   and are accepted.
 //!
-//! Paths are opened once without following symbolic links or junctions
-//! (`FILE_FLAG_OPEN_REPARSE_POINT`), and every check runs on that handle, so a
-//! path swapped between check and read cannot be read.
+//! The final path component is opened once without following a symbolic
+//! link or junction (`FILE_FLAG_OPEN_REPARSE_POINT`) and every check runs on
+//! that handle, so swapping the final component between check and read cannot
+//! redirect the read. Parent components are resolved normally: a junction or
+//! symbolic link higher up the path (including one met by `create_dir_all`)
+//! is followed. That is acceptable only because the parents are expected to be
+//! writable by this user alone (for example under `%LOCALAPPDATA%`), so
+//! anyone able to plant such a link already has the user's rights; these
+//! functions do not protect paths below a directory other users can write.
 // Remove once lib.rs re-exports make_private_dir and write_private_file.
 
 use std::fs::{File, OpenOptions};
@@ -89,7 +95,8 @@ pub fn read_own_file(path: &Path, max: u64) -> Result<Vec<u8>, PrivateFileError>
 /// list propagates to existing children. SYSTEM and Administrators keep
 /// access by privilege only.
 ///
-/// The directory is opened without following a junction or symbolic link,
+/// The directory itself is opened without following a junction or symbolic
+/// link (parent components are followed; see the module docs),
 /// must be owned by this user, and the result is read back: owner, a
 /// protected DACL and owner-only entries are all verified.
 ///

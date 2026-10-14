@@ -10,7 +10,6 @@
 
 use crate::Waker;
 use std::cell::RefCell;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver, SyncSender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
@@ -66,15 +65,18 @@ pub struct Tray {
     actions: Receiver<TrayAction>,
     status: Shared<TrayStatus>,
     waker: Shared<Option<Waker>>,
-    stop: Arc<Stop>,
+    stop: Shared<Stop>,
 }
 
-/// Hand-off between [`Tray::drop`] and the thread that creates the window.
+/// Hand-off between [`Tray::drop`] and the thread that owns the window,
+/// shared through a mutex so a handle is only posted to while it is live.
 #[derive(Default)]
 struct Stop {
-    stopped: AtomicBool,
-    /// The window handle as an address; 0 until created.
-    hwnd: AtomicUsize,
+    /// [`Tray`] was dropped.
+    stopped: bool,
+    /// The window handle as an address; 0 before creation and from
+    /// `WM_DESTROY` on, so a recycled handle is never posted to.
+    hwnd: usize,
 }
 
 impl std::fmt::Debug for Tray {
@@ -93,7 +95,7 @@ impl Tray {
         let (tx, actions) = mpsc::sync_channel(QUEUE);
         let status = Arc::new(Mutex::new(TrayStatus::Connecting));
         let waker: Shared<Option<Waker>> = Arc::default();
-        let stop = Arc::new(Stop::default());
+        let stop: Shared<Stop> = Arc::default();
         let notify = Notify {
             tx,
             waker: Arc::clone(&waker),
@@ -101,7 +103,7 @@ impl Tray {
         let (st, sp) = (Arc::clone(&status), Arc::clone(&stop));
         let spawned = thread::Builder::new()
             .name("tray".into())
-            .spawn(move || run(icon, notify, &st, &sp));
+            .spawn(move || run(icon, notify, &st, sp));
         if spawned.is_err() {
             *lock(&status) = TrayStatus::Unavailable;
         }
@@ -131,10 +133,12 @@ impl Tray {
 
 impl Drop for Tray {
     fn drop(&mut self) {
-        // SeqCst on both sides: either this sees the handle or the thread sees
-        // `stopped` right after publishing it.
-        self.stop.stopped.store(true, Ordering::SeqCst);
-        let hwnd = self.stop.hwnd.load(Ordering::SeqCst);
+        // Posting under the lock: the window thread clears the handle under
+        // the same lock in WM_DESTROY, before the window is gone, so a
+        // non-zero handle here is still this tray's window.
+        let mut stop = lock(&self.stop);
+        stop.stopped = true;
+        let hwnd = std::mem::take(&mut stop.hwnd);
         if hwnd != 0 {
             post(hwnd as HWND, WM_CLOSE);
         }
@@ -176,10 +180,12 @@ struct Notify {
 
 impl Notify {
     fn send(&self, action: TrayAction) {
-        if self.tx.try_send(action).is_ok()
-            && let Some(wake) = lock(&self.waker).as_ref()
-        {
-            wake();
+        if self.tx.try_send(action).is_ok() {
+            // Clone out of the lock: the waker runs unlocked.
+            let wake = lock(&self.waker).clone();
+            if let Some(wake) = wake {
+                wake();
+            }
         }
     }
 }
@@ -190,6 +196,7 @@ struct State {
     data: NOTIFYICONDATAW,
     taskbar_created: u32,
     status: Shared<TrayStatus>,
+    stop: Shared<Stop>,
 }
 
 thread_local! {
@@ -200,7 +207,7 @@ fn run(
     icon: Option<(i32, i32, Vec<u8>)>,
     notify: Notify,
     status: &Shared<TrayStatus>,
-    stop: &Stop,
+    stop: Shared<Stop>,
 ) {
     let Some(hicon) = icon.and_then(|(w, h, bgra)| create_icon(w, h, &bgra)) else {
         *lock(status) = TrayStatus::Unavailable;
@@ -245,16 +252,29 @@ fn run(
             data,
             taskbar_created: register_message(&wide("TaskbarCreated")),
             status: Arc::clone(status),
+            stop: Arc::clone(&stop),
         });
     });
-    stop.hwnd.store(hwnd as usize, Ordering::SeqCst);
-    if stop.stopped.load(Ordering::SeqCst) {
-        post(hwnd, WM_CLOSE);
+    {
+        let mut stop = lock(&stop);
+        if stop.stopped {
+            post(hwnd, WM_CLOSE);
+        } else {
+            stop.hwnd = hwnd as usize;
+        }
     }
     let mut msg = MSG::default();
     // 0 on WM_QUIT, -1 on error: both end the loop.
     while get_message(&mut msg) > 0 {
         dispatch(&msg);
+    }
+    // After an error the window still exists: remove the icon and destroy it
+    // (WM_DESTROY clears the handle). After WM_QUIT this is already done.
+    // Read first: WM_DESTROY takes the same lock.
+    let alive = lock(&stop).hwnd != 0;
+    if alive {
+        notify_icon(NIM_DELETE, &data);
+        destroy_window(hwnd);
     }
     STATE.with_borrow_mut(Option::take);
     *lock(status) = TrayStatus::Unavailable;
@@ -262,6 +282,13 @@ fn run(
 }
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    // A panic (for example in a waker) must not unwind into the system frames
+    // that called this procedure; it is contained and the message reported
+    // as handled.
+    std::panic::catch_unwind(|| handle_message(hwnd, msg, wparam, lparam)).unwrap_or(0)
+}
+
+fn handle_message(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     // Copy what is needed and release the borrow: the popup menu below runs a
     // nested message loop that re-enters this procedure.
     let state = STATE.with_borrow(|s| {
@@ -271,10 +298,11 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
                 s.data,
                 s.taskbar_created,
                 Arc::clone(&s.status),
+                Arc::clone(&s.stop),
             )
         })
     });
-    let Some((notify, data, taskbar_created, status)) = state else {
+    let Some((notify, data, taskbar_created, status, stop)) = state else {
         return def_window_proc(hwnd, msg, wparam, lparam);
     };
     match msg {
@@ -297,6 +325,8 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
             0
         }
         WM_DESTROY => {
+            // The handle is still valid here; from now on Drop must not post.
+            lock(&stop).hwnd = 0;
             post_quit();
             0
         }

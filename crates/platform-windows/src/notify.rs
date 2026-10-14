@@ -4,10 +4,11 @@
 //! callers only enqueue into a bounded queue. Each toast's buttons carry an
 //! opaque random token (never the number) that maps back to the call in
 //! memory; activation is handled in-process through the `Activated` event.
-//! Toasts are best-effort: when the notifier cannot be created or showing
-//! fails (no registered AppUserModelID, notifications disabled, Server SKU)
+//! Toasts are best-effort: when the notifier cannot be created or is not
+//! enabled (no registered AppUserModelID, notifications disabled, Server SKU)
 //! the notifier reports [`NotifierStatus::Unavailable`] and the window banner
-//! remains the way to answer.
+//! remains the way to answer. A single toast that fails to load or show is
+//! skipped without disabling the others.
 
 use crate::Waker;
 use rust_microsip_control::caller::sanitize_caller;
@@ -147,7 +148,7 @@ impl Notifier {
 
     /// Show "Incoming call" for `call` with a sanitized `caller` body.
     pub fn incoming_call(&self, call: CallId, caller: &str) -> Delivery {
-        self.send(Job::Show(call, sanitize_caller(caller)))
+        self.send(Job::Show(call, toast_body(caller)))
     }
 
     /// Hide the toast for `call` (answered, rejected or ended).
@@ -190,16 +191,10 @@ fn worker(
         match job {
             Job::Show(call, body) => {
                 hide(&notifier, &tokens, shown.remove(&call));
-                match show(&notifier, &body, call, &tokens, &action_tx, &waker) {
-                    Ok(entry) => {
-                        shown.insert(call, entry);
-                    }
-                    Err(_) => {
-                        // ponytail: any show failure disables toasts for the
-                        // session; the window banner keeps working.
-                        *lock(status) = NotifierStatus::Unavailable;
-                        return;
-                    }
+                // A toast that fails is skipped; the window banner still
+                // offers the call and later toasts are unaffected.
+                if let Ok(entry) = show(&notifier, &body, call, &tokens, &action_tx, &waker) {
+                    shown.insert(call, entry);
                 }
             }
             Job::Close(call) => hide(&notifier, &tokens, shown.remove(&call)),
@@ -239,9 +234,13 @@ fn show(
                 && let Ok(arguments) = args.Arguments()
                 && let Some(action) = take_action(&arguments.to_string_lossy(), &tokens_h)
                 && tx.try_send(action).is_ok()
-                && let Some(wake) = lock(&wk).as_ref()
             {
-                wake();
+                // Clone out of the lock so the waker runs unlocked, and keep
+                // a panicking waker from unwinding into WinRT.
+                let wake = lock(&wk).clone();
+                if let Some(wake) = wake {
+                    let _ = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| wake()));
+                }
             }
             Ok(())
         },
@@ -261,8 +260,22 @@ fn hide(notifier: &ToastNotifier, tokens: &Tokens, entry: Option<(String, ToastN
     }
 }
 
-/// Toast XML; `body` is already XML-escaped by `sanitize_caller` and `token`
-/// is hex, so neither can break out of its text or attribute.
+/// The toast body for `caller`: only characters valid in XML 1.0, then
+/// `sanitize_caller` (controls and bidi marks removed, markup escaped), so
+/// `LoadXml` never sees an invalid character or markup from the caller.
+fn toast_body(caller: &str) -> String {
+    let valid: String = caller.chars().filter(|&c| is_xml_char(c)).collect();
+    sanitize_caller(&valid)
+}
+
+/// `Char` of XML 1.0: #x9 | #xA | #xD | [#x20-#xD7FF] | [#xE000-#xFFFD] |
+/// [#x10000-#x10FFFF] (surrogates cannot occur in a `char`).
+fn is_xml_char(c: char) -> bool {
+    matches!(c, '\u{9}' | '\u{A}' | '\u{D}' | '\u{20}'..='\u{D7FF}' | '\u{E000}'..='\u{FFFD}' | '\u{10000}'..)
+}
+
+/// Toast XML; `body` comes from `toast_body` (valid XML characters, escaped)
+/// and `token` is hex, so neither can break out of its text or attribute.
 fn toast_xml(body: &str, token: &str) -> String {
     format!(
         "<toast scenario=\"incomingCall\">\
@@ -300,6 +313,41 @@ mod tests {
         assert!(xml.contains("arguments=\"answer:00ff\" activationType=\"foreground\""));
         assert!(xml.contains("arguments=\"reject:00ff\" activationType=\"foreground\""));
         assert!(!xml.contains("<1002>"));
+    }
+
+    #[test]
+    fn hostile_callers_yield_valid_escaped_text() {
+        let hostile = "A\u{FFFE}B\u{FFFF}C\u{0}\u{1}\u{8}\u{B}\u{C}\u{1F}\u{7F}D&amp;</text></binding></visual><actions><action content=\"x\" arguments=\"answer:00\"/>\
+<![CDATA[x]]><!-- c --><?pi?>\u{1F600}";
+        let body = toast_body(hostile);
+        assert!(body.chars().all(is_xml_char), "{body:?}");
+        assert!(!body.contains('<') && !body.contains('>'), "{body:?}");
+        assert!(body.starts_with("ABCD&amp;amp;&lt;/text&gt;"), "{body:?}");
+        let xml = toast_xml(&body, "00ff");
+        assert_eq!(xml.matches("<action ").count(), 2);
+        assert_eq!(xml.matches("<text>").count(), 2);
+        // The real parser accepts it (no toast platform or AUMID needed).
+        let parsed = XmlDocument::new()
+            .and_then(|doc| doc.LoadXml(&HSTRING::from(xml.as_str())).map(|()| doc));
+        assert!(parsed.is_ok(), "{parsed:?}");
+        // Only invalid characters: the generic placeholder, never empty.
+        assert_eq!(toast_body("\u{FFFE}\u{FFFF}\u{1}"), "Unknown caller");
+        for c in [
+            '\u{9}',
+            '\u{A}',
+            '\u{D}',
+            ' ',
+            '\u{D7FF}',
+            '\u{E000}',
+            '\u{FFFD}',
+            '\u{10000}',
+            '\u{10FFFF}',
+        ] {
+            assert!(is_xml_char(c), "{c:?}");
+        }
+        for c in ['\u{0}', '\u{8}', '\u{B}', '\u{1F}', '\u{FFFE}', '\u{FFFF}'] {
+            assert!(!is_xml_char(c), "{c:?}");
+        }
     }
 
     #[test]

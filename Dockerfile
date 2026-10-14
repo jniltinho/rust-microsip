@@ -78,6 +78,7 @@ COPY --chown=builder:builder Cargo.toml Cargo.lock rust-toolchain.toml LICENSE N
 COPY --chown=builder:builder docker/rust-components.sha256 docker/
 COPY --chown=builder:builder apps/ apps/
 COPY --chown=builder:builder crates/ crates/
+COPY --chown=builder:builder vendor/ vendor/
 COPY --chown=builder:builder packaging/ packaging/
 
 # Only this stage may access the registry when external crates are introduced.
@@ -90,6 +91,32 @@ RUN --network=none sh packaging/verify.sh
 FROM verify AS build
 RUN --network=none cargo build --workspace --release --frozen --target x86_64-unknown-linux-gnu \
     && sh packaging/export-scaffold.sh
+
+# Windows cross build (add-windows-port tasks 1.2 and 5.1): clippy, both
+# release exes and the test executables run on a windows-latest runner.
+FROM windows-toolchain AS windows-source
+COPY --chown=builder:builder Cargo.toml Cargo.lock rust-toolchain.toml LICENSE NOTICE Dockerfile .dockerignore ./
+COPY --chown=builder:builder docker/rust-components.sha256 docker/rust-components-windows.sha256 docker/
+COPY --chown=builder:builder apps/ apps/
+COPY --chown=builder:builder crates/ crates/
+COPY --chown=builder:builder vendor/ vendor/
+COPY --chown=builder:builder packaging/ packaging/
+
+FROM windows-source AS windows-fetch
+# All platforms: the host side (build scripts, proc macros) also resolves.
+RUN cargo fetch --locked
+
+FROM windows-fetch AS windows-build
+RUN --network=none set -eu; \
+    cargo clippy --workspace --lib --bins --tests --target x86_64-pc-windows-gnu --frozen -- -D warnings; \
+    cargo build -p rust-microsip --release --target x86_64-pc-windows-gnu --frozen; \
+    cargo test --workspace --lib --bins --tests --target x86_64-pc-windows-gnu --frozen --no-run --message-format=json \
+        | python3 packaging/windows/collect-tests.py /out/windows/tests; \
+    cp target/x86_64-pc-windows-gnu/release/rust-microsip.exe target/x86_64-pc-windows-gnu/release/rust-microsip-cli.exe /out/windows/; \
+    cd /out/windows && find . -type f -name '*.exe' | sort | xargs sha256sum > SHA256SUMS
+
+FROM scratch AS windows-artifacts
+COPY --from=windows-build /out/windows/ /
 
 # AppImage tools from the same pinned snapshot plus the pinned official runtime.
 FROM toolchain AS appimage-tools
@@ -133,7 +160,7 @@ allowed = {
     "packaging/reviewed-licenses.json",
     "apps/rust-microsip/assets/NotoSans-Regular.ttf", "apps/rust-microsip/assets/OFL.txt",
     "apps/rust-microsip/assets/source.json",
-    "packaging/verify.sh", "packaging/export-scaffold.sh",
+    "packaging/verify.sh", "packaging/export-scaffold.sh", "packaging/windows/collect-tests.py", "packaging/windows/zip.py",
     "packaging/appimage/build-appimage.sh", "packaging/appimage/verify.sh",
     "packaging/appimage/pins.txt", "packaging/appimage/rust-microsip.desktop",
     "apps/rust-microsip/assets/icons/rust-microsip.svg", "apps/rust-microsip/assets/icons/rust-microsip-256.png",
@@ -151,7 +178,7 @@ for path in files:
         "crates/telephony/src/engine", "crates/core/src", "crates/core/tests", "crates/audio/src", "crates/config/src", "crates/storage/src", "crates/storage/tests", "crates/platform/src", "crates/platform/src/control", "crates/platform-windows/src", "crates/control/src", "apps/rust-microsip/src/ui/state",
     }
     # Reviewed, commit-pinned third-party license texts only.
-    is_source = is_source or relative.startswith(("packaging/third-party-notices/", "packaging/appimage/runtime-licenses/"))
+    is_source = is_source or relative.startswith(("packaging/third-party-notices/", "packaging/appimage/runtime-licenses/", "vendor/wgpu-hal/"))
     if relative not in allowed and not is_source:
         unexpected.append(relative)
 if unexpected:

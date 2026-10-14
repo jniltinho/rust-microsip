@@ -33,8 +33,9 @@ use windows_sys::Win32::Security::Credentials::{
 const TARGET_PREFIX: &str = "rust-microsip:";
 const USER_NAME: &str = "rust-microsip";
 const MAX_ACCOUNT_REF: usize = 256;
-/// Credential Manager limits the comment to 256 characters including the NUL.
-const MAX_COMMENT_CHARS: usize = 255;
+/// Credential Manager limits the comment to 256 UTF-16 code units
+/// (`CRED_MAX_STRING_LENGTH`) including the NUL.
+const MAX_COMMENT_UNITS: usize = 255;
 
 /// Upper bound for one complete [`SecretStore`] operation, including connecting.
 pub const OPERATION_TIMEOUT: Duration = Duration::from_secs(10);
@@ -80,8 +81,13 @@ impl std::fmt::Debug for SecretBytes {
 
 impl Drop for SecretBytes {
     fn drop(&mut self) {
-        self.0.fill(0);
-        std::hint::black_box(&mut self.0);
+        for byte in &mut self.0 {
+            // SAFETY: `byte` is a valid, aligned, exclusive reference to an
+            // initialized `u8`; a volatile write is not elided.
+            unsafe { ptr::write_volatile(byte, 0) };
+        }
+        // Keep the zeroing ordered before the deallocation that follows.
+        std::sync::atomic::compiler_fence(std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -118,7 +124,7 @@ impl SecretStore {
     /// [`SecretError::Service`] with the Win32 error code.
     pub fn store(&self, account_ref: &str, label: &str, secret: &[u8]) -> Result<(), SecretError> {
         let mut target = target(account_ref)?;
-        let mut comment = wide(&label.chars().take(MAX_COMMENT_CHARS).collect::<String>());
+        let mut comment = wide(truncate_utf16(label, MAX_COMMENT_UNITS));
         let mut user = wide(USER_NAME);
         let size = u32::try_from(secret.len())
             .map_err(|_| SecretError::Service("the secret is too large".into()))?;
@@ -238,6 +244,19 @@ fn target(account_ref: &str) -> Result<Vec<u16>, SecretError> {
     Ok(wide(&format!("{TARGET_PREFIX}{account_ref}")))
 }
 
+/// The longest prefix of `text` that fits in `max` UTF-16 code units, never
+/// splitting a character (and so never a surrogate pair).
+fn truncate_utf16(text: &str, max: usize) -> &str {
+    let mut units = 0;
+    for (index, c) in text.char_indices() {
+        units += c.len_utf16();
+        if units > max {
+            return &text[..index];
+        }
+    }
+    text
+}
+
 fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(once(0)).collect()
 }
@@ -271,6 +290,20 @@ mod tests {
             Some(SecretError::InvalidAccount)
         );
         assert_eq!(store.delete(" "), Err(SecretError::InvalidAccount));
+    }
+
+    #[test]
+    fn comments_are_truncated_by_utf16_units() {
+        assert_eq!(truncate_utf16("abc", 255), "abc");
+        let ascii = "x".repeat(300);
+        assert_eq!(truncate_utf16(&ascii, 255).len(), 255);
+        // Each U+1F600 is a surrogate pair: 127 fit in 254 units, the 128th
+        // would need 256.
+        let emoji = "\u{1F600}".repeat(200);
+        let cut = truncate_utf16(&emoji, 255);
+        assert_eq!(cut.encode_utf16().count(), 254);
+        assert_eq!(cut.chars().count(), 127);
+        assert!(wide(cut).len() <= 256);
     }
 
     #[test]

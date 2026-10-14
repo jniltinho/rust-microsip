@@ -26,6 +26,18 @@ PROTECTED = {
     ("rustrtc", "0.4.7"): "7fc50a0fd78b4b7a61fab57d1e4ee915eb9a8d710c22333f231cf8fc79f3befe",
     ("version_check", "0.9.5"): "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a",
 }
+# Path-patched copies of registry crates (vendor/README.md): exact identity,
+# the original archive checksum, the directory and the pinned notice files.
+VENDORED = {
+    ("wgpu-hal", "30.0.1"): {
+        "archive_sha256": "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58",
+        "dir": "vendor/wgpu-hal",
+        "notices": {
+            "LICENSE.APACHE": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+            "LICENSE.MIT": "dc0d97139e8205818c703741c7be7cb3b96888bd5917b8d6fc6133731e403c21",
+        },
+    },
+}
 NOTICE_PREFIXES = ("license", "licence", "copying", "copyright", "notice", "unlicense")
 # Bundled-component terms often live as LICENSES/<SPDX-id>.txt (REUSE layout).
 NOTICE_DIRECTORIES = {"licenses", "licences"}
@@ -148,8 +160,25 @@ def verified_notices(archive, checksum, prefix, allow_empty=False):
     return notices
 
 
+def vendored_notices(package, root):
+    """Pinned notices of a reviewed vendored crate, or ValueError."""
+    entry = VENDORED.get((package["name"], package["version"]))
+    if entry is None or Path(package["manifest_path"]).resolve() != (root / entry["dir"] / "Cargo.toml").resolve():
+        raise ValueError("unreviewed path dependency")
+    notices = {}
+    for relative, digest in entry["notices"].items():
+        path = root / entry["dir"] / relative
+        if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+            raise ValueError("missing vendored notice")
+        content = path.read_bytes()
+        if hashlib.sha256(content).hexdigest() != digest:
+            raise ValueError("vendored notice changed")
+        notices[relative] = content
+    return entry, notices
+
+
 def collect(metadata, lock, cache, output, tree=None, reviewed=None, supplements=None,
-            supplement_root=HERE / "third-party-notices"):
+            supplement_root=HERE / "third-party-notices", vendor_root=HERE.parent):
     """Inventory selected registry nodes and preserve their original notices.
 
     With `tree`, metadata-only nodes (not built for the target) are listed but
@@ -173,8 +202,22 @@ def collect(metadata, lock, cache, output, tree=None, reviewed=None, supplements
         if package["id"] not in selected:
             continue
         if package["source"] is None:
-            if package["id"] not in metadata["workspace_members"]:
-                raise ValueError("unreviewed path dependency")
+            if package["id"] in metadata["workspace_members"]:
+                continue
+            entry, notices = vendored_notices(package, vendor_root)
+            verify_license(package["name"], package["version"], package["license"], notices)
+            hashes = {}
+            for relative, content in sorted(notices.items()):
+                path = output / (package["name"] + "-" + package["version"]) / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                with path.open("xb") as target:
+                    target.write(content)
+                hashes[relative] = hashlib.sha256(content).hexdigest()
+            rows.append({"name": package["name"], "version": package["version"],
+                         "source": "vendored:" + entry["dir"], "archive_sha256": entry["archive_sha256"],
+                         "declared_license": package["license"], "license_choice": None,
+                         "license_basis": "allowlist-or-legacy", "notice_sources": ["vendored-pinned"],
+                         "features": sorted(selected[package["id"]]["features"]), "notices_sha256": hashes})
             continue
         name, version = package["name"], package["version"]
         if not re.fullmatch(r"[A-Za-z0-9_-]+", name) or not re.fullmatch(r"[0-9][A-Za-z0-9.+-]*", version):

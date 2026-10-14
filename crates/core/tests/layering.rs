@@ -3,6 +3,8 @@
 //! backends, D-Bus or sockets directly. Dependencies come from
 //! `cargo metadata` (offline), so renamed, table-form and target-specific
 //! dependencies are seen by their real package names.
+// Needs `cargo metadata` at run time: runs where the Docker toolchain is.
+#![cfg(unix)]
 
 use serde_json::Value;
 use std::path::{Path, PathBuf};
