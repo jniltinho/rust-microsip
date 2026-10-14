@@ -151,9 +151,11 @@ jobs:
             @(Get-ChildItem "${hive}:\$uninstall" -ErrorAction SilentlyContinue |
               Get-ItemProperty | Where-Object DisplayName -eq 'rust-microsip')
           }
-          # User data must survive upgrade and uninstall.
+          # User data and stored credentials must survive upgrade and uninstall.
           New-Item -ItemType Directory -Force $data | Out-Null
           Set-Content (Join-Path $data 'keep.txt') 'fictional user data'
+          $credential = 'rust-microsip:ci-fictional'
+          cmdkey "/generic:$credential" /user:fictional /pass:fictional | Out-Null
 
           $msi = (Get-ChildItem bin -Filter 'rust-microsip-*-x86_64.msi').FullName
           Msi "/i `"$msi`" /qn /l*v `"$PWD\install.log`""
@@ -173,6 +175,8 @@ jobs:
           Msi "/x $($entries[0].PSChildName) /qn /l*v `"$PWD\uninstall.log`""
           if ((Test-Path $dir) -or (Test-Path $lnk) -or (Entries HKCU).Count -ne 0) { throw 'uninstall left files or registration' }
           if (-not (Test-Path (Join-Path $data 'keep.txt'))) { throw 'uninstall removed user data' }
+          if (-not (cmdkey "/list:$credential" | Select-String -SimpleMatch $credential)) { throw 'uninstall removed credentials' }
+          cmdkey "/delete:$credential" | Out-Null
       - name: MSI logs
         if: failure()
         shell: pwsh

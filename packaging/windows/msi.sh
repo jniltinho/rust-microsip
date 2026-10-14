@@ -30,6 +30,9 @@ msibuild "$work/$msi" -s "rust-microsip SIP softphone" rust-microsip "x64;1033" 
 # Start Menu shortcut AppUserModelID (toasts), a table wixl does not author.
 cp "$here/MsiShortcutProperty.idt" "$work/"
 msibuild "$work/$msi" -i "$work/MsiShortcutProperty.idt"
+# Word Count 10: compressed (2) and "elevated privileges are not required" (8); no ALLUSERS.
+msiinfo suminfo "$work/$msi" | grep -qx 'Source: 10 (a)' || { echo "MSI is not a per-user package" >&2; exit 1; }
+if msiinfo export "$work/$msi" Property | grep -q '^ALLUSERS'; then echo "MSI sets ALLUSERS" >&2; exit 1; fi
 msiinfo export "$work/$msi" MsiShortcutProperty | grep -q 'StartMenuShortcut.*rust-microsip' \
     || { echo "MSI lacks the AppUserModelID row" >&2; exit 1; }
 
